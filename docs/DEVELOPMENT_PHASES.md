@@ -765,11 +765,11 @@ Codemods and co-pilot tools — they arrive later as new operation types on this
 - **Unpublish:** detach the domain; repository and `draft` untouched
 
 ### Definition of done
-- [ ] Publish produces a live site at `<slug>.plinth.dev` — **waiting on the G3 hosting decision**
+- [x] Publish produces a live site — at `<repo>.vercel.app` for now; `<slug>.plinth.dev` needs a domain
 - [x] Edits after publishing do not change the live site (`main` stays where it was)
-- [x] Editing on `draft` does not trigger a Vercel build (`vercel.json` in the template; to confirm once hosting is connected)
+- [x] Editing on `draft` does not trigger a Vercel build (verified live)
 - [x] A deliberately broken build fails pre-flight, before `main` or any host is touched
-- [ ] A build that fails on Vercel leaves the previous deployment serving — **with hosting**
+- [ ] A build that fails on Vercel leaves the previous deployment serving — Vercel's behaviour; tracked as `failed` (integration-tested), not yet reproduced live because pre-flight catches build failures first
 - [x] Publish waits for a running operation rather than interleaving with it
 - [x] The unpublished-changes count is correct
 
@@ -823,9 +823,12 @@ Enabled by `VERCEL_TOKEN` (worker). Without it, everything above still works and
 4. `draft` is never deployed: the template's `vercel.json` sets `git.deploymentEnabled.draft: false`.
 
 **Setup (once):** create a Vercel token; install the Vercel GitHub app on the `plinth-pages` organisation with access to
-all repositories; keep `PORTFOLIO_REPO_VISIBILITY=public` while on Hobby. **Verified so far:** unit tests against the
-documented API shapes and integration tests of the tracker and the publish path; the live end-to-end check runs once a
-token is configured.
+all repositories; keep `PORTFOLIO_REPO_VISIBILITY=public` while on Hobby. **Verified live 2026-09-14 (11/11)** on a throwaway public portfolio, Vercel Hobby, personal account: project
+created and linked to `plinth-pages/<repo>` with production branch `main`; Vercel started the production deployment
+from the push to `main` itself (found by commit sha, so no second deployment was started); **pending → building →
+ready in 54 s**; the published commit served at `https://<repo>.vercel.app` with HTTP 200 and the edited content; a
+later change pushed to `draft` created no deployment and left the live site unchanged. End to end from Publish to live:
+pre-flight build 15 s + Vercel 54 s.
 
 **Duration: 3–4 days**
 
