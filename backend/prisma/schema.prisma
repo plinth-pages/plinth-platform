@@ -97,7 +97,10 @@ model Sandbox {
   provider       String        @default("e2b")
   externalId     String?       @map("external_id")
   status         SandboxStatus @default(destroyed)
+  /** The provider URL of the dev server. Not reachable without `trafficToken`; browsers use the preview proxy. */
   previewUrl     String?       @map("preview_url")
+  /** Sent by the preview proxy as `e2b-traffic-access-token`. Null only for sandboxes created before gate G2. */
+  trafficToken   String?       @map("traffic_token")
   /** Updated by the IDE heartbeat. Idle time is measured from here. */
   lastAccessedAt DateTime?     @map("last_accessed_at")
   /** Start of the current billed stretch (create or resume). Null unless running. */

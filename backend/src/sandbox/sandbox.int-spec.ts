@@ -41,7 +41,13 @@ class FakeDriver implements SandboxDriver {
     const externalId = `fake-${this.next++}`;
     this.sandboxes.set(externalId, { state: "running", health: "healthy" });
     const startedAt = new Date();
-    return { externalId, previewUrl: `https://3000-${externalId}.test`, startedAt, expiresAt: new Date(Date.now() + opts.timeoutMs) };
+    return {
+      externalId,
+      previewUrl: `https://3000-${externalId}.test`,
+      accessToken: `traffic-${externalId}`,
+      startedAt,
+      expiresAt: new Date(Date.now() + opts.timeoutMs),
+    };
   }
   async bootstrap(externalId: string, workspace: Workspace) {
     this.record("bootstrap", [externalId, workspace]);
@@ -52,7 +58,7 @@ class FakeDriver implements SandboxDriver {
     const sandbox = this.sandboxes.get(externalId);
     if (!sandbox) throw new SandboxNotRunningError(externalId, "gone");
     sandbox.state = "running";
-    return { startedAt: new Date(), expiresAt: new Date(Date.now() + opts.timeoutMs) };
+    return { accessToken: `traffic-${externalId}`, startedAt: new Date(), expiresAt: new Date(Date.now() + opts.timeoutMs) };
   }
   async pause(externalId: string, reason: string) {
     this.record("pause", [externalId, reason]);
@@ -106,6 +112,8 @@ const TOKEN = "ghs_fake_installation_token";
 let driver: FakeDriver;
 let locks: InMemorySandboxLocks;
 let lifecycle: SandboxLifecycle;
+let events: { portfolioId: string; status: string }[];
+const publisher = { publish: async (portfolioId: string, event: { status: string }) => void events.push({ portfolioId, status: event.status }) };
 
 async function readyPortfolio(): Promise<Portfolio> {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -126,9 +134,10 @@ beforeAll(() => prisma.$connect());
 
 beforeEach(() => {
   mine.length = 0;
+  events = [];
   driver = new FakeDriver();
   locks = new InMemorySandboxLocks();
-  lifecycle = new SandboxLifecycle(prisma, driver, locks, { installationToken: async () => TOKEN }, { org: "plinth-pages", timings });
+  lifecycle = new SandboxLifecycle(prisma, driver, locks, { installationToken: async () => TOKEN }, { org: "plinth-pages", timings }, publisher);
 });
 
 afterAll(async () => {
@@ -160,6 +169,8 @@ describe("ensure", () => {
       gitToken: TOKEN,
       env: {},
     });
+    expect(sandbox.trafficToken).toBe("traffic-fake-1");
+    expect(events.filter((e) => e.portfolioId === portfolio.id).map((e) => e.status)).toEqual(["starting", "running"]);
     // After bootstrapping, the provider deadline shrinks from the bootstrap allowance to the idle window.
     expect(driver.called("extend")[0].args[1]).toBeLessThanOrEqual(timings.idlePauseMs + PROVIDER_DEADLINE_SLACK_MS);
   });
@@ -236,6 +247,27 @@ describe("ensure", () => {
   });
 });
 
+describe("private previews (gate G2)", () => {
+  it("replaces a running sandbox that was created without a traffic token", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await setRow(portfolio.id, { trafficToken: null });
+
+    expect(await lifecycle.ensure(portfolio.id)).toBe("created");
+    expect(driver.called("destroy")[0].args).toEqual(["fake-1", "rebuild"]);
+    expect(await row(portfolio.id)).toMatchObject({ externalId: "fake-2", trafficToken: "traffic-fake-2" });
+  });
+
+  it("clears the token when the sandbox is destroyed", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await driver.pause("fake-1", "idle");
+    await setRow(portfolio.id, { status: "paused", pausedAt: ago(25 * 60 * MIN), runStartedAt: null });
+    await lifecycle.sweep(new Date(), mine);
+    expect(await row(portfolio.id)).toMatchObject({ status: "destroyed", trafficToken: null, previewUrl: null });
+  });
+});
+
 describe("recovery ladder", () => {
   it("restarts the dev server first, without clearing the cache", async () => {
     const portfolio = await readyPortfolio();
@@ -305,7 +337,7 @@ describe("sweep", () => {
     lifecycle = new SandboxLifecycle(prisma, driver, locks, { installationToken: async () => TOKEN }, {
       org: "plinth-pages",
       timings: { ...timings, rotateAfterMs: 57 * MIN },
-    });
+    }, publisher);
     const portfolio = await readyPortfolio();
     await lifecycle.ensure(portfolio.id);
     const now = new Date();

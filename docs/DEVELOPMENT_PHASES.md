@@ -100,11 +100,42 @@ docs.e2b.dev/sandbox/persistence.
   Phase 3 builds a custom template (Node 24, pnpm, 2 GiB, pnpm store pre-warmed from `plinth-template`).
 - **The default lifecycle is `onTimeout: kill`.** Plinth creates sandboxes with `onTimeout: pause`, so a missed
   rotation pauses instead of discarding the running dev server.
-- **Port traffic is public:** `https://3000-<id>.e2b.app` answered 200 with no auth header. Relevant to gate G2.
+- **Port traffic is public by default:** `https://3000-<id>.e2b.app` answered 200 with no auth header. Resolved by gate G2 below.
 - **A paused sandbox returns 502 to traffic** and stays paused (`autoResume` defaults to false). Wake-on-request is
   therefore Plinth's job: the IDE heartbeat resumes it.
 - **Idle pause is shortened to 5 minutes by default** (configurable), at the owner's request, to keep compute cost
   down; resuming is sub-second, so an aggressive idle timeout costs the user almost nothing.
+
+### G2 result — checked 2026-09-13
+
+**Verdict: pass, with a Plinth proxy in front.** E2B can make port traffic private; a browser cannot send the
+credential itself, so the IDE reaches previews through Plinth.
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Can a preview URL require a credential? | **Yes.** `Sandbox.create({ network: { allowPublicTraffic: false } })` makes every port answer **403** unless the request carries the sandbox's `e2b-traffic-access-token` header. | live probe |
+| Which forms of the token work? | **Only that header.** A wrong token, a `?e2b-traffic-access-token=` query string and `Authorization: Bearer` all get 403. Websocket upgrades accept the header too. | live probe |
+| Is the token stable? | **Yes**, across pause/resume and repeated `connect` calls (64 characters, returned as `sandbox.trafficAccessToken`). | live probe |
+| Can an iframe use it directly? | **No.** Browsers can't attach custom headers to an iframe navigation, and a cookie would be third-party inside the IDE. | — |
+
+**What was built (before Phase 4):**
+- Every sandbox is created with public traffic disabled; its token is stored in `sandboxes.traffic_token`. A sandbox
+  created earlier (no token) is destroyed and rebuilt on the next visit.
+- A **preview proxy** (api process, port 4100) serves each preview on its own hostname —
+  `http://<label>.preview.localhost:4100` locally — and forwards to the sandbox with the token added. A whole origin
+  per preview means Next.js works unmodified: absolute asset paths, routing and the hot-reload websocket.
+- The label is a **capability**: 130 random bits, one per owner and portfolio, stored in Redis and **extended only by
+  the owner's authenticated heartbeat**. It stops working 15 minutes after the editor closes, so a leaked link goes
+  dead on its own. No cookies are involved, so it works in the IDE's iframe and in a new tab alike.
+- The proxy never returns the token, strips the platform session cookie and the referer, and adds
+  `frame-ancestors 'self' <admin>`, `X-Robots-Tag: noindex` and `Referrer-Policy: same-origin`.
+- A request to a sleeping preview gets a "Waking…" page that retries, and queues a resume. A 502 from E2B (paused by
+  its own deadline, or the dev server died) also queues `ensure` immediately.
+- **Production needs** wildcard DNS and a wildcard certificate for the preview domain (`*.preview.<domain>`).
+  Settings: `PREVIEW_PROXY_PORT`, `PREVIEW_URL_TEMPLATE`.
+
+**Verified live:** the raw sandbox URL returns 403; the preview link serves the page, its assets and the HMR websocket;
+a guessed label gets 410; another user gets 404.
 
 ---
 
@@ -458,7 +489,7 @@ vendored tarballs. Builds in ~30 s. Rebuild it whenever the template's dependenc
   Infrastructure errors retry up to 3 times.
 - **Metering is per second** (`seconds_used`), capped at E2B's deadline when E2B paused the sandbox first.
 - **Not done yet:** pushing pending changes before pause/destroy (nothing is written in the sandbox until Phase 5),
-  and a daily cost alarm (Phase 14). The preview URL is still public — gate G2, before Phase 4.
+  and a daily cost alarm (Phase 14). Preview URLs were public at this point; gate G2 made them private before Phase 4.
 
 **Settings** (worker env, defaults shown): `E2B_TEMPLATE=plinth-portfolio`, `SANDBOX_IDLE_PAUSE_MINUTES=5`,
 `SANDBOX_DESTROY_AFTER_PAUSED_HOURS=24`, `SANDBOX_ROTATE_AFTER_MINUTES=50`.
@@ -485,14 +516,48 @@ channel — with empty slots waiting for the co-pilot and integrations.
 - **Dashboard:** the portfolio card with status and repository link
 
 ### Definition of done
-- [ ] The editor shows the running sandbox
-- [ ] A file changed in the sandbox updates the iframe without a manual reload
-- [ ] The code viewer cannot open `.env.local`, even by URL manipulation
-- [ ] A paused sandbox shows "Waking" and recovers on its own
-- [ ] Device widths trigger real responsive layouts
-- [ ] Below tablet width, the IDE shows a "use a larger screen" message
+- [x] The editor shows the running sandbox
+- [x] A file changed in the sandbox updates the iframe without a manual reload
+- [x] The code viewer cannot open `.env.local`, even by URL manipulation
+- [x] A paused sandbox shows "Waking" and recovers on its own
+- [x] Device widths trigger real responsive layouts
+- [x] Below tablet width, the IDE shows a "use a larger screen" message
 
 **Duration: 3–4 days**
+
+### As built — 2026-09-13
+
+The editor is at `/portfolios/:id`; the dashboard card links to it. Verified against the real api, worker and E2B
+(28/28 backend checks) and in Chromium.
+
+- **Layout:** top bar (repository, `draft`, status chip, Restart, Open preview) · co-pilot column (placeholder, hidden
+  below 1024 px) · Preview / Code tabs · side panels **Slots**, **Integrations**, **Settings**.
+- **Preview:** the iframe loads the preview link from gate G2. Desktop fills the space; Tablet and Mobile set the
+  iframe's real width (768 / 390 px, so the portfolio's own breakpoints fire) and scale it down when the column is
+  narrower. The frame reloads whenever the preview comes back, so it never keeps showing an error from while it slept.
+- **Status:** Connecting / Starting / Waking / Live / Paused / Stopped / Needs attention. The editor sends a heartbeat
+  every 30 s while the tab is visible and wakes a paused preview as soon as it notices. Measured: after E2B paused the
+  sandbox, the editor went Paused → Waking → Live in **3 s** once the pause was detected.
+- **Live events:** `GET /v1/portfolios/:id/events` (SSE). The worker publishes on Redis
+  (`plinth:portfolio-events:<id>`) whenever a sandbox's status changes; one subscriber connection in the api fans out
+  to open editors. Events are hints to refetch; polling (3 s while busy, 20 s otherwise) covers a dropped stream.
+- **Code tab:** a file tree from `git ls-files --cached --others --exclude-standard` and a read-only viewer with syntax
+  highlighting (`prism-react-renderer`) and line numbers. Files up to 512 KB; binary files are not shown. Deep links:
+  `?tab=code&file=app/page.tsx`.
+- **Refusal rules** (`workspace-policy.ts`) are enforced on the api **and** again on the worker against the file's real
+  path after resolving symlinks: `.env*`, `.git/`, `node_modules/`, `.next/`, `.vercel/`, `.turbo/`, `.npmrc`,
+  `*.pem|key|p12|pfx`, absolute paths, `..` and backslashes. Verified: `.env.local`, `app/../.env.local`, `%2e%2e/`,
+  an absolute path and a symlink to `.env.local` all return 403, including through the editor's URL.
+- **Reads go through the worker.** The api has no E2B credentials, so it queues a job on the `workspace` queue
+  (concurrency 16, separate from sandbox starts) and waits for the answer.
+- **Slots panel — the start of the codemod UI.** Lists the ten slots from the `@plinth-pages/core` the portfolio has
+  installed, grouped by file, with what `plinth.json` places in each. Clicking a slot opens its file with the
+  `<Slot>` line marked. **Run plinth check** runs the contract validator in the sandbox (~2 s).
+- **Integrations panel** explains that installs arrive with the safety net; there are no install buttons yet.
+  Installing anything is a code change, and Rule 4 means no code change ships before Phase 5.
+- **Below 768 px** the editor isn't mounted at all, so a phone never keeps a sandbox awake.
+- **Hot reload through the proxy, measured in Chromium:** changing `content/profile.ts` in the sandbox updated the
+  page's `<h1>` without a reload (same document).
 
 ---
 

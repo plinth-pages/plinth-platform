@@ -10,6 +10,7 @@ import {
   type ExecResult,
   type FileEntry,
   type PauseReason,
+  type ResumedSandbox,
   type SandboxDriver,
   type SandboxInfo,
   type Workspace,
@@ -58,6 +59,7 @@ export class E2BDriver implements SandboxDriver {
     return {
       externalId: sandbox.sandboxId,
       previewUrl: `https://${sandbox.host(DEV_SERVER_PORT)}`,
+      accessToken: sandbox.trafficAccessToken,
       startedAt,
       expiresAt: new Date(startedAt.getTime() + opts.timeoutMs),
     };
@@ -94,11 +96,11 @@ export class E2BDriver implements SandboxDriver {
     await this.waitForDevServer(sandbox);
   }
 
-  async resume(externalId: string, opts: { timeoutMs: number }): Promise<{ startedAt: Date; expiresAt: Date }> {
+  async resume(externalId: string, opts: { timeoutMs: number }): Promise<ResumedSandbox> {
     const startedAt = new Date();
     const sandbox = await this.api.connect(externalId, { timeoutMs: opts.timeoutMs });
     this.connected.set(externalId, sandbox);
-    return { startedAt, expiresAt: new Date(startedAt.getTime() + opts.timeoutMs) };
+    return { accessToken: sandbox.trafficAccessToken, startedAt, expiresAt: new Date(startedAt.getTime() + opts.timeoutMs) };
   }
 
   async pause(externalId: string, reason: PauseReason): Promise<void> {

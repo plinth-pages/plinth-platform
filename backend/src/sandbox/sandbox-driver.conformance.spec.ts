@@ -23,6 +23,7 @@ class FakeE2B implements E2BApi {
     const record = (method: string, args: unknown[]) => this.calls.push({ method: `sandbox.${method}`, args });
     return {
       sandboxId,
+      trafficAccessToken: `traffic-${sandboxId}`,
       host: (port) => `${port}-${sandboxId}.e2b.app`,
       run: async (command, opts) => {
         record("run", [command, opts]);
@@ -137,6 +138,7 @@ describe("E2BDriver passes its parameters through", () => {
       metadata: { app: "plinth", portfolioId: "portfolio-42" },
     });
     expect(created.previewUrl).toBe(`https://3000-${created.externalId}.e2b.app`);
+    expect(created.accessToken).toBe(`traffic-${created.externalId}`);
     expect(created.expiresAt.getTime() - created.startedAt.getTime()).toBe(123_000);
   });
 
@@ -148,6 +150,7 @@ describe("E2BDriver passes its parameters through", () => {
     const resumed = await driver.resume(externalId, { timeoutMs: 420_000 });
     expect(api.called("connect").at(-1)!.args).toEqual([externalId, { timeoutMs: 420_000 }]);
     expect(resumed.expiresAt.getTime() - resumed.startedAt.getTime()).toBe(420_000);
+    expect(resumed.accessToken).toBe(`traffic-${externalId}`);
   });
 
   it.each<PauseReason>(["idle", "rotation"])("pause: the %s reason is recorded", async (reason) => {

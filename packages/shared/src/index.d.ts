@@ -99,7 +99,10 @@ export type PreviewStatus = "none" | "starting" | "running" | "paused" | "destro
 
 export interface PreviewSummary {
   status: PreviewStatus;
-  /** Public URL of the dev server. Only answers while `status` is `running`. */
+  /**
+   * The preview link: an unguessable hostname on the preview proxy, valid for 15 minutes after the last heartbeat.
+   * Null until the preview has been opened. Serves the draft only while `status` is `running`.
+   */
   previewUrl: string | null;
   /** A start, restart or rebuild is queued or in progress. */
   pending: boolean;
@@ -117,4 +120,60 @@ export interface PreviewSummary {
 
 export interface PreviewResponse {
   preview: PreviewSummary;
+}
+
+/** Pushed to the IDE over server-sent events. Events are hints to refetch; the REST endpoints stay authoritative. */
+export type PortfolioEvent = { type: "sandbox"; status: PreviewStatus; at: string };
+
+export type WorkspaceFileKind = "file" | "binary" | "too_large";
+
+export interface WorkspaceTreeResponse {
+  /** Workspace-relative paths, sorted. Excludes what git ignores and everything the viewer refuses to open. */
+  files: string[];
+  truncated: boolean;
+}
+
+export interface WorkspaceFileResponse {
+  path: string;
+  kind: WorkspaceFileKind;
+  /** Present when `kind` is `file`. */
+  content: string | null;
+  size: number;
+}
+
+export interface SlotInfo {
+  name: string;
+  file: string;
+  description: string;
+  /** Renders no wrapper element. */
+  bare: boolean;
+  /** Integrations here wrap the page (context providers). */
+  wraps: boolean;
+  /** Integration ids placed in this slot, from plinth.json. */
+  integrations: string[];
+}
+
+export interface SlotsResponse {
+  coreVersion: string | null;
+  slotsVersion: number | null;
+  slots: SlotInfo[];
+}
+
+export interface ContractIssue {
+  code: string;
+  message: string;
+  file?: string;
+  line?: number;
+}
+
+export interface ContractCheckResponse {
+  ok: boolean;
+  issues: ContractIssue[];
+  durationMs: number;
+}
+
+/** Returned with 409 when the workspace can't be read because the sandbox is not running. */
+export interface SandboxNotRunningApiError extends ApiError {
+  statusCode: 409;
+  code: "SANDBOX_NOT_RUNNING";
 }

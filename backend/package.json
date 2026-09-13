@@ -39,6 +39,8 @@
     "bullmq": "^5",
     "cookie-parser": "^1",
     "e2b": "^2",
+    "http-proxy-3": "2.0.1",
+    "ioredis": "5.11.1",
     "reflect-metadata": "^0.2",
     "rxjs": "^7",
     "zod": "^3.24"

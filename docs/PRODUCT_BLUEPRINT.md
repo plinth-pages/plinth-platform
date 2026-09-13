@@ -302,7 +302,7 @@ profile form: GitHub supplies the profile, and everything else is faster to say 
 ├────────────────────┬──────────────────────────────────────────────────────────┤
 │ CO-PILOT           │  PREVIEW  │  CODE                                        │
 │                    │ ┌──────────────────────────────────────────────────┐     │
-│ conversation with  │ │ iframe → the sandbox's public preview URL        │     │
+│ conversation with  │ │ iframe → a private preview link (proxy + token)  │     │
 │ operation cards:   │ │ the real app, served by next dev                 │     │
 │  ✓ Installed       │ │                                                  │     │
 │    LeetCode Stats  │ └──────────────────────────────────────────────────┘     │
@@ -787,7 +787,7 @@ fallback if E2B proves incompatible with the budget, without changing anything a
 | A secret leaks via the AI context or client bundle | Critical | Low | Tool-level deny lists; server routes only; no `NEXT_PUBLIC_` secrets |
 | A bug ships in the template | High | Medium | Template and `@plinth-pages/core` separated; fleet updates through the safety net |
 | GitHub secondary rate limits during provisioning bursts | Medium | Medium | Recovery job; throttled bulk operations |
-| A draft preview URL is shared publicly | Medium | Medium | No client-side secrets; `noindex`; authenticated proxy in V1 |
+| A draft preview URL is shared publicly | Medium | Medium | Sandboxes reject traffic without their token; previews go through a proxy on capability hostnames that expire 15 min after the editor closes; `noindex`; no client-side secrets |
 | LLM cost scales with sign-ups | High | High | Per-plan limits; operation batching |
 | The solo build takes longer than planned | High | High | The Path B milestone in the roadmap |
 

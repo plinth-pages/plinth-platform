@@ -1,5 +1,6 @@
 import type {
   AdminPingResponse,
+  ContractCheckResponse,
   EnqueuePingResponse,
   JobStatusResponse,
   MeResponse,
@@ -7,6 +8,9 @@ import type {
   PortfolioRole,
   PortfoliosResponse,
   PreviewResponse,
+  SlotsResponse,
+  WorkspaceFileResponse,
+  WorkspaceTreeResponse,
 } from "@plinth-pages/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
@@ -54,4 +58,11 @@ export const api = {
   openPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview`, { method: "POST" }),
   restartPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview/restart`, { method: "POST" }),
   rebuildPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview/rebuild`, { method: "POST" }),
+  files: (id: string) => request<WorkspaceTreeResponse>(`/portfolios/${id}/files`),
+  file: (id: string, path: string) =>
+    request<WorkspaceFileResponse>(`/portfolios/${id}/files/content?path=${encodeURIComponent(path)}`),
+  slots: (id: string) => request<SlotsResponse>(`/portfolios/${id}/slots`),
+  checkContract: (id: string) => request<ContractCheckResponse>(`/portfolios/${id}/slots/check`, { method: "POST" }),
+  /** Server-sent events; open with `new EventSource(url, { withCredentials: true })`. */
+  eventsUrl: (id: string) => `${API_URL}/portfolios/${id}/events`,
 };

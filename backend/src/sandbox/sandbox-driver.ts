@@ -22,7 +22,15 @@ export type DevServerHealth = "healthy" | "starting" | "unreachable";
 
 export interface CreatedSandbox {
   externalId: string;
+  /** Private: answers only requests that carry `accessToken` (gate G2). Browsers reach it through the preview proxy. */
   previewUrl: string;
+  accessToken: string;
+  startedAt: Date;
+  expiresAt: Date;
+}
+
+export interface ResumedSandbox {
+  accessToken: string;
   startedAt: Date;
   expiresAt: Date;
 }
@@ -64,12 +72,12 @@ export interface FileEntry {
 export interface SandboxDriver {
   readonly provider: string;
 
-  /** Boots an empty sandbox. The caller records `externalId` before bootstrapping, so a crash cannot leak it. */
+  /** Boots an empty sandbox with public traffic disabled. The caller records `externalId` before bootstrapping, so a crash cannot leak it. */
   create(portfolioId: string, opts: { timeoutMs: number }): Promise<CreatedSandbox>;
   /** Clone, write `.env.local`, install, start the dev server, and wait until it answers. */
   bootstrap(externalId: string, workspace: Workspace): Promise<void>;
   /** Resumes a paused sandbox. `timeoutMs` is required: resuming resets the provider's clock to it. */
-  resume(externalId: string, opts: { timeoutMs: number }): Promise<{ startedAt: Date; expiresAt: Date }>;
+  resume(externalId: string, opts: { timeoutMs: number }): Promise<ResumedSandbox>;
   pause(externalId: string, reason: PauseReason): Promise<void>;
   destroy(externalId: string, reason: DestroyReason): Promise<void>;
   /** Moves the provider's auto-pause deadline to `timeoutMs` from now. */

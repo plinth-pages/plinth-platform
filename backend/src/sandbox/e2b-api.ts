@@ -27,6 +27,8 @@ export interface E2BInfo {
 
 export interface E2BSandbox {
   readonly sandboxId: string;
+  /** Required in the `e2b-traffic-access-token` header of every request to a port. */
+  readonly trafficAccessToken: string;
   host(port: number): string;
   /** Resolves with the exit code instead of throwing on a non-zero exit. */
   run(command: string, opts: { cwd?: string; envs?: Record<string, string>; timeoutMs: number }): Promise<ExecResult>;
@@ -60,6 +62,8 @@ export function createE2BApi(apiKey: string): E2BApi {
         ...auth,
         timeoutMs,
         metadata,
+        // Gate G2: without this, anyone who learns a port URL can open the draft.
+        network: { allowPublicTraffic: false },
         // E2B's default is to kill on timeout. Pausing keeps the workspace if a deadline is ever missed.
         lifecycle: { onTimeout: "pause", autoResume: false },
       });
@@ -92,8 +96,12 @@ export function createE2BApi(apiKey: string): E2BApi {
 }
 
 function wrap(sandbox: Sandbox, sdk: typeof import("e2b")): E2BSandbox {
+  if (!sandbox.trafficAccessToken) {
+    throw new Error(`Sandbox ${sandbox.sandboxId} has public traffic enabled; it was created before previews were made private`);
+  }
   return {
     sandboxId: sandbox.sandboxId,
+    trafficAccessToken: sandbox.trafficAccessToken,
     host: (port) => sandbox.getHost(port),
     async run(command, { cwd, envs, timeoutMs }) {
       try {

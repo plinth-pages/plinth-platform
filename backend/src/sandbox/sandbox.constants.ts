@@ -53,3 +53,12 @@ export function sandboxTimings(
     rotateAfterMs: env.SANDBOX_ROTATE_AFTER_MINUTES * 60_000,
   };
 }
+
+interface SandboxQueue {
+  add(name: SandboxJobName, data: SandboxJobData, opts: { jobId: string } & typeof SANDBOX_JOB_OPTIONS): Promise<unknown>;
+}
+
+/** Idempotent while a job of the same kind is queued or running for the portfolio. */
+export function enqueueSandboxJob(queue: SandboxQueue, name: SandboxJobName, portfolioId: string) {
+  return queue.add(name, { portfolioId }, { jobId: sandboxJobId(name, portfolioId), ...SANDBOX_JOB_OPTIONS });
+}

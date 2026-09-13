@@ -10,6 +10,8 @@ import { GitHubModule } from "./github/github.module";
 import { HealthController } from "./health/health.controller";
 import { JobsController } from "./jobs/jobs.controller";
 import { PingProcessor } from "./jobs/ping.processor";
+import { PortfolioEventsHub } from "./events/portfolio-events.hub";
+import { previewApiProviders } from "./preview/preview.providers";
 import { PrismaModule } from "./prisma/prisma.module";
 import { PortfoliosController } from "./provisioning/portfolios.controller";
 import { PortfoliosService } from "./provisioning/portfolios.service";
@@ -20,6 +22,10 @@ import { QueueModule } from "./queue/queue.module";
 import { PreviewController } from "./sandbox/preview.controller";
 import { PreviewService } from "./sandbox/preview.service";
 import { sandboxWorkerProviders } from "./sandbox/sandbox.providers";
+import { WorkspaceReader } from "./workspace/workspace-reader";
+import { WorkspaceController } from "./workspace/workspace.controller";
+import { WorkspaceProcessor } from "./workspace/workspace.processor";
+import { WorkspaceService } from "./workspace/workspace.service";
 
 @Global()
 @Module({})
@@ -33,7 +39,7 @@ class RoleModule {
   }
 }
 
-/** HTTP only. Must never register a queue processor or cron — see architecture.spec.ts. */
+/** HTTP and the preview proxy. Must never register a queue processor or cron — see architecture.spec.ts. */
 @Module({
   imports: [QueueModule, AuthModule],
   controllers: [
@@ -42,9 +48,10 @@ class RoleModule {
     JobsController,
     PortfoliosController,
     PreviewController,
+    WorkspaceController,
     GitHubAppSetupController,
   ],
-  providers: [DevOnlyGuard, PortfoliosService, PreviewService],
+  providers: [DevOnlyGuard, PortfoliosService, PreviewService, WorkspaceService, PortfolioEventsHub, ...previewApiProviders],
 })
 export class ApiModule {}
 
@@ -59,6 +66,8 @@ export class ApiModule {}
     ProvisioningScheduler,
     { provide: PROVISIONER_OPTIONS, useValue: DEFAULT_PROVISIONER_OPTIONS },
     ...sandboxWorkerProviders,
+    WorkspaceProcessor,
+    WorkspaceReader,
   ],
 })
 export class WorkerModule {}

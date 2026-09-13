@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Portfolio, Sandbox, SandboxStatus } from "@prisma/client";
+import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   SANDBOX_DRIVER,
@@ -7,6 +8,7 @@ import {
   SandboxNotRunningError,
   type DestroyReason,
   type PauseReason,
+  type ResumedSandbox,
   type SandboxDriver,
   type SandboxInfo,
 } from "./sandbox-driver";
@@ -58,6 +60,7 @@ export class SandboxLifecycle {
     @Inject(SANDBOX_LOCKS) private readonly locks: SandboxLocks,
     @Inject(GIT_TOKENS) private readonly tokens: GitTokenSource,
     @Inject(SANDBOX_LIFECYCLE_OPTIONS) private readonly options: SandboxLifecycleOptions,
+    @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
   ) {}
 
   /** Makes the preview reachable: keeps a running sandbox, resumes a paused one, or builds a new one from `draft`. */
@@ -142,7 +145,10 @@ export class SandboxLifecycle {
       portfolio.sandbox ??
       (await this.prisma.sandbox.upsert({ where: { portfolioId: portfolio.id }, create: { portfolioId: portfolio.id }, update: {} }));
 
-    if (sandbox.externalId) {
+    if (sandbox.externalId && !sandbox.trafficToken) {
+      // Created before previews were made private (gate G2): its URL is public, so replace it.
+      await this.stop(sandbox, "rebuild", "destroyed", null);
+    } else if (sandbox.externalId) {
       const live = await this.driver.info(sandbox.externalId);
       if (live.state === "paused") return this.resume(portfolio, sandbox);
       if (live.state === "running") {
@@ -170,6 +176,7 @@ export class SandboxLifecycle {
     const starting = await this.update(sandbox.id, {
       externalId: created.externalId,
       previewUrl: created.previewUrl,
+      trafficToken: created.accessToken,
       runStartedAt: created.startedAt,
       expiresAt: created.expiresAt,
     });
@@ -201,7 +208,7 @@ export class SandboxLifecycle {
     // If the provider paused it on its own while the row said running, bill that stretch first.
     const billed = sandbox.status === "running" ? billedSeconds(sandbox, now) : 0;
 
-    let resumed: { startedAt: Date; expiresAt: Date };
+    let resumed: ResumedSandbox;
     try {
       resumed = await this.driver.resume(sandbox.externalId!, {
         timeoutMs: this.providerTimeoutMs({ lastAccessedAt: sandbox.lastAccessedAt, runStartedAt: now }, now),
@@ -214,6 +221,7 @@ export class SandboxLifecycle {
 
     const running = await this.update(sandbox.id, {
       status: "running",
+      trafficToken: resumed.accessToken,
       runStartedAt: resumed.startedAt,
       expiresAt: resumed.expiresAt,
       pausedAt: null,
@@ -300,6 +308,7 @@ export class SandboxLifecycle {
     });
     await this.update(sandbox.id, {
       status: "running",
+      trafficToken: resumed.accessToken,
       runStartedAt: resumed.startedAt,
       expiresAt: resumed.expiresAt,
       pausedAt: null,
@@ -352,12 +361,18 @@ export class SandboxLifecycle {
     return this.prisma.sandbox.findUniqueOrThrow({ where: { portfolioId } });
   }
 
-  private update(id: string, data: Parameters<PrismaService["sandbox"]["update"]>[0]["data"]): Promise<Sandbox> {
-    return this.prisma.sandbox.update({ where: { id }, data });
+  private async update(id: string, data: Parameters<PrismaService["sandbox"]["update"]>[0]["data"]): Promise<Sandbox> {
+    const sandbox = await this.prisma.sandbox.update({ where: { id }, data });
+    if (data.status) {
+      await this.events
+        .publish(sandbox.portfolioId, { type: "sandbox", status: sandbox.status, at: new Date().toISOString() })
+        .catch((error: unknown) => this.logger.warn(`Could not publish a sandbox event: ${errorMessage(error)}`));
+    }
+    return sandbox;
   }
 }
 
-const STOPPED = { externalId: null, previewUrl: null, runStartedAt: null, expiresAt: null, pausedAt: null };
+const STOPPED = { externalId: null, previewUrl: null, trafficToken: null, runStartedAt: null, expiresAt: null, pausedAt: null };
 const PAUSED = (pausedAt: Date) => ({ status: "paused" as SandboxStatus, pausedAt, runStartedAt: null, expiresAt: null });
 
 /** Seconds of the open stretch, ending at `endedAt` or the provider's deadline, whichever came first. */

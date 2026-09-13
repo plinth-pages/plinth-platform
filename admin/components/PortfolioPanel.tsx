@@ -1,9 +1,9 @@
 "use client";
 
 import type { PortfolioRole, PortfolioSummary } from "@plinth-pages/shared";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
-import { PreviewPanel } from "./PreviewPanel";
 
 const ROLES: { role: PortfolioRole; label: string; hint: string }[] = [
   { role: "developer", label: "Developer", hint: "Projects, GitHub, coding stats" },
@@ -96,10 +96,7 @@ export function PortfolioPanel() {
   return (
     <div className="flex flex-col gap-3">
       {portfolios.map((portfolio) => (
-        <div key={portfolio.id} className="flex flex-col gap-3">
-          <PortfolioCard portfolio={portfolio} onRetry={() => retry(portfolio.id)} />
-          {portfolio.status === "ready" ? <PreviewPanel portfolioId={portfolio.id} /> : null}
-        </div>
+        <PortfolioCard key={portfolio.id} portfolio={portfolio} onRetry={() => retry(portfolio.id)} />
       ))}
       {error ? <ErrorNote message={error} /> : null}
     </div>
@@ -136,6 +133,12 @@ function PortfolioCard({ portfolio, onRetry }: { portfolio: PortfolioSummary; on
 
       {portfolio.status === "ready" && portfolio.repoUrl ? (
         <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+          <Link
+            href={`/portfolios/${portfolio.id}`}
+            className="rounded-md bg-zinc-900 px-3 py-1.5 font-medium text-white hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+          >
+            Open editor
+          </Link>
           <a
             href={portfolio.repoUrl}
             target="_blank"

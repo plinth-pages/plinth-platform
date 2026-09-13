@@ -1,12 +1,15 @@
+import { getQueueToken } from "@nestjs/bullmq";
 import { Logger, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import type { Queue } from "bullmq";
 import type { Env } from "../config/env";
+import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "../events/portfolio-events";
 import { GITHUB_APP_AUTH } from "../github/github.module";
 import { createE2BApi } from "./e2b-api";
 import { DEFAULT_E2B_DRIVER_TIMINGS, E2BDriver } from "./e2b.driver";
 import { SANDBOX_DRIVER } from "./sandbox-driver";
 import { RedisSandboxLocks, SANDBOX_LOCKS } from "./sandbox-locks";
-import { sandboxTimings } from "./sandbox.constants";
+import { SANDBOX_QUEUE, sandboxTimings } from "./sandbox.constants";
 import { GIT_TOKENS, SANDBOX_LIFECYCLE_OPTIONS, SandboxLifecycle, type SandboxLifecycleOptions } from "./sandbox.lifecycle";
 import { SandboxProcessor, SandboxScheduler } from "./sandbox.processor";
 
@@ -17,6 +20,12 @@ export const sandboxWorkerProviders: Provider[] = [
   SandboxLifecycle,
   { provide: SANDBOX_LOCKS, useClass: RedisSandboxLocks },
   { provide: GIT_TOKENS, useExisting: GITHUB_APP_AUTH },
+  {
+    provide: PORTFOLIO_EVENTS,
+    inject: [getQueueToken(SANDBOX_QUEUE)],
+    // Publishing works on the queue's ordinary (non-blocking) connection.
+    useFactory: (queue: Queue) => new RedisPortfolioEventPublisher(async () => (await queue.client) as never),
+  },
   {
     provide: SANDBOX_DRIVER,
     inject: [ConfigService],

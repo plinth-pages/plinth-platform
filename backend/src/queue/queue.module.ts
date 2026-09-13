@@ -4,20 +4,9 @@ import { ConfigService } from "@nestjs/config";
 import type { Env } from "../config/env";
 import { PROVISIONING_QUEUE } from "../provisioning/provisioning.constants";
 import { SANDBOX_QUEUE } from "../sandbox/sandbox.constants";
+import { WORKSPACE_QUEUE } from "../workspace/workspace.constants";
 import { PING_QUEUE } from "./queue.constants";
-
-function redisConnection(redisUrl: string) {
-  const url = new URL(redisUrl);
-  return {
-    host: url.hostname,
-    port: Number(url.port || 6379),
-    username: url.username || undefined,
-    password: url.password ? decodeURIComponent(url.password) : undefined,
-    tls: url.protocol === "rediss:" ? {} : undefined,
-    // BullMQ workers block on Redis; a per-request retry limit would make them throw instead of wait.
-    maxRetriesPerRequest: null,
-  };
-}
+import { redisConnection } from "./redis-connection";
 
 /** Registers queues. Both roles import this: the api enqueues, the worker consumes. */
 @Module({
@@ -28,7 +17,12 @@ function redisConnection(redisUrl: string) {
         connection: redisConnection(config.get("REDIS_URL", { infer: true })),
       }),
     }),
-    BullModule.registerQueue({ name: PING_QUEUE }, { name: PROVISIONING_QUEUE }, { name: SANDBOX_QUEUE }),
+    BullModule.registerQueue(
+      { name: PING_QUEUE },
+      { name: PROVISIONING_QUEUE },
+      { name: SANDBOX_QUEUE },
+      { name: WORKSPACE_QUEUE },
+    ),
   ],
   exports: [BullModule],
 })

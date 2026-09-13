@@ -46,6 +46,18 @@ const envSchema = z
     SANDBOX_DESTROY_AFTER_PAUSED_HOURS: z.coerce.number().positive().default(24),
     /** E2B Hobby caps continuous runtime at 1 hour; an active sandbox is paused and resumed before then to reset it. */
     SANDBOX_ROTATE_AFTER_MINUTES: z.coerce.number().positive().max(55).default(50),
+
+    // Preview proxy — api role. Sandboxes reject traffic without their access token, so browsers reach a preview
+    // through an unguessable, expiring hostname served here, which adds the token.
+    PREVIEW_PROXY_PORT: z.coerce.number().int().positive().default(4100),
+    /** `{session}` becomes the session label. Needs wildcard DNS in production; `*.localhost` works locally. */
+    PREVIEW_URL_TEMPLATE: z
+      .string()
+      .default("http://{session}.preview.localhost:4100")
+      .refine(
+        (value) => value.includes("{session}") && URL.canParse(value.replace("{session}", "x")),
+        "Must be a URL whose hostname contains {session}",
+      ),
   })
   .superRefine((env, ctx) => {
     const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;
