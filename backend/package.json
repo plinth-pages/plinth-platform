@@ -1,5 +1,5 @@
 {
-  "name": "@plinth/backend",
+  "name": "@plinth-pages/backend",
   "version": "0.0.0",
   "private": true,
   "scripts": {
@@ -43,7 +43,7 @@
   "devDependencies": {
     "@nestjs/cli": "^11",
     "@nestjs/testing": "^11",
-    "@plinth/shared": "workspace:^",
+    "@plinth-pages/shared": "workspace:^",
     "@types/cookie-parser": "^1",
     "@types/express": "^5",
     "@types/jest": "^29",

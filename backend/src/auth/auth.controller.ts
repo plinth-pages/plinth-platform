@@ -1,7 +1,7 @@
 import { Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "@prisma/client";
-import type { MeResponse } from "@plinth/shared";
+import type { MeResponse } from "@plinth-pages/shared";
 import { randomBytes, timingSafeEqual } from "crypto";
 import type { CookieOptions, Request, Response } from "express";
 import type { Env } from "../config/env";

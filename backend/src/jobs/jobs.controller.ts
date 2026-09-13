@@ -1,6 +1,6 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Controller, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
-import type { EnqueuePingResponse, JobState, JobStatusResponse, PingJobResult } from "@plinth/shared";
+import type { EnqueuePingResponse, JobState, JobStatusResponse, PingJobResult } from "@plinth-pages/shared";
 import type { Queue } from "bullmq";
 import { SessionGuard } from "../auth/session.guard";
 import { DevOnlyGuard } from "../common/dev-only.guard";

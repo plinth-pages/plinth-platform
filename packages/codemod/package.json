@@ -1,9 +1,9 @@
 {
-  "name": "@plinth/codemod",
+  "name": "@plinth-pages/codemod",
   "version": "0.0.0",
   "private": true,
   "description": "AST codemod engine — built in Phase 9.",
   "scripts": {
-    "typecheck": "echo \"@plinth/codemod: nothing to typecheck until Phase 9\""
+    "typecheck": "echo \"@plinth-pages/codemod: nothing to typecheck until Phase 9\""
   }
 }

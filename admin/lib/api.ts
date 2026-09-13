@@ -3,7 +3,7 @@ import type {
   EnqueuePingResponse,
   JobStatusResponse,
   MeResponse,
-} from "@plinth/shared";
+} from "@plinth-pages/shared";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
 

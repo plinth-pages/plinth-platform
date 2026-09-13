@@ -2,7 +2,7 @@ import { Injectable, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import type { User } from "@prisma/client";
-import type { SessionUser } from "@plinth/shared";
+import type { SessionUser } from "@plinth-pages/shared";
 import { adminLogins, type Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
 

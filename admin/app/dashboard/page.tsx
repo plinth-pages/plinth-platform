@@ -1,6 +1,6 @@
 "use client";
 
-import type { JobStatusResponse, SessionUser } from "@plinth/shared";
+import type { JobStatusResponse, SessionUser } from "@plinth-pages/shared";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";

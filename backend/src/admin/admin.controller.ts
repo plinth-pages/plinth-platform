@@ -1,6 +1,6 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import type { User } from "@prisma/client";
-import type { AdminPingResponse } from "@plinth/shared";
+import type { AdminPingResponse } from "@plinth-pages/shared";
 import { CurrentUser, Roles, RolesGuard } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
 

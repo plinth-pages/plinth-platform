@@ -1,6 +1,6 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Inject } from "@nestjs/common";
-import type { PingJobResult } from "@plinth/shared";
+import type { PingJobResult } from "@plinth-pages/shared";
 import type { Job } from "bullmq";
 import { ORCHESTRATOR_ROLE, type OrchestratorRole } from "../config/role";
 import { PING_QUEUE } from "../queue/queue.constants";

@@ -11,7 +11,7 @@ Requirements: Node 20, pnpm 9, Redis on `127.0.0.1:6379`.
 pnpm install
 cp backend/.env.example backend/.env        # fill in DATABASE_URL, SESSION_SECRET, GitHub OAuth app
 cp admin/.env.example admin/.env.local
-pnpm --filter @plinth/backend exec prisma migrate deploy
+pnpm --filter @plinth-pages/backend exec prisma migrate deploy
 ```
 
 Three processes, three terminals:

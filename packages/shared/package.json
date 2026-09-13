@@ -1,5 +1,5 @@
 {
-  "name": "@plinth/shared",
+  "name": "@plinth-pages/shared",
   "version": "0.0.0",
   "private": true,
   "description": "API contract types shared by backend and admin. Types only — import with `import type`.",
