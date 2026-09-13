@@ -16,7 +16,7 @@ export interface GitHubRepos {
   readonly org: string;
   readonly templateFullName: string;
   getRepo(name: string): Promise<RepoInfo | null>;
-  generateFromTemplate(name: string, description: string): Promise<RepoInfo>;
+  generateFromTemplate(name: string, description: string, visibility: RepoVisibility): Promise<RepoInfo>;
   getBranchSha(repo: string, branch: string): Promise<string | null>;
   createBranch(repo: string, branch: string, sha: string): Promise<void>;
   deleteRepo(name: string): Promise<void>;
@@ -25,6 +25,8 @@ export interface GitHubRepos {
 }
 
 export const GITHUB_REPOS = Symbol("GITHUB_REPOS");
+
+export type RepoVisibility = "public" | "private";
 
 interface RepoJson {
   id: number;
@@ -61,13 +63,13 @@ export class GitHubClient implements GitHubRepos {
     return json ? toRepoInfo(json) : null;
   }
 
-  async generateFromTemplate(name: string, description: string): Promise<RepoInfo> {
+  async generateFromTemplate(name: string, description: string, visibility: RepoVisibility): Promise<RepoInfo> {
     try {
       const json = await this.request<RepoJson>("POST", `/repos/${this.templateFullName}/generate`, {
         owner: this.org,
         name,
         description,
-        private: true,
+        private: visibility === "private",
         include_all_branches: false,
       });
       return toRepoInfo(json!);

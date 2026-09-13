@@ -49,13 +49,16 @@ describe("GitHubClient", () => {
     });
   });
 
-  it("generates a private repository from the template in the organisation", async () => {
+  it.each([
+    ["private", true],
+    ["public", false],
+  ] as const)("generates a %s repository from the template in the organisation", async (visibility, isPrivate) => {
     const { gh, calls } = client(() => ({ status: 201, body: repoJson("portfolio-asha") }));
-    await gh.generateFromTemplate("portfolio-asha", "desc");
+    await gh.generateFromTemplate("portfolio-asha", "desc", visibility);
     expect(calls[0]).toEqual({
       url: "https://api.github.com/repos/plinth-pages/plinth-template/generate",
       method: "POST",
-      body: { owner: "plinth-pages", name: "portfolio-asha", description: "desc", private: true, include_all_branches: false },
+      body: { owner: "plinth-pages", name: "portfolio-asha", description: "desc", private: isPrivate, include_all_branches: false },
     });
   });
 
@@ -65,7 +68,7 @@ describe("GitHubClient", () => {
         ? { status: 422, body: { message: "Repository creation failed: name already exists on this account" } }
         : { status: 200, body: repoJson("portfolio-asha") },
     );
-    expect((await gh.generateFromTemplate("portfolio-asha", "d")).fullName).toBe("plinth-pages/portfolio-asha");
+    expect((await gh.generateFromTemplate("portfolio-asha", "d", "private")).fullName).toBe("plinth-pages/portfolio-asha");
   });
 
   it("treats an empty, still-generating repository as having no branch yet", async () => {
@@ -104,7 +107,7 @@ describe("rate limits and retryability", () => {
 
   it("treats 422 'submitted too quickly' on repository creation as a rate limit", async () => {
     const { gh } = client(() => ({ status: 422, body: { message: "Repository creation failed: was submitted too quickly" } }));
-    const error = await gh.generateFromTemplate("x", "d").catch((e) => e);
+    const error = await gh.generateFromTemplate("x", "d", "private").catch((e) => e);
     expect(error).toBeInstanceOf(GitHubRateLimitError);
     expect(error.retryAfterMs).toBe(60_000);
   });

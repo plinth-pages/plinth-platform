@@ -151,8 +151,13 @@ community answers on Hobby and organisations.
 
 **Options:** (a) Vercel Pro — about ₹1,700/month, fits the budget alongside E2B's free tier; (b) CLI deploys from the
 worker on a token — no Git integration needed, same Pro question for commercial use; (c) another host with an API
-(e.g. Cloudflare Pages or Netlify). **Until one is chosen, Publish promotes `draft` to `main` and records the
-deployment as `unconfigured`.** The hosting step plugs in after the push without changing the flow before it.
+(e.g. Cloudflare Pages or Netlify).
+
+**Decision (2026-09-14, owner): stay on Vercel Hobby for now and provision public repositories.**
+`PORTFOLIO_REPO_VISIBILITY=public` (default `private`) sets the visibility of *new* portfolio repositories; flipping it
+to `private` after moving to Vercel Pro needs no code change. Repositories that already exist keep their visibility.
+With public repositories the `draft` branch is publicly readable too; secrets never live in the repository
+(`.env*` is ignored, and credentials arrive via the vault in Phase 12).
 
 ---
 
@@ -790,8 +795,37 @@ Production build in the sandbox: **17 s**; whole publish: **21 s**. `POST /publi
 - **Editor:** a **Publish** button in the top bar with the unpublished count; while publishing it shows the step
   (Preparing, Building, Publishing). A toast reports **Published** or **Couldn't publish** with the build errors.
 - Edit-check p50/p95 exclude publish builds.
-- **Not built yet:** creating the hosting project and domain, tracking the deployment to a live URL, slug claiming,
-  unpublish, and pausing an idle sandbox after publishing.
+- **Not built yet:** slug claiming and a custom domain (`<slug>.plinth.dev`), unpublish, syncing environment variables
+  from the vault, and pausing an idle sandbox after publishing.
+
+### Vercel deployments — added 2026-09-14
+
+Enabled by `VERCEL_TOKEN` (worker). Without it, everything above still works and deployments are `unconfigured`.
+
+1. **Before `main` moves** (after the pre-flight build passes), the worker makes sure the portfolio has a Vercel project:
+   `GET /v9/projects/<repo-name>`, else `POST /v11/projects` with `framework: nextjs` and
+   `gitRepository: { type: github, repo: <org>/<repo> }`. The id is stored in `portfolios.vercel_project_id`. A project
+   with that name linked to a different repository is never reused. **If Vercel can't reach the repository, the
+   publish fails and `main` does not move** — the message says what to fix.
+2. **After the push**, a `deployments` row is created as `pending` and a `track-deployment` job follows it, outside the
+   portfolio lock, so editing continues while Vercel builds:
+   - Vercel normally starts a production deployment from the push to `main` itself; the job finds it with
+     `GET /v7/deployments?projectId&target=production&sha`.
+   - If none appears within 45 s (for example the very first push after the project was linked), the job starts one for
+     the exact commit: `POST /v13/deployments` with `target: production` and
+     `gitSource: { type: github, org, repo, ref: main, sha }`.
+   - It polls `GET /v13/deployments/:id` every 5 s: `BUILDING` → `building`; `READY` → `ready` with the live URL (the
+     shortest production alias, `<project>.vercel.app`); `ERROR`/`CANCELED` → `failed` with Vercel's message. Vercel
+     keeps serving the previous production deployment when a build fails. After 20 minutes it is recorded as failed.
+3. **Editor:** "Deploying…" next to Publish while Vercel builds, a **Live ↗** link to the last successful deployment
+   (it stays even if a later deployment fails), and a toast — "Your site is live" with the link, or "The deployment
+   failed" with Vercel's error.
+4. `draft` is never deployed: the template's `vercel.json` sets `git.deploymentEnabled.draft: false`.
+
+**Setup (once):** create a Vercel token; install the Vercel GitHub app on the `plinth-pages` organisation with access to
+all repositories; keep `PORTFOLIO_REPO_VISIBILITY=public` while on Hobby. **Verified so far:** unit tests against the
+documented API shapes and integration tests of the tracker and the publish path; the live end-to-end check runs once a
+token is configured.
 
 **Duration: 3–4 days**
 

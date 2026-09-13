@@ -1,11 +1,11 @@
 import { getQueueToken } from "@nestjs/bullmq";
 import { DynamicModule, Global, Module } from "@nestjs/common";
 import type { Queue } from "bullmq";
-import { ConfigModule } from "@nestjs/config";
+import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
 import { AuthModule } from "./auth/auth.module";
 import { DevOnlyGuard } from "./common/dev-only.guard";
-import { validateEnv } from "./config/env";
+import { validateEnv, type Env } from "./config/env";
 import { ORCHESTRATOR_ROLE, type OrchestratorRole } from "./config/role";
 import { GitHubAppSetupController } from "./github/github-app-setup.controller";
 import { GitHubModule } from "./github/github.module";
@@ -14,11 +14,12 @@ import { JobsController } from "./jobs/jobs.controller";
 import { PingProcessor } from "./jobs/ping.processor";
 import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "./events/portfolio-events";
 import { PortfolioEventsHub } from "./events/portfolio-events.hub";
+import { DeploymentTracker, HOSTING, VERCEL_CLIENT, VercelHosting, createVercelClient } from "./hosting/hosting";
 import { GitSync } from "./operations/git-sync";
-import { OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
+import { DEPLOYMENT_TRACKING, OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
 import { DevEditController, OperationsController } from "./operations/operations.controller";
 import { OPERATIONS_QUEUE } from "./operations/operations.constants";
-import { OperationsProcessor, QueuedPushRetries } from "./operations/operations.processor";
+import { OperationsProcessor, QueuedDeploymentTracking, QueuedPushRetries } from "./operations/operations.processor";
 import { OperationsService } from "./operations/operations.service";
 import { PublishController } from "./operations/publish.controller";
 import { PENDING_PUSHES } from "./operations/pending-pushes";
@@ -92,7 +93,14 @@ export class ApiModule {}
     Provisioner,
     ProvisioningRecovery,
     ProvisioningScheduler,
-    { provide: PROVISIONER_OPTIONS, useValue: DEFAULT_PROVISIONER_OPTIONS },
+    {
+      provide: PROVISIONER_OPTIONS,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService<Env, true>) => ({
+        ...DEFAULT_PROVISIONER_OPTIONS,
+        visibility: config.get("PORTFOLIO_REPO_VISIBILITY", { infer: true }),
+      }),
+    },
     ...sandboxWorkerProviders,
     WorkspaceProcessor,
     WorkspaceReader,
@@ -102,6 +110,10 @@ export class ApiModule {}
     { provide: PENDING_PUSHES, useExisting: GitSync },
     { provide: PUSH_RETRIES, useClass: QueuedPushRetries },
     { provide: SANDBOX_WAKER, useClass: QueuedSandboxWaker },
+    { provide: VERCEL_CLIENT, inject: [ConfigService], useFactory: createVercelClient },
+    { provide: HOSTING, useClass: VercelHosting },
+    { provide: DEPLOYMENT_TRACKING, useClass: QueuedDeploymentTracking },
+    DeploymentTracker,
   ],
 })
 export class WorkerModule {}

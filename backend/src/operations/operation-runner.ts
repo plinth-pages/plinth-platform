@@ -3,6 +3,7 @@ import type { Operation, OperationStatus, Prisma, Sandbox } from "@prisma/client
 import type { OperationFailure } from "@plinth-pages/shared";
 import { posix } from "path";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
+import { HOSTING, HostingError, type Hosting } from "../hosting/hosting";
 import { PrismaService } from "../prisma/prisma.service";
 import { gitAuthEnv } from "../sandbox/e2b.driver";
 import { GIT_TOKENS, type GitTokenSource } from "../sandbox/git-tokens";
@@ -38,6 +39,13 @@ export interface PushRetries {
   schedule(portfolioId: string): Promise<void>;
 }
 
+export const DEPLOYMENT_TRACKING = Symbol("DEPLOYMENT_TRACKING");
+
+/** Starts following a deployment on the host, in the background. */
+export interface DeploymentTracking {
+  track(portfolioId: string, deploymentId: string): Promise<void>;
+}
+
 export type DrainOutcome = "drained" | "sandbox_not_running";
 
 /** An infrastructure failure: the operation ends `failed`, never `rejected`. */
@@ -65,6 +73,8 @@ export class OperationRunner {
     @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
     @Inject(PUSH_RETRIES) private readonly pushRetries: PushRetries,
     @Inject(SANDBOX_WAKER) private readonly waker: SandboxWaker,
+    @Inject(HOSTING) private readonly hosting: Hosting,
+    @Inject(DEPLOYMENT_TRACKING) private readonly tracking: DeploymentTracking,
   ) {}
 
   async drain(portfolioId: string): Promise<DrainOutcome> {
@@ -257,6 +267,11 @@ export class OperationRunner {
       if (failures.length) return this.reject(operation, externalId, began, failures, checkMs, `${aheadBy} change${aheadBy === 1 ? "" : "s"} not published`);
 
       await this.transition(operation, "applying", { checkMs });
+      // Hosting is ready before main moves, so a misconfigured host never leaves a published commit undeployed.
+      if (this.hosting.configured) {
+        const portfolio = await this.prisma.portfolio.findUniqueOrThrow({ where: { id: operation.portfolioId } });
+        await this.hosting.prepare(portfolio);
+      }
       const pushed = await this.exec(externalId, "live", publishPushScript(), { ...gitAuthEnv(token), PLINTH_SHA: head }, STEP_TIMEOUT.short);
       await this.discard(externalId).catch(() => undefined);
       if (pushed.exitCode !== 0 || reported(pushed.stdout, "PUBLISHED") !== head) {
@@ -264,10 +279,12 @@ export class OperationRunner {
         throw new OperationAborted(`GitHub refused the update to main, so nothing was published: ${detail}`);
       }
 
-      // No hosting provider is connected yet (gate G3), so main is the published version and nothing is deployed.
-      await this.prisma.deployment.create({
-        data: { portfolioId: operation.portfolioId, operationId: operation.id, commitSha: head, status: "unconfigured", finishedAt: new Date() },
+      const deployment = await this.prisma.deployment.create({
+        data: this.hosting.configured
+          ? { portfolioId: operation.portfolioId, operationId: operation.id, commitSha: head, status: "pending" }
+          : { portfolioId: operation.portfolioId, operationId: operation.id, commitSha: head, status: "unconfigured", finishedAt: new Date() },
       });
+      if (this.hosting.configured) await this.tracking.track(operation.portfolioId, deployment.id);
       await this.finish(operation, "applied", began, {
         commitSha: head,
         diff: `Published ${aheadBy} change${aheadBy === 1 ? "" : "s"} to main.`,
@@ -402,6 +419,7 @@ function errorText(error: unknown): string {
 
 function describeFailure(error: unknown, sandboxGone: string): string {
   if (error instanceof OperationAborted || error instanceof PushFailedError) return error.message;
+  if (error instanceof HostingError) return `${error.message} Nothing was published.`;
   if (error instanceof SandboxNotRunningError) return sandboxGone;
   return `Something went wrong, so nothing changed: ${errorText(error)}`;
 }

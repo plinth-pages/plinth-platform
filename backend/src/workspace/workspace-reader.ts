@@ -7,6 +7,7 @@ import type {
 } from "@plinth-pages/shared";
 import { UnrecoverableError } from "bullmq";
 import { GITHUB_REPOS, type GitHubRepos } from "../github/github.client";
+import { HOSTING, type Hosting } from "../hosting/hosting";
 import { PrismaService } from "../prisma/prisma.service";
 import { SANDBOX_DRIVER, SandboxNotRunningError, type SandboxDriver } from "../sandbox/sandbox-driver";
 import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
@@ -24,17 +25,20 @@ export class WorkspaceReader {
     @Inject(SANDBOX_DRIVER) private readonly driver: SandboxDriver,
     @Inject(SANDBOX_WAKER) private readonly waker: SandboxWaker,
     @Inject(GITHUB_REPOS) private readonly github: GitHubRepos,
+    @Inject(HOSTING) private readonly hosting: Hosting,
   ) {}
 
   /** What publishing would promote, read from GitHub so it answers while the sandbox is asleep. */
-  async publishState(portfolioId: string): Promise<{ unpublishedCount: number; draftSha: string | null; mainSha: string | null }> {
+  async publishState(
+    portfolioId: string,
+  ): Promise<{ unpublishedCount: number; draftSha: string | null; mainSha: string | null; hostingConfigured: boolean }> {
     const portfolio = await this.prisma.portfolio.findUniqueOrThrow({ where: { id: portfolioId }, select: { repoName: true } });
     const [draftSha, mainSha, comparison] = await Promise.all([
       this.github.getBranchSha(portfolio.repoName, "draft"),
       this.github.getBranchSha(portfolio.repoName, "main"),
       this.github.compare(portfolio.repoName, "main", "draft"),
     ]);
-    return { unpublishedCount: comparison?.aheadBy ?? 0, draftSha, mainSha };
+    return { unpublishedCount: comparison?.aheadBy ?? 0, draftSha, mainSha, hostingConfigured: this.hosting.configured };
   }
 
   async tree(portfolioId: string): Promise<WorkspaceTreeResponse> {

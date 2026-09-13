@@ -62,7 +62,9 @@ export class WorkspaceService implements OnModuleDestroy {
   }
 
   /** Reads GitHub through the worker; the sandbox does not need to be running. */
-  publishState(portfolioId: string): Promise<{ unpublishedCount: number; draftSha: string | null; mainSha: string | null }> {
+  publishState(
+    portfolioId: string,
+  ): Promise<{ unpublishedCount: number; draftSha: string | null; mainSha: string | null; hostingConfigured: boolean }> {
     return this.ask({ name: "publish-state", data: { portfolioId } }, 25_000);
   }
 

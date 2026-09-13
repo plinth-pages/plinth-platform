@@ -34,7 +34,7 @@ export function OutcomeToast({ outcome, onDismiss }: { outcome: Outcome | null; 
   const published = isPublish && operation.status === "applied";
   const title = published ? "Published" : isPublish ? "Couldn't publish" : "This change couldn't be applied safely";
   const detail = published
-    ? `${operation.diff ?? "Your draft is now the live version."} Connect hosting to put it online.`
+    ? `${operation.diff ?? "Your draft is now the published version."}`
     : isPublish && operation.status === "rejected"
       ? "The production build failed, so the live version didn't change."
       : isPublish

@@ -2,16 +2,19 @@ import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { DelayedError, type Job, type Queue } from "bullmq";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
+import { DeploymentTracker, TRACK_POLL_MS } from "../hosting/hosting";
 import { PrismaService } from "../prisma/prisma.service";
 import { SANDBOX_LOCKS, type SandboxLocks } from "../sandbox/sandbox-locks";
 import { SandboxLifecycle } from "../sandbox/sandbox.lifecycle";
 import { GitSync } from "./git-sync";
-import { OperationRunner, type PushRetries } from "./operation-runner";
+import { OperationRunner, type DeploymentTracking, type PushRetries } from "./operation-runner";
 import {
   OPERATION_BUSY_RETRY_MS,
   OPERATIONS_QUEUE,
   PUSH_JOB_OPTIONS,
+  TRACK_DEPLOYMENT_JOB_OPTIONS,
   pushJobId,
+  trackDeploymentJobId,
   type OperationJobData,
 } from "./operations.constants";
 
@@ -27,6 +30,7 @@ export class OperationsProcessor extends WorkerHost {
     private readonly sync: GitSync,
     @Inject(SANDBOX_LOCKS) private readonly locks: SandboxLocks,
     @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
+    private readonly tracker: DeploymentTracker,
   ) {
     super();
   }
@@ -34,6 +38,7 @@ export class OperationsProcessor extends WorkerHost {
   async process(job: Job<OperationJobData>, token?: string): Promise<unknown> {
     const { portfolioId } = job.data;
     if (job.name === "push") return this.push(job, token);
+    if (job.name === "track-deployment") return this.trackDeployment(job, token);
 
     const result = await this.locks.run(portfolioId, () => this.runner.drain(portfolioId));
     if (!result.acquired) return this.later(job, token);
@@ -60,6 +65,21 @@ export class OperationsProcessor extends WorkerHost {
     return "pushed";
   }
 
+  /** Needs no lock: it only reads the host and writes the deployment row. */
+  private async trackDeployment(job: Job<OperationJobData>, token?: string) {
+    const deploymentId = job.data.deploymentId!;
+    try {
+      if ((await this.tracker.track(deploymentId)) === "wait") return this.later(job, token, TRACK_POLL_MS);
+      return "tracked";
+    } catch (error) {
+      if (error instanceof DelayedError) throw error;
+      if (job.attemptsMade + 1 >= (job.opts.attempts ?? 1)) {
+        await this.tracker.giveUp(deploymentId, error instanceof Error ? error.message : String(error));
+      }
+      throw error;
+    }
+  }
+
   private async failQueued(portfolioId: string, error: string) {
     const queued = await this.prisma.operation.findMany({ where: { portfolioId, status: "queued" }, select: { id: true } });
     for (const { id } of queued) {
@@ -73,6 +93,16 @@ export class OperationsProcessor extends WorkerHost {
   private async later(job: Job, token: string | undefined, delayMs = OPERATION_BUSY_RETRY_MS): Promise<never> {
     await job.moveToDelayed(Date.now() + Math.max(delayMs, 50), token);
     throw new DelayedError();
+  }
+}
+
+/** Worker only: follows deployments through the queue. */
+@Injectable()
+export class QueuedDeploymentTracking implements DeploymentTracking {
+  constructor(@InjectQueue(OPERATIONS_QUEUE) private readonly queue: Queue<OperationJobData>) {}
+
+  async track(portfolioId: string, deploymentId: string): Promise<void> {
+    await this.queue.add("track-deployment", { portfolioId, deploymentId }, { jobId: trackDeploymentJobId(deploymentId), delay: 5_000, ...TRACK_DEPLOYMENT_JOB_OPTIONS });
   }
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import type { PublishStatusResponse } from "@plinth-pages/shared";
+import type { DeploymentSummary, PublishStatusResponse } from "@plinth-pages/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { usePortfolioEvents } from "./portfolioEvents";
@@ -14,10 +14,20 @@ export function usePublish(portfolioId: string) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A deployment that finished while the editor was open. */
+  const [deployed, setDeployed] = useState<DeploymentSummary | null>(null);
+  const followed = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await api.publishStatus(portfolioId));
+      const next = await api.publishStatus(portfolioId);
+      const deployment = next.lastDeployment;
+      if (deployment && (deployment.status === "pending" || deployment.status === "building")) followed.current = deployment.id;
+      if (deployment && followed.current === deployment.id && (deployment.status === "ready" || deployment.status === "failed")) {
+        followed.current = null;
+        setDeployed(deployment);
+      }
+      setStatus(next);
     } catch {
       // Keep the last known state; the next event or poll retries.
     }
@@ -29,16 +39,17 @@ export function usePublish(portfolioId: string) {
 
   // Several events arrive per operation; one refresh after they settle is enough.
   usePortfolioEvents(portfolioId, (event) => {
-    if (event.type !== "operation") return;
+    if (event.type !== "operation" && event.type !== "deployment") return;
     if (pending.current) clearTimeout(pending.current);
     pending.current = setTimeout(() => void refresh(), 400);
   });
 
+  const deploying = status?.lastDeployment?.status === "pending" || status?.lastDeployment?.status === "building";
   const publishing = Boolean(status?.publishing) || submitting;
   useEffect(() => {
-    const timer = setInterval(() => void refresh(), publishing ? PUBLISHING_POLL_MS : IDLE_POLL_MS);
+    const timer = setInterval(() => void refresh(), publishing || deploying ? PUBLISHING_POLL_MS : IDLE_POLL_MS);
     return () => clearInterval(timer);
-  }, [publishing, refresh]);
+  }, [publishing, deploying, refresh]);
 
   const publish = useCallback(async () => {
     setSubmitting(true);
@@ -53,5 +64,5 @@ export function usePublish(portfolioId: string) {
     }
   }, [portfolioId, refresh]);
 
-  return { status, publishing, publish, error };
+  return { status, publishing, deploying, publish, error, deployed, dismissDeployed: () => setDeployed(null) };
 }

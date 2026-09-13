@@ -125,7 +125,8 @@ export interface PreviewResponse {
 /** Pushed to the IDE over server-sent events. Events are hints to refetch; the REST endpoints stay authoritative. */
 export type PortfolioEvent =
   | { type: "sandbox"; status: PreviewStatus; at: string }
-  | { type: "operation"; operationId: string; status: OperationStatus; at: string };
+  | { type: "operation"; operationId: string; status: OperationStatus; at: string }
+  | { type: "deployment"; deploymentId: string; status: DeploymentStatus; at: string };
 
 export type WorkspaceFileKind = "file" | "binary" | "too_large";
 
@@ -274,6 +275,8 @@ export interface PublishStatusResponse {
   /** The publish operation queued or running, if any. */
   publishing: OperationSummary | null;
   lastDeployment: DeploymentSummary | null;
+  /** The URL of the most recent successful deployment — still live even if a later one failed. */
+  liveUrl: string | null;
   /** False until a hosting provider is connected; publishing still promotes draft to main. */
   hostingConfigured: boolean;
 }

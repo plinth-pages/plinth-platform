@@ -222,6 +222,8 @@ let sandbox: SimulatedSandbox;
 let runner: OperationRunner;
 let events: { operationId: string; status: string }[];
 let scheduledPushes: string[];
+let hosting: { configured: boolean; prepared: string[]; failWith: Error | null; prepare(portfolio: Portfolio): Promise<void> };
+let tracked: string[];
 let woken: string[];
 
 async function portfolioWithSandbox(): Promise<Portfolio> {
@@ -248,11 +250,22 @@ beforeEach(() => {
   sandbox = new SimulatedSandbox();
   events = [];
   scheduledPushes = [];
+  tracked = [];
+  hosting = {
+    configured: false,
+    prepared: [],
+    failWith: null,
+    async prepare(portfolio) {
+      // The simulated main must not have moved yet when hosting is prepared.
+      this.prepared.push(`${portfolio.id}@${sandbox.main}`);
+      if (this.failWith) throw this.failWith;
+    },
+  };
   woken = [];
   const publisher = { publish: async (_: string, event: { type: string; operationId?: string; status: string }) => void events.push({ operationId: event.operationId!, status: event.status }) };
   runner = new OperationRunner(prisma, sandbox, tokens, new GitSync(prisma, sandbox, tokens), publisher, {
     schedule: async (portfolioId) => void scheduledPushes.push(portfolioId),
-  }, { wake: async (portfolioId) => void woken.push(portfolioId) });
+  }, { wake: async (portfolioId) => void woken.push(portfolioId) }, hosting, { track: async (_portfolioId, deploymentId) => void tracked.push(deploymentId) });
 });
 
 afterAll(async () => {
@@ -484,6 +497,40 @@ describe("publishing", () => {
 
     expect(await reload(publish.id)).toMatchObject({ status: "failed", error: expect.stringContaining("main) has changes that aren't in your draft") });
     expect(sandbox.steps).not.toContain("publish-push");
+  });
+
+  it("with hosting connected: prepares the project before main moves, then follows the deployment", async () => {
+    hosting.configured = true;
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Hosted" };\n' }]);
+    await runner.drain(portfolio.id);
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    expect(await reload(publish.id)).toMatchObject({ status: "applied", commitSha: "c1" });
+    expect(hosting.prepared).toEqual([`${portfolio.id}@base`]);
+    const deployment = await prisma.deployment.findUniqueOrThrow({ where: { operationId: publish.id } });
+    expect(deployment).toMatchObject({ status: "pending", commitSha: "c1", finishedAt: null });
+    expect(tracked).toEqual([deployment.id]);
+  });
+
+  it("with hosting misconfigured: publishes nothing and says what to fix", async () => {
+    const { HostingError } = await import("../hosting/hosting");
+    hosting.configured = true;
+    hosting.failWith = new HostingError("Vercel can't reach plinth-pages/portfolio-x: Repository not found. Install the Vercel GitHub app on the organisation.");
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Blocked" };\n' }]);
+    await runner.drain(portfolio.id);
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    expect(await reload(publish.id)).toMatchObject({ status: "failed", error: expect.stringContaining("Install the Vercel GitHub app") });
+    expect(sandbox.main).toBe("base");
+    expect(sandbox.steps).not.toContain("publish-push");
+    expect(await prisma.deployment.count({ where: { operationId: publish.id } })).toBe(0);
+    expect(tracked).toEqual([]);
   });
 
   it("fails without retrying when GitHub refuses the update to main", async () => {

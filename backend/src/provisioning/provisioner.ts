@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service";
-import { GITHUB_REPOS, type GitHubRepos } from "../github/github.client";
+import { GITHUB_REPOS, type GitHubRepos, type RepoVisibility } from "../github/github.client";
 
 /** Retryable unless marked otherwise. */
 export class ProvisioningError extends Error {
@@ -25,10 +25,12 @@ export interface ProvisionerOptions {
   /** How long to wait for GitHub to finish writing a freshly generated repository. */
   branchPollAttempts: number;
   branchPollDelayMs: number;
+  /** For new repositories only. From PORTFOLIO_REPO_VISIBILITY. */
+  visibility: RepoVisibility;
 }
 
 export const PROVISIONER_OPTIONS = Symbol("PROVISIONER_OPTIONS");
-export const DEFAULT_PROVISIONER_OPTIONS: ProvisionerOptions = { branchPollAttempts: 20, branchPollDelayMs: 1500 };
+export const DEFAULT_PROVISIONER_OPTIONS: Omit<ProvisionerOptions, "visibility"> = { branchPollAttempts: 20, branchPollDelayMs: 1500 };
 
 const DRAFT_BRANCH = "draft";
 const PRODUCTION_BRANCH = "main";
@@ -61,8 +63,12 @@ export class Provisioner {
       );
     }
     if (!repo) {
-      repo = await this.github.generateFromTemplate(name, `Portfolio for @${portfolio.user.githubLogin} — built with Plinth`);
-      this.logger.log(`Generated ${repo.fullName} for portfolio ${portfolioId}`);
+      repo = await this.github.generateFromTemplate(
+        name,
+        `Portfolio for @${portfolio.user.githubLogin} — built with Plinth`,
+        this.options.visibility,
+      );
+      this.logger.log(`Generated ${repo.fullName} (${this.options.visibility}) for portfolio ${portfolioId}`);
     }
 
     const mainSha = await this.waitForBranch(name, PRODUCTION_BRANCH);

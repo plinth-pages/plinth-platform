@@ -28,21 +28,24 @@ export class PublishController {
     const portfolio = await this.prisma.portfolio.findFirst({ where: { id, userId: user.id }, select: { id: true, status: true } });
     if (!portfolio) throw new NotFoundException("Portfolio not found");
 
-    const [state, sandbox, publishing, lastDeployment] = await Promise.all([
-      portfolio.status === "ready" ? this.workspace.publishState(id) : { unpublishedCount: 0, draftSha: null, mainSha: null },
+    const [state, sandbox, publishing, lastDeployment, lastLive] = await Promise.all([
+      portfolio.status === "ready"
+        ? this.workspace.publishState(id)
+        : { unpublishedCount: 0, draftSha: null, mainSha: null, hostingConfigured: false },
       this.prisma.sandbox.findUnique({ where: { portfolioId: id }, select: { pendingPush: true } }),
       this.prisma.operation.findFirst({
         where: { portfolioId: id, type: "publish", status: { in: ["queued", "staging", "checking", "applying"] } },
         orderBy: { createdAt: "desc" },
       }),
       this.prisma.deployment.findFirst({ where: { portfolioId: id }, orderBy: { createdAt: "desc" } }),
+      this.prisma.deployment.findFirst({ where: { portfolioId: id, status: "ready" }, orderBy: { createdAt: "desc" } }),
     ]);
     return {
       ...state,
       pendingPush: sandbox?.pendingPush ?? false,
       publishing: publishing ? toSummary(publishing) : null,
       lastDeployment: lastDeployment ? toDeployment(lastDeployment) : null,
-      hostingConfigured: false,
+      liveUrl: lastLive?.url ?? null,
     };
   }
 }

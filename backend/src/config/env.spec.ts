@@ -74,4 +74,10 @@ describe("validateEnv", () => {
   it("parses admin logins case-insensitively", () => {
     expect([...adminLogins({ ADMIN_GITHUB_LOGINS: " SumitVerma77, other " })]).toEqual(["sumitverma77", "other"]);
   });
+
+  it("defaults new portfolio repositories to private and accepts only public or private", () => {
+    expect(validateEnv(worker).PORTFOLIO_REPO_VISIBILITY).toBe("private");
+    expect(validateEnv({ ...worker, PORTFOLIO_REPO_VISIBILITY: "public" }).PORTFOLIO_REPO_VISIBILITY).toBe("public");
+    expect(() => validateEnv({ ...worker, PORTFOLIO_REPO_VISIBILITY: "internal" })).toThrow(/PORTFOLIO_REPO_VISIBILITY/);
+  });
 });

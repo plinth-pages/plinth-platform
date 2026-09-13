@@ -26,6 +26,12 @@ const envSchema = z
     // Repository provisioning.
     GITHUB_ORG: z.string().default("plinth-pages"),
     GITHUB_TEMPLATE_REPO: z.string().default("plinth-template"),
+    /**
+     * Visibility of newly provisioned portfolio repositories. `public` lets Vercel's Hobby plan deploy them (Hobby
+     * can't deploy private repositories owned by an organisation); switch to `private` on Vercel Pro. Existing
+     * repositories are not changed.
+     */
+    PORTFOLIO_REPO_VISIBILITY: z.enum(["public", "private"]).default("private"),
     // The GitHub App that creates portfolio repositories — worker role only.
     GITHUB_APP_ID: z.string().regex(/^\d+$/, "Must be the numeric App ID").optional(),
     /** Base64 of the App's PEM private key, so it fits on one .env line. */
@@ -58,6 +64,12 @@ const envSchema = z
         (value) => value.includes("{session}") && URL.canParse(value.replace("{session}", "x")),
         "Must be a URL whose hostname contains {session}",
       ),
+
+    // Hosting — worker role. Without a token, Publish still promotes draft to main but deploys nothing.
+    /** vercel.com/account/settings/tokens. Scope it to the team or account that owns the portfolio projects. */
+    VERCEL_TOKEN: z.string().optional(),
+    /** Only for a Vercel team; leave unset for a personal (Hobby) account. */
+    VERCEL_TEAM_ID: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;

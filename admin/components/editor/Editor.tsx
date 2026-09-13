@@ -9,6 +9,7 @@ import { useOperations } from "@/lib/useOperations";
 import { usePublish } from "@/lib/usePublish";
 import { usePreview, type PreviewPhase } from "@/lib/usePreview";
 import { CodeView, type CodeTarget } from "./CodeView";
+import { DeploymentToast } from "./DeploymentToast";
 import { OutcomeToast } from "./OutcomeToast";
 import { PublishButton } from "./PublishButton";
 import { DEVICES, PreviewFrame, type Device } from "./PreviewFrame";
@@ -132,7 +133,13 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
               Open preview ↗
             </a>
           ) : null}
-          <PublishButton status={publishing.status} publishing={publishing.publishing} onPublish={() => void publishing.publish()} error={publishing.error} />
+          <PublishButton
+            status={publishing.status}
+            publishing={publishing.publishing}
+            deploying={publishing.deploying}
+            onPublish={() => void publishing.publish()}
+            error={publishing.error}
+          />
         </div>
       </header>
 
@@ -205,6 +212,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
         />
       </div>
       <OutcomeToast outcome={operations.outcome} onDismiss={operations.dismissOutcome} />
+      <DeploymentToast deployment={publishing.deployed} onDismiss={publishing.dismissDeployed} />
     </div>
   );
 }

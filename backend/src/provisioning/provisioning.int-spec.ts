@@ -25,6 +25,7 @@ class FakeGitHub implements GitHubRepos {
   readonly templateFullName = TEMPLATE;
   repos = new Map<string, RepoInfo & { branches: Map<string, string> }>();
   generated: string[] = [];
+  visibilities: string[] = [];
   deleted: string[] = [];
   /** Branch lookups that return null before `main` appears, like a freshly generated repository. */
   pendingMainLookups = 0;
@@ -40,8 +41,9 @@ class FakeGitHub implements GitHubRepos {
     const repo = this.repos.get(name);
     return repo ? { ...repo, branches: undefined } : null;
   }
-  async generateFromTemplate(name: string) {
+  async generateFromTemplate(name: string, _description: string, visibility: "public" | "private") {
     this.generated.push(name);
+    this.visibilities.push(visibility);
     const repo = this.info(name, TEMPLATE);
     this.repos.set(name, repo);
     return repo;
@@ -115,7 +117,7 @@ beforeEach(() => {
   github = new FakeGitHub();
   queue = { add: jest.fn(async () => ({ id: "job" })) };
   portfolios = new PortfoliosService(prisma, config, queue as unknown as Queue<ProvisionJobData>);
-  provisioner = new Provisioner(prisma, github, { branchPollAttempts: 5, branchPollDelayMs: 5 });
+  provisioner = new Provisioner(prisma, github, { branchPollAttempts: 5, branchPollDelayMs: 5, visibility: "public" });
   recovery = new ProvisioningRecovery(prisma, queue as unknown as Queue<ProvisionJobData>);
   processor = new ProvisioningProcessor(provisioner, recovery);
 });
@@ -169,6 +171,7 @@ describe("provisioning", () => {
 
     const repo = github.repos.get(portfolio.repoName)!;
     expect(github.generated).toEqual([portfolio.repoName]);
+    expect(github.visibilities).toEqual(["public"]); // from PORTFOLIO_REPO_VISIBILITY
     expect(repo.branches.get("draft")).toBe(repo.branches.get("main"));
     const saved = await prisma.portfolio.findUniqueOrThrow({ where: { id: portfolio.id } });
     expect(saved).toMatchObject({ status: "ready", repoId: repo.id, failureReason: null, provisionAttempts: 1 });
@@ -177,7 +180,7 @@ describe("provisioning", () => {
   it("adopts a repository an earlier attempt already created instead of generating another", async () => {
     const user = await makeUser();
     const portfolio = await portfolios.create(user, "developer");
-    await github.generateFromTemplate(portfolio.repoName);
+    await github.generateFromTemplate(portfolio.repoName, "", "public");
     github.generated = [];
 
     await processor.process(job(portfolio.id));
