@@ -39,16 +39,31 @@ enum PortfolioStatus {
   failed
 }
 
+enum PortfolioRole {
+  developer
+  designer
+  student
+  creator
+  freelancer
+  founder
+  researcher
+  other
+}
+
 model Portfolio {
-  id              String          @id @default(cuid())
-  userId          String          @map("user_id")
-  slug            String?         @unique
-  status          PortfolioStatus @default(provisioning)
-  repoName        String?         @map("repo_name")
-  repoId          String?         @map("repo_id")
-  vercelProjectId String?         @map("vercel_project_id")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  id                String          @id @default(cuid())
+  userId            String          @map("user_id")
+  role              PortfolioRole
+  slug              String?         @unique
+  status            PortfolioStatus @default(provisioning)
+  // Chosen at creation, before the repository exists, so a retry always targets the same name.
+  repoName          String          @unique @map("repo_name")
+  repoId            String?         @map("repo_id")
+  vercelProjectId   String?         @map("vercel_project_id")
+  failureReason     String?         @map("failure_reason")
+  provisionAttempts Int             @default(0) @map("provision_attempts")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
 
   user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   sandbox               Sandbox?
@@ -59,6 +74,7 @@ model Portfolio {
   conversations         Conversation[]
 
   @@index([userId])
+  @@index([status, updatedAt])
   @@map("portfolios")
 }
 

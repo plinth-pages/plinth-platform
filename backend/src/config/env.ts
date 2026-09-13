@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const url = z.string().url();
 
+const API_ONLY = ["SESSION_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const;
+const WORKER_ONLY = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"] as const;
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -14,20 +17,37 @@ const envSchema = z
     API_URL: url,
     ADMIN_URL: url,
 
-    // Required by the api role only; the worker never handles sign-in.
+    // Sign-in — api role only.
     SESSION_SECRET: z.string().min(32).optional(),
     GITHUB_CLIENT_ID: z.string().optional(),
     GITHUB_CLIENT_SECRET: z.string().optional(),
     ADMIN_GITHUB_LOGINS: z.string().default(""),
+
+    // Repository provisioning.
+    GITHUB_ORG: z.string().default("plinth-pages"),
+    GITHUB_TEMPLATE_REPO: z.string().default("plinth-template"),
+    // The GitHub App that creates portfolio repositories — worker role only.
+    GITHUB_APP_ID: z.string().regex(/^\d+$/, "Must be the numeric App ID").optional(),
+    /** Base64 of the App's PEM private key, so it fits on one .env line. */
+    GITHUB_APP_PRIVATE_KEY: z
+      .string()
+      .refine(
+        (value) => /-----BEGIN [A-Z ]*PRIVATE KEY-----/.test(Buffer.from(value, "base64").toString("utf8")),
+        "Must be the base64-encoded PEM private key",
+      )
+      .optional(),
   })
   .superRefine((env, ctx) => {
-    if (env.ORCHESTRATOR_ROLE !== "api") return;
-    for (const key of ["SESSION_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const) {
+    const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;
+    for (const key of required) {
       if (!env[key]) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
-          message: "Required when ORCHESTRATOR_ROLE=api",
+          message:
+            env.ORCHESTRATOR_ROLE === "worker"
+              ? "Required when ORCHESTRATOR_ROLE=worker (create the GitHub App at /v1/dev/github-app/new)"
+              : "Required when ORCHESTRATOR_ROLE=api",
         });
       }
     }

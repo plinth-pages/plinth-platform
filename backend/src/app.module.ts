@@ -5,10 +5,17 @@ import { AuthModule } from "./auth/auth.module";
 import { DevOnlyGuard } from "./common/dev-only.guard";
 import { validateEnv } from "./config/env";
 import { ORCHESTRATOR_ROLE, type OrchestratorRole } from "./config/role";
+import { GitHubAppSetupController } from "./github/github-app-setup.controller";
+import { GitHubModule } from "./github/github.module";
 import { HealthController } from "./health/health.controller";
 import { JobsController } from "./jobs/jobs.controller";
 import { PingProcessor } from "./jobs/ping.processor";
 import { PrismaModule } from "./prisma/prisma.module";
+import { PortfoliosController } from "./provisioning/portfolios.controller";
+import { PortfoliosService } from "./provisioning/portfolios.service";
+import { DEFAULT_PROVISIONER_OPTIONS, PROVISIONER_OPTIONS, Provisioner } from "./provisioning/provisioner";
+import { ProvisioningRecovery, ProvisioningScheduler } from "./provisioning/provisioning-recovery";
+import { ProvisioningProcessor } from "./provisioning/provisioning.processor";
 import { QueueModule } from "./queue/queue.module";
 
 @Global()
@@ -26,15 +33,22 @@ class RoleModule {
 /** HTTP only. Must never register a queue processor or cron — see architecture.spec.ts. */
 @Module({
   imports: [QueueModule, AuthModule],
-  controllers: [HealthController, AdminController, JobsController],
-  providers: [DevOnlyGuard],
+  controllers: [HealthController, AdminController, JobsController, PortfoliosController, GitHubAppSetupController],
+  providers: [DevOnlyGuard, PortfoliosService],
 })
 export class ApiModule {}
 
-/** Queue consumers, and later crons and sandbox sweeps. No controllers. */
+/** Queue consumers, schedulers and anything that acts on GitHub as the App. No controllers. */
 @Module({
-  imports: [QueueModule],
-  providers: [PingProcessor],
+  imports: [QueueModule, GitHubModule],
+  providers: [
+    PingProcessor,
+    ProvisioningProcessor,
+    Provisioner,
+    ProvisioningRecovery,
+    ProvisioningScheduler,
+    { provide: PROVISIONER_OPTIONS, useValue: DEFAULT_PROVISIONER_OPTIONS },
+  ],
 })
 export class WorkerModule {}
 

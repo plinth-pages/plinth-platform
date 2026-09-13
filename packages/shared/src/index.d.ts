@@ -48,3 +48,48 @@ export interface ApiError {
   statusCode: number;
   message: string;
 }
+
+// ---------------------------------------------------------------------------
+// Portfolios (Phase 2)
+// ---------------------------------------------------------------------------
+
+export type PortfolioRole =
+  | "developer"
+  | "designer"
+  | "student"
+  | "creator"
+  | "freelancer"
+  | "founder"
+  | "researcher"
+  | "other";
+
+export type PortfolioStatus = "provisioning" | "ready" | "failed";
+
+export interface PortfolioSummary {
+  id: string;
+  role: PortfolioRole;
+  status: PortfolioStatus;
+  repoName: string;
+  /** Present once the repository exists on GitHub. */
+  repoUrl: string | null;
+  failureReason: string | null;
+  createdAt: string;
+}
+
+export interface CreatePortfolioRequest {
+  role: PortfolioRole;
+}
+
+export interface PortfolioResponse {
+  portfolio: PortfolioSummary;
+}
+
+export interface PortfoliosResponse {
+  portfolios: PortfolioSummary[];
+}
+
+export interface PortfolioLimitError extends ApiError {
+  statusCode: 409;
+  code: "PORTFOLIO_LIMIT";
+  portfolioId: string;
+}

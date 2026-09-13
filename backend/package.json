@@ -11,7 +11,8 @@
     "test": "jest",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "test:int": "jest --testRegex \"\\.int-spec\\.ts$\" --runInBand"
   },
   "jest": {
     "moduleFileExtensions": [

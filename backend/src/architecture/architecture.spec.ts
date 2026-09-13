@@ -1,7 +1,9 @@
 import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Module, type DynamicModule } from "@nestjs/common";
+import { generateKeyPairSync } from "crypto";
 import { AppModule } from "../app.module";
 import { PingProcessor } from "../jobs/ping.processor";
+import { ProvisioningProcessor } from "../provisioning/provisioning.processor";
 import { findProcessors } from "./topology";
 
 const baseEnv = {
@@ -12,6 +14,10 @@ const baseEnv = {
   SESSION_SECRET: "x".repeat(32),
   GITHUB_CLIENT_ID: "test",
   GITHUB_CLIENT_SECRET: "test",
+  GITHUB_APP_ID: "1",
+  GITHUB_APP_PRIVATE_KEY: Buffer.from(
+    generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }),
+  ).toString("base64"),
 };
 
 function graphFor(role: "api" | "worker") {
@@ -32,8 +38,10 @@ describe("process role topology", () => {
     expect(await findProcessors(graphFor("api"))).toEqual([]);
   });
 
-  it("registers the ping processor in the worker role", async () => {
-    expect(await findProcessors(graphFor("worker"))).toContain(PingProcessor);
+  it("registers the ping and provisioning processors in the worker role", async () => {
+    expect(await findProcessors(graphFor("worker"))).toEqual(
+      expect.arrayContaining([PingProcessor, ProvisioningProcessor]),
+    );
   });
 
   it("detects a processor that leaks into an api-shaped graph", async () => {
