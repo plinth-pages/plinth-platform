@@ -1,0 +1,238 @@
+// Plinth orchestrator schema — Phase 0.
+// Tables exist so later phases have somewhere to land; columns are added when a phase needs them.
+//
+// DATABASE_URL points at Supabase's session pooler (port 5432). The backend is a long-running
+// process, not serverless, so session mode is correct and also supports migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+model User {
+  id          String   @id @default(cuid())
+  githubId    String   @unique @map("github_id")
+  githubLogin String   @map("github_login")
+  name        String?
+  avatarUrl   String?  @map("avatar_url")
+  role        UserRole @default(user)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  portfolios Portfolio[]
+
+  @@map("users")
+}
+
+enum PortfolioStatus {
+  provisioning
+  ready
+  failed
+}
+
+model Portfolio {
+  id              String          @id @default(cuid())
+  userId          String          @map("user_id")
+  slug            String?         @unique
+  status          PortfolioStatus @default(provisioning)
+  repoName        String?         @map("repo_name")
+  repoId          String?         @map("repo_id")
+  vercelProjectId String?         @map("vercel_project_id")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sandbox               Sandbox?
+  operations            Operation[]
+  deployments           Deployment[]
+  installedIntegrations InstalledIntegration[]
+  credentials           Credential[]
+  conversations         Conversation[]
+
+  @@index([userId])
+  @@map("portfolios")
+}
+
+enum SandboxStatus {
+  starting
+  running
+  paused
+  destroyed
+  unhealthy
+}
+
+model Sandbox {
+  id             String        @id @default(cuid())
+  portfolioId    String        @unique @map("portfolio_id")
+  provider       String        @default("e2b")
+  externalId     String?       @map("external_id")
+  status         SandboxStatus @default(starting)
+  previewUrl     String?       @map("preview_url")
+  lastAccessedAt DateTime?     @map("last_accessed_at")
+  minutesUsed    Int           @default(0) @map("minutes_used")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@map("sandboxes")
+}
+
+enum OperationType {
+  edit
+  install
+  uninstall
+  move
+  theme
+  fleet_update
+  publish
+}
+
+enum OperationActor {
+  user
+  copilot
+  system
+}
+
+enum OperationStatus {
+  queued
+  staging
+  checking
+  applying
+  applied
+  rejected
+  reverted
+  failed
+}
+
+model Operation {
+  id          String          @id @default(cuid())
+  portfolioId String          @map("portfolio_id")
+  type        OperationType
+  actor       OperationActor
+  status      OperationStatus @default(queued)
+  input       Json
+  diff        String?
+  checkOutput Json?           @map("check_output")
+  attempts    Int             @default(0)
+  commitSha   String?         @map("commit_sha")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  startedAt   DateTime?       @map("started_at")
+  finishedAt  DateTime?       @map("finished_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, createdAt])
+  @@map("operations")
+}
+
+enum DeploymentStatus {
+  pending
+  building
+  ready
+  failed
+}
+
+model Deployment {
+  id                 String           @id @default(cuid())
+  portfolioId        String           @map("portfolio_id")
+  status             DeploymentStatus @default(pending)
+  commitSha          String           @map("commit_sha")
+  vercelDeploymentId String?          @map("vercel_deployment_id")
+  url                String?
+  error              String?
+  createdAt          DateTime         @default(now()) @map("created_at")
+  finishedAt         DateTime?        @map("finished_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, createdAt])
+  @@map("deployments")
+}
+
+model Integration {
+  id            String   @id // e.g. "leetcode-stats"
+  name          String
+  category      String
+  packageName   String   @map("package_name")
+  latestVersion String   @map("latest_version")
+  manifest      Json
+  isActive      Boolean  @default(false) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  installs InstalledIntegration[]
+
+  @@map("integrations")
+}
+
+model InstalledIntegration {
+  id            String   @id @default(cuid())
+  portfolioId   String   @map("portfolio_id")
+  integrationId String   @map("integration_id")
+  version       String
+  slot          String
+  props         Json
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  portfolio   Portfolio   @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  integration Integration @relation(fields: [integrationId], references: [id])
+
+  @@unique([portfolioId, integrationId])
+  @@map("installed_integrations")
+}
+
+model Credential {
+  id          String   @id @default(cuid())
+  portfolioId String   @map("portfolio_id")
+  key         String // environment variable name, e.g. RESEND_API_KEY
+  ciphertext  String
+  iv          String
+  keyId       String   @map("key_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, key])
+  @@map("credentials")
+}
+
+model Conversation {
+  id          String   @id @default(cuid())
+  portfolioId String   @map("portfolio_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  messages  Message[]
+
+  @@index([portfolioId])
+  @@map("conversations")
+}
+
+enum MessageRole {
+  user
+  assistant
+  tool
+}
+
+model Message {
+  id             String      @id @default(cuid())
+  conversationId String      @map("conversation_id")
+  role           MessageRole
+  content        Json
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}

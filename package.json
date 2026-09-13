@@ -1,0 +1,12 @@
+{
+  "name": "plinth-platform",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "scripts": {
+    "dev:api": "pnpm --filter @plinth/backend dev:api",
+    "dev:worker": "pnpm --filter @plinth/backend dev:worker",
+    "dev:admin": "pnpm --filter @plinth/admin dev",
+    "test": "pnpm --filter @plinth/backend test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}
