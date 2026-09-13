@@ -7,7 +7,8 @@
     "dev:worker": "pnpm --filter @plinth-pages/backend dev:worker",
     "dev:admin": "pnpm --filter @plinth-pages/admin dev",
     "test": "pnpm --filter @plinth-pages/backend test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "build:packages": "pnpm --filter @plinth-pages/codemod build"
   },
   "engines": {
     "node": ">=22"

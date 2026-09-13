@@ -1,0 +1,37 @@
+{
+  "id": "leetcode-stats",
+  "name": "LeetCode Stats",
+  "description": "Problems you've solved on LeetCode by difficulty, and your global ranking. Updates hourly.",
+  "category": "coding",
+  "package": "@plinth-pages/leetcode-stats",
+  "version": "0.1.0",
+  "component": {
+    "import": "LeetCodeStats",
+    "kind": "element"
+  },
+  "defaultSlot": "afterProjects",
+  "allowedSlots": [
+    "heroAfter",
+    "beforeProjects",
+    "afterProjects",
+    "sidebar",
+    "beforeContact"
+  ],
+  "props": [
+    {
+      "name": "username",
+      "label": "LeetCode username",
+      "type": "string",
+      "required": true,
+      "placeholder": "your-username",
+      "pattern": "[A-Za-z0-9_-]{1,40}",
+      "patternMessage": "LeetCode usernames use letters, numbers, underscores and hyphens.",
+      "maxLength": 40
+    }
+  ],
+  "recommendedFor": [
+    "developer",
+    "student"
+  ],
+  "homepage": "https://github.com/plinth-pages/plinth-packages/tree/main/packages/leetcode-stats"
+}

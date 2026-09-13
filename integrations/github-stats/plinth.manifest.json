@@ -1,0 +1,44 @@
+{
+  "id": "github-stats",
+  "name": "GitHub Stats",
+  "description": "Your public repositories, stars and followers, with your most-starred repositories. Updates hourly.",
+  "category": "coding",
+  "package": "@plinth-pages/github-stats",
+  "version": "0.1.0",
+  "component": {
+    "import": "GitHubStats",
+    "kind": "element"
+  },
+  "defaultSlot": "afterProjects",
+  "allowedSlots": [
+    "heroAfter",
+    "beforeProjects",
+    "afterProjects",
+    "sidebar",
+    "beforeContact"
+  ],
+  "props": [
+    {
+      "name": "username",
+      "label": "GitHub username",
+      "type": "string",
+      "required": true,
+      "placeholder": "octocat",
+      "pattern": "[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}",
+      "patternMessage": "GitHub usernames use letters, numbers and single hyphens (up to 39 characters).",
+      "maxLength": 39
+    },
+    {
+      "name": "showTopRepos",
+      "label": "Show top repositories",
+      "type": "boolean",
+      "default": true
+    }
+  ],
+  "recommendedFor": [
+    "developer",
+    "student",
+    "researcher"
+  ],
+  "homepage": "https://github.com/plinth-pages/plinth-packages/tree/main/packages/github-stats"
+}

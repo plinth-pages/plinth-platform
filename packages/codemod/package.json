@@ -1,9 +1,32 @@
 {
   "name": "@plinth-pages/codemod",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "AST codemod engine — built in Phase 9.",
+  "description": "The AST codemod engine: adds, moves and removes integrations inside a portfolio's locked slots. Source text in, source text out.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
   "scripts": {
-    "typecheck": "echo \"@plinth-pages/codemod: nothing to typecheck until Phase 9\""
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "prettier": "^3.6.0",
+    "typescript": "^5.7"
+  },
+  "devDependencies": {
+    "@plinth-pages/check": "file:../../vendor/plinth-pages-check-0.1.0.tgz",
+    "@plinth-pages/core": "file:../../vendor/plinth-pages-core-0.1.0.tgz",
+    "@types/node": "^20",
+    "tsup": "^8",
+    "vitest": "^3"
   }
 }
