@@ -1,5 +1,12 @@
 import type {
+  AdminIntegrationRequestsResponse,
   AdminPingResponse,
+  InstallIntegrationRequest,
+  InstalledIntegrationsResponse,
+  IntegrationRequestBody,
+  IntegrationRequestResponse,
+  IntegrationsResponse,
+  ValidatePropsResponse,
   ContractCheckResponse,
   EditOperationRequest,
   OperationResponse,
@@ -71,6 +78,22 @@ export const api = {
   /** Queues a publish; returns immediately. */
   publish: (id: string) => request<OperationResponse>(`/portfolios/${id}/publish`, { method: "POST" }),
   operations: (id: string) => request<OperationsResponse>(`/portfolios/${id}/operations`),
+  integrations: () => request<IntegrationsResponse>("/integrations"),
+  validateIntegration: (integrationId: string, props: Record<string, unknown>) =>
+    request<ValidatePropsResponse>(`/integrations/${encodeURIComponent(integrationId)}/validate`, { method: "POST", body: JSON.stringify({ props }) }),
+  requestIntegration: (body: IntegrationRequestBody) =>
+    request<IntegrationRequestResponse>("/integrations/requests", { method: "POST", body: JSON.stringify(body) }),
+  withdrawIntegrationRequest: (key: string) =>
+    request<IntegrationRequestResponse>(`/integrations/requests/${encodeURIComponent(key)}`, { method: "DELETE" }),
+  installedIntegrations: (id: string) => request<InstalledIntegrationsResponse>(`/portfolios/${id}/integrations`),
+  /** Queues an install through the safety net; returns immediately. */
+  installIntegration: (id: string, body: InstallIntegrationRequest) =>
+    request<OperationResponse>(`/portfolios/${id}/integrations`, { method: "POST", body: JSON.stringify(body) }),
+  moveIntegration: (id: string, integrationId: string, slot: string) =>
+    request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "PATCH", body: JSON.stringify({ slot }) }),
+  uninstallIntegration: (id: string, integrationId: string) =>
+    request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
+  adminIntegrationRequests: () => request<AdminIntegrationRequestsResponse>("/admin/integration-requests"),
   /** Development only: runs an edit through the safety net. */
   devEdit: (id: string, body: EditOperationRequest) =>
     request<OperationResponse>(`/dev/portfolios/${id}/edit`, { method: "POST", body: JSON.stringify(body) }),

@@ -13,6 +13,7 @@ const SOURCE_LABEL: Record<OperationFailure["source"], string> = {
   install: "Installing packages",
   render: "Page render",
   build: "Production build",
+  codemod: "Placing the integration",
 };
 
 /** A gentle notice that a change was not applied. Details are one click away and never shown by default. */

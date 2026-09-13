@@ -4,6 +4,10 @@ import type { Queue } from "bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
 import { AuthModule } from "./auth/auth.module";
+import { CatalogueController } from "./catalogue/catalogue.controller";
+import { CatalogueIngest } from "./catalogue/catalogue-ingest";
+import { CatalogueService } from "./catalogue/catalogue.service";
+import { IntegrationRequestsService } from "./catalogue/integration-requests.service";
 import { DevOnlyGuard } from "./common/dev-only.guard";
 import { validateEnv, type Env } from "./config/env";
 import { ORCHESTRATOR_ROLE, type OrchestratorRole } from "./config/role";
@@ -16,6 +20,9 @@ import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "./events/portfol
 import { PortfolioEventsHub } from "./events/portfolio-events.hub";
 import { DeploymentTracker, HOSTING, VERCEL_CLIENT, VercelHosting, createVercelClient } from "./hosting/hosting";
 import { GitSync } from "./operations/git-sync";
+import { IntegrationPlanner } from "./operations/integration-planner";
+import { IntegrationsController } from "./operations/integrations.controller";
+import { IntegrationsService } from "./operations/integrations.service";
 import { DEPLOYMENT_TRACKING, OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
 import { DevEditController, OperationsController } from "./operations/operations.controller";
 import { OPERATIONS_QUEUE } from "./operations/operations.constants";
@@ -64,6 +71,8 @@ class RoleModule {
     WorkspaceController,
     OperationsController,
     PublishController,
+    CatalogueController,
+    IntegrationsController,
     DevEditController,
     GitHubAppSetupController,
   ],
@@ -73,6 +82,9 @@ class RoleModule {
     PreviewService,
     WorkspaceService,
     OperationsService,
+    CatalogueService,
+    IntegrationRequestsService,
+    IntegrationsService,
     PortfolioEventsHub,
     ...previewApiProviders,
     {
@@ -106,6 +118,8 @@ export class ApiModule {}
     WorkspaceReader,
     OperationsProcessor,
     OperationRunner,
+    IntegrationPlanner,
+    CatalogueIngest,
     GitSync,
     { provide: PENDING_PUSHES, useExisting: GitSync },
     { provide: PUSH_RETRIES, useClass: QueuedPushRetries },

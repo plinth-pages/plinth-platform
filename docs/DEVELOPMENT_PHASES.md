@@ -984,6 +984,20 @@ them in the worker, writes them back, and continues at step 4 of Phase 5.
 
 **Duration: 5–7 days**
 
+### As built — 2026-09-14
+- **API** (`@plinth-pages/codemod`, TypeScript compiler API + text splices, no reprinting): `installIntegration`,
+  `uninstallIntegration`, `moveIntegration` over the three portfolio files (`app/layout.tsx`, `app/page.tsx`,
+  `plinth.json`), plus the primitives `addImport`, `removeImport`, `insertElement`, `insertProvider`, `removeBlock`,
+  `listBlocks`. `renameSlot` is deferred to fleet updates (Phase 16).
+- **Props** are rendered as `name={JSON.stringify(value)}` — finite numbers, booleans and strings only; reserved names
+  (`children`, `key`, `ref`, `dangerouslySetInnerHTML`, `style`, `className`, `on*`) are refused. Prettier keeps the
+  braces, e.g. `username={"octocat"}`.
+- **Order:** imports sorted by package inside `plinth:imports`; blocks in a slot sorted by integration id; providers
+  go in the `wrap={[…]}` array with the same markers.
+- **Failures** are typed `CodemodError`s (`SLOT_NOT_FOUND`, `SLOT_DUPLICATE`, `MARKERS_CORRUPT`, …) and surface as
+  `source: "codemod"` rejections. Prettier is loaded lazily, so the worker never loads it.
+- **Tests:** 52 (golden, adversarial, round trip, determinism, escaping, failures).
+
 ---
 
 ## PHASE 10 — Integration packages and catalogue
@@ -1013,6 +1027,24 @@ them; the marketplace renders a configuration form from each manifest.
 - [ ] A manifest referencing a slot outside the vocabulary is rejected at ingestion
 
 **Duration: 4–5 days**
+
+### As built — 2026-09-14
+- **Not on npm yet.** Packages are vendored: `integrations/<id>/<package>-<version>.tgz` in this repository. The worker
+  ingests them at start-up (`CatalogueIngest`), reading `package.json` and `plinth.manifest.json` from inside the
+  tarball; a manifest must validate, name the tarball's own package and version, and use its directory as its id.
+  Installing copies the tarball to the portfolio's `vendor/` and depends on `file:vendor/<tgz>`. When publishing to
+  npm, drop the tarball: the planner falls back to the exact version.
+- **API:** `GET /v1/integrations` (catalogue + planned + the user's requests), `POST /v1/integrations/:id/validate`
+  (manifest rules, then a cached existence check against GitHub / LeetCode; an unreachable source never blocks).
+- **Planned integrations and requests** (pulled forward from Phase 13): a static list of ~40 not-yet-built
+  integrations (`planned-integrations.ts`). `POST /v1/integrations/requests` records one vote per user per
+  integration in `integration_requests` (typed suggestions are slugged, so "Notion Pages!" and "notion pages" count
+  once; installable ones are refused; 50 per account), `DELETE …/requests/:key` withdraws.
+  `GET /v1/admin/integration-requests` ranks them for the super admin (`/admin/requests` in the admin app).
+- **Editor → Integrations panel:** search, category filters, *On your portfolio* (Move / Remove, live pending
+  status), *Ready to install* (role recommendations first, exact `package@version`, slot picker limited to
+  `allowedSlots`, a form generated from `props` with live validation), *Coming soon* with **Request**, and a
+  free-text "Don't see it?" request.
 
 ---
 
@@ -1062,6 +1094,25 @@ update plinth.json
 - [ ] Codemod-caused rejections are recorded separately from other rejections
 
 **Duration: 5–6 days**
+
+### As built — 2026-09-14
+- **Planner** (`IntegrationPlanner`, worker): after staging, reads the three portfolio files and `package.json` from
+  the staging worktree, runs the codemod, sets or removes the dependency (key order preserved so removal is exact),
+  and returns `noop` / `reject` / `change`. The runner writes the vendored tarball (`vendor` step), writes the files,
+  and continues with the unchanged safety net: install + format → `plinth check` ∥ `tsc` → apply → push → render check.
+  The `installed_integrations` table is updated in the same transaction as success, never on a revert.
+- **Dependencies are linked before the code lands.** Found live: fast-forwarding `app/page.tsx` before
+  `pnpm install` linked the package made Next compile a `Module not found` and the render check reverted a good
+  install. `applyScript` now installs the new manifest into the live tree first, then merges; `revertScript` does the
+  same in reverse. A package that can't be linked rejects the operation before the preview changes.
+- **API** (`/v1/portfolios/:id/integrations`): `GET` installed + pending, `POST` install (catalogue, slot, props, live
+  check, already installed → 409, limit of 5 → 409), `PATCH /:integrationId` move, `DELETE /:integrationId` remove —
+  each queues an operation and returns 202. The worker re-checks slot and limit against the repository itself.
+- **Failure modes:** codemod → `source: "codemod"`; disallowed slot, unknown integration, plan limit, unlinkable
+  package → `source: "install"`; already installed / not installed / same slot → applied no-op without a commit.
+- **Live check** (throwaway public repo, real E2B + GitHub, deleted afterwards): install GitHub Stats 24.9 s (checks
+  2.8 s) with live GitHub data in the preview; LeetCode Stats alongside it 22.3 s; move 15.9 s; both removed in
+  44 s; net diff against the pre-install commit empty — `pnpm-lock.yaml` and `vendor/` included; `main` never moved.
 
 ---
 

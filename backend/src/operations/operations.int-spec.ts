@@ -2,7 +2,12 @@
  * Integration tests for the safety net: real Postgres (backend/.env), a simulated sandbox with a git-like model.
  * Run with `pnpm test:int`. Each test creates its own users and deletes them afterwards.
  */
-import type { Operation, Portfolio } from "@prisma/client";
+import type { ConfigService } from "@nestjs/config";
+import type { Operation, OperationType, Portfolio } from "@prisma/client";
+import { readFileSync } from "fs";
+import { join } from "path";
+import { CatalogueIngest, integrationsDir } from "../catalogue/catalogue-ingest";
+import type { Env } from "../config/env";
 import type { OperationFailure } from "@plinth-pages/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import {
@@ -16,6 +21,7 @@ import {
 } from "../sandbox/sandbox-driver";
 import { InMemorySandboxLocks } from "../sandbox/sandbox-locks";
 import { GitSync } from "./git-sync";
+import { IntegrationPlanner, MAX_INSTALLED_INTEGRATIONS } from "./integration-planner";
 import { OperationRunner } from "./operation-runner";
 
 process.loadEnvFile(".env");
@@ -48,6 +54,8 @@ class SimulatedSandbox implements SandboxDriver {
   /** Returns build log lines when the production build should fail for this tree. */
   buildErrors = (tree: Tree): string[] => ([...tree.values()].some((c) => c.includes("BUILD_BREAKS")) ? ["./app/page.tsx", "20:14  Error: Unescaped entity.  react/no-unescaped-entities"] : []);
   mainPushFails = false;
+  /** The live tree cannot link the change's dependencies, so apply exits before merging. */
+  liveInstallFails = false;
   /** Every distinct live tree, in order. */
   liveHistory: string[] = [snapshot(this.live)];
   steps: string[] = [];
@@ -76,6 +84,9 @@ class SimulatedSandbox implements SandboxDriver {
         this.staging = new Map(this.live);
         return ok(`PLINTH_HEAD=${this.head}`);
       }
+      case "vendor":
+        this.staging!.set(env.PLINTH_PATH, Buffer.from(env.PLINTH_B64, "base64").toString("latin1"));
+        return ok();
       case "files": {
         const deletes = env.PLINTH_DELETE ? Buffer.from(env.PLINTH_DELETE, "base64").toString().split("\0") : [];
         for (const path of deletes) this.staging!.delete(path);
@@ -102,6 +113,7 @@ class SimulatedSandbox implements SandboxDriver {
         );
       }
       case "apply": {
+        if (this.liveInstallFails) return exit(31, "---PLINTH:install---\n ERR_PNPM_NO_OFFLINE_TARBALL  A package is missing from the store");
         const sha = `c${this.commits.length + 1}`;
         this.commits.push({ sha, message: `${env.PLINTH_SUBJECT}\n\nOperation-Id: ${env.PLINTH_OPERATION_ID}`, tree: new Map(this.staging!) });
         this.setLive(this.staging!);
@@ -176,7 +188,14 @@ class SimulatedSandbox implements SandboxDriver {
     this.staging!.set(file.path, content);
   }
 
-  readonly initial: Tree = new Map(this.live);
+  initial: Tree = new Map(this.live);
+
+  /** Replaces the whole repository, as if the portfolio had been provisioned with it. */
+  seed(tree: Tree) {
+    this.live = new Map(tree);
+    this.initial = new Map(tree);
+    this.liveHistory = [snapshot(tree)];
+  }
   private setLive(tree: Tree) {
     this.live = new Map(tree);
     this.liveHistory.push(snapshot(this.live));
@@ -202,8 +221,12 @@ class SimulatedSandbox implements SandboxDriver {
     return "healthy" as const;
   }
   async restartDevServer() {}
-  async readFile() {
-    return "";
+  async readFile(externalId: string, file: WorkspaceFile) {
+    if (!this.running) throw new SandboxNotRunningError(externalId, "gone");
+    const tree = file.root === "staging" ? this.staging : this.live;
+    const content = tree?.get(file.path);
+    if (content === undefined) throw new Error(`No such file: ${file.path}`);
+    return content;
   }
   async listFiles() {
     return [];
@@ -241,10 +264,30 @@ async function queueEdit(portfolioId: string, files: { path: string; content: st
   return prisma.operation.create({ data: { portfolioId, type: "edit", actor: "user", summary, input: { files } } });
 }
 
+async function queueOperation(portfolioId: string, type: OperationType, input: object, summary: string): Promise<Operation> {
+  return prisma.operation.create({ data: { portfolioId, type, actor: "user", summary, input } });
+}
+
+const config = { get: () => undefined } as unknown as ConfigService<Env, true>;
+const fixture = (name: string) => readFileSync(join(__dirname, "../../../packages/codemod/test/fixtures/template", name), "utf8");
+/** The template's real layout, page and plinth.json, which the codemod engine edits. */
+const templateTree = (): Tree =>
+  new Map([
+    ["app/layout.tsx", fixture("layout.tsx")],
+    ["app/page.tsx", fixture("page.tsx")],
+    ["plinth.json", fixture("plinth.json")],
+    ["package.json", `${JSON.stringify({ name: "portfolio", private: true, dependencies: { "@plinth-pages/core": "file:vendor/plinth-pages-core-0.1.0.tgz", next: "15.5.3" } }, null, 2)}\n`],
+    ["content/profile.ts", 'export const profile = { name: "Asha" };\n'],
+  ]);
+
 const reload = (id: string) => prisma.operation.findUniqueOrThrow({ where: { id } });
 const failuresOf = (operation: Operation) => (operation.checkOutput as OperationFailure[] | null) ?? [];
 
-beforeAll(() => prisma.$connect());
+beforeAll(async () => {
+  await prisma.$connect();
+  // The catalogue rows the planner reads, from the same vendored tarballs the worker ingests.
+  await new CatalogueIngest(prisma, config).ingest(integrationsDir(config));
+});
 
 beforeEach(() => {
   sandbox = new SimulatedSandbox();
@@ -263,9 +306,18 @@ beforeEach(() => {
   };
   woken = [];
   const publisher = { publish: async (_: string, event: { type: string; operationId?: string; status: string }) => void events.push({ operationId: event.operationId!, status: event.status }) };
-  runner = new OperationRunner(prisma, sandbox, tokens, new GitSync(prisma, sandbox, tokens), publisher, {
-    schedule: async (portfolioId) => void scheduledPushes.push(portfolioId),
-  }, { wake: async (portfolioId) => void woken.push(portfolioId) }, hosting, { track: async (_portfolioId, deploymentId) => void tracked.push(deploymentId) });
+  runner = new OperationRunner(
+    prisma,
+    sandbox,
+    tokens,
+    new GitSync(prisma, sandbox, tokens),
+    publisher,
+    { schedule: async (portfolioId) => void scheduledPushes.push(portfolioId) },
+    { wake: async (portfolioId) => void woken.push(portfolioId) },
+    hosting,
+    { track: async (_portfolioId, deploymentId) => void tracked.push(deploymentId) },
+    new IntegrationPlanner(prisma, sandbox, config),
+  );
 });
 
 afterAll(async () => {
@@ -296,6 +348,151 @@ describe("a valid edit", () => {
     expect(sandbox.remote).toBe("c1");
     expect(sandbox.steps).toEqual(["stage", "files", "prepare", "check", "apply", "push", "health"]);
     expect(events.map((e) => e.status)).toEqual(["staging", "checking", "applying", "applied"]);
+  });
+});
+
+describe("integrations", () => {
+  const install = (portfolioId: string, slot = "afterProjects", props: object = { username: "octocat", showTopRepos: true }) =>
+    queueOperation(portfolioId, "install", { integrationId: "github-stats", slot, props }, "Install GitHub Stats");
+  const installedRows = (portfolioId: string) => prisma.installedIntegration.findMany({ where: { portfolioId } });
+
+  it("installs, moves and uninstalls through the safety net; uninstalling restores every file byte for byte", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    const before = snapshot(sandbox.live);
+
+    const installed = await install(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(await reload(installed.id)).toMatchObject({ status: "applied", commitSha: "c1", error: null });
+    expect(sandbox.steps).toEqual(["stage", "vendor", "files", "prepare", "check", "apply", "push", "health"]);
+    const page = sandbox.live.get("app/page.tsx")!;
+    expect(page).toContain('import { GitHubStats } from "@plinth-pages/github-stats";');
+    expect(page).toMatch(/<Slot name="afterProjects">[\s\S]*plinth:github-stats:start[\s\S]*<GitHubStats showTopRepos=\{true\} username=\{"octocat"\} \/>/);
+    expect(JSON.parse(sandbox.live.get("package.json")!).dependencies["@plinth-pages/github-stats"]).toBe("file:vendor/plinth-pages-github-stats-0.1.0.tgz");
+    expect(sandbox.live.get("vendor/plinth-pages-github-stats-0.1.0.tgz")!.slice(0, 2)).toBe("\x1f\x8b"); // a real gzip
+    expect(JSON.parse(sandbox.live.get("plinth.json")!).integrations).toEqual([
+      expect.objectContaining({ id: "github-stats", package: "@plinth-pages/github-stats", version: "0.1.0", slot: "afterProjects" }),
+    ]);
+    expect(sandbox.commits[0].message.split("\n")[0]).toBe("Install GitHub Stats");
+    expect(sandbox.remote).toBe("c1");
+    expect(await installedRows(portfolio.id)).toEqual([expect.objectContaining({ integrationId: "github-stats", slot: "afterProjects", version: "0.1.0" })]);
+
+    sandbox.steps = [];
+    const moved = await queueOperation(portfolio.id, "move", { integrationId: "github-stats", slot: "sidebar" }, "Move GitHub Stats");
+    await runner.drain(portfolio.id);
+    expect(await reload(moved.id)).toMatchObject({ status: "applied", commitSha: "c2" });
+    expect(sandbox.steps).toEqual(["stage", "files", "prepare", "check", "apply", "push", "health"]);
+    expect(sandbox.live.get("app/page.tsx")).toMatch(/<Slot name="sidebar">[\s\S]*<GitHubStats/);
+    expect(sandbox.live.get("app/page.tsx")).toContain('<Slot name="afterProjects"></Slot>');
+    expect(await installedRows(portfolio.id)).toEqual([expect.objectContaining({ slot: "sidebar" })]);
+
+    const removed = await queueOperation(portfolio.id, "uninstall", { integrationId: "github-stats" }, "Remove GitHub Stats");
+    await runner.drain(portfolio.id);
+    expect(await reload(removed.id)).toMatchObject({ status: "applied", commitSha: "c3" });
+    expect(snapshot(sandbox.live)).toBe(before);
+    expect(await installedRows(portfolio.id)).toEqual([]);
+  });
+
+  it("treats installing twice, and removing or moving something that isn't there, as no-ops without a commit", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    await install(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    sandbox.steps = [];
+    const again = await install(portfolio.id, "sidebar");
+    const sameSlot = await queueOperation(portfolio.id, "move", { integrationId: "github-stats", slot: "afterProjects" }, "Move GitHub Stats");
+    const absent = await queueOperation(portfolio.id, "uninstall", { integrationId: "leetcode-stats" }, "Remove LeetCode Stats");
+    await runner.drain(portfolio.id);
+
+    expect(await reload(again.id)).toMatchObject({ status: "applied", commitSha: null, diff: "GitHub Stats is already installed." });
+    expect(await reload(sameSlot.id)).toMatchObject({ status: "applied", commitSha: null, diff: "GitHub Stats is already in that slot." });
+    expect(await reload(absent.id)).toMatchObject({ status: "applied", commitSha: null, diff: "That integration isn't installed." });
+    expect(sandbox.steps).toEqual(["stage", "discard", "stage", "discard", "stage", "discard"]);
+    expect(sandbox.commits).toHaveLength(1);
+  });
+
+  it("rejects a slot the integration doesn't allow, an unknown integration and the plan limit, before any file changes", async () => {
+    const portfolio = await portfolioWithSandbox();
+    const tree = templateTree();
+    sandbox.seed(tree);
+
+    const footer = await install(portfolio.id, "footer");
+    const unknown = await queueOperation(portfolio.id, "install", { integrationId: "no-such-thing", slot: "sidebar", props: {} }, "Install nothing");
+    await runner.drain(portfolio.id);
+
+    expect(await reload(footer.id)).toMatchObject({ status: "rejected" });
+    expect(failuresOf(await reload(footer.id))).toEqual([{ source: "install", message: 'GitHub Stats can\'t be placed in "footer".' }]);
+    expect(failuresOf(await reload(unknown.id))).toEqual([{ source: "install", message: 'The integration "no-such-thing" isn\'t in the catalogue.' }]);
+
+    const full = Array.from({ length: MAX_INSTALLED_INTEGRATIONS }, (_, i) => ({ id: `other-${i}`, package: `@x/other-${i}`, version: "1.0.0", slot: "sidebar", props: {} }));
+    sandbox.seed(new Map([...tree, ["plinth.json", JSON.stringify({ coreVersion: "0.1.0", slotsVersion: 1, integrations: full }, null, 2)]]));
+    const overLimit = await install(portfolio.id);
+    await runner.drain(portfolio.id);
+    expect(failuresOf(await reload(overLimit.id))).toEqual([
+      { source: "install", message: `Your plan includes up to ${MAX_INSTALLED_INTEGRATIONS} integrations. Remove one to add another.` },
+    ]);
+
+    expect(sandbox.commits).toEqual([]);
+    expect(sandbox.liveHistory).toHaveLength(1);
+    expect(sandbox.steps.filter((step) => !["stage", "discard"].includes(step))).toEqual([]);
+    expect(await installedRows(portfolio.id)).toEqual([]);
+  });
+
+  it("reports a broken slot contract as a codemod rejection", async () => {
+    const portfolio = await portfolioWithSandbox();
+    const tree = templateTree();
+    tree.set("app/page.tsx", tree.get("app/page.tsx")!.replace('<Slot name="afterProjects"></Slot>', ""));
+    sandbox.seed(tree);
+
+    const op = await install(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    const done = await reload(op.id);
+    expect(done.status).toBe("rejected");
+    expect(failuresOf(done)).toEqual([expect.objectContaining({ source: "codemod", code: "SLOT_NOT_FOUND" })]);
+    expect(sandbox.liveHistory).toHaveLength(1);
+  });
+
+  it("reverts an install whose page no longer renders, and doesn't record it as installed", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    sandbox.renders = (tree) => !tree.get("app/page.tsx")!.includes("<GitHubStats");
+
+    const op = await install(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(await reload(op.id)).toMatchObject({ status: "reverted", revertSha: "c2" });
+    expect(snapshot(sandbox.live)).toBe(snapshot(sandbox.initial));
+    expect(await installedRows(portfolio.id)).toEqual([]);
+  });
+
+  it("rejects an install whose package can't be linked in the live tree, before the preview sees the import", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    sandbox.liveInstallFails = true;
+
+    const op = await install(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    const done = await reload(op.id);
+    expect(done.status).toBe("rejected");
+    expect(failuresOf(done)).toEqual([{ source: "install", message: "ERR_PNPM_NO_OFFLINE_TARBALL  A package is missing from the store" }]);
+    expect(sandbox.liveHistory).toHaveLength(1);
+    expect(sandbox.steps.slice(-2)).toEqual(["apply", "discard"]);
+    expect(await installedRows(portfolio.id)).toEqual([]);
+  });
+
+  it("fails malformed integration input without touching the sandbox", async () => {
+    const portfolio = await portfolioWithSandbox();
+    const op = await queueOperation(portfolio.id, "install", { integrationId: "github-stats", slot: "sidebar", props: { username: { $gt: "" } } }, "Install");
+    await runner.drain(portfolio.id);
+
+    const done = await reload(op.id);
+    expect(done.status).toBe("failed");
+    expect(done.error).toMatch(/^The change is invalid/);
+    expect(sandbox.steps).toEqual(["discard"]);
   });
 });
 

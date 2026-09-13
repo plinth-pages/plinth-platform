@@ -1,4 +1,4 @@
-import prettier, { type Options } from "prettier";
+import type { Options } from "prettier";
 
 export { CodemodError, type CodemodErrorCode } from "./source";
 export { addImport, removeImport, type Changed } from "./imports";
@@ -19,8 +19,10 @@ export {
 
 /**
  * Formats a file the way the portfolio does. The safety net also formats every touched file with the repository's own
- * Prettier config; this is for tests and for callers that want formatted output directly.
+ * Prettier config; this is for tests and for callers that want formatted output directly. Prettier is loaded on first
+ * use, so services that only plan edits (the worker) never load it.
  */
-export function formatSource(source: string, filepath: string, options: Options = {}): Promise<string> {
+export async function formatSource(source: string, filepath: string, options: Options = {}): Promise<string> {
+  const prettier = await import("prettier");
   return prettier.format(source, { ...options, filepath });
 }

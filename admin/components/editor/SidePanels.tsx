@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { PreviewPhase } from "@/lib/usePreview";
 import type { CodeTarget } from "./CodeView";
+import { IntegrationsPanel } from "./IntegrationsPanel";
 import { SafetyNetTester } from "./SafetyNetTester";
 
 export type SidePanel = "slots" | "integrations" | "settings";
@@ -37,6 +38,9 @@ export function SidePanels(props: {
   timings: OperationTimings | null;
   isAdmin: boolean;
   working: boolean;
+  /** Increments when an operation finishes. */
+  revision: number;
+  activeOperationId: string | null;
 }) {
   return (
     <aside className="flex min-h-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -61,7 +65,9 @@ export function SidePanels(props: {
         {props.panel === "slots" ? (
           <SlotsPanel portfolioId={props.portfolio.id} live={props.phase === "live"} onOpenCode={props.onOpenCode} />
         ) : null}
-        {props.panel === "integrations" ? <IntegrationsPanel onShowSlots={() => props.onPanel("slots")} /> : null}
+        {props.panel === "integrations" ? (
+          <IntegrationsPanel portfolioId={props.portfolio.id} role={props.portfolio.role} revision={props.revision} activeOperationId={props.activeOperationId} />
+        ) : null}
         {props.panel === "settings" ? (
           <SettingsPanel
             portfolio={props.portfolio}
@@ -188,25 +194,6 @@ function SlotsPanel({ portfolioId, live, onOpenCode }: { portfolioId: string; li
           <p className="text-xs text-zinc-500">Validates that every slot and codemod marker is where the engine expects it.</p>
         )}
       </section>
-    </div>
-  );
-}
-
-function IntegrationsPanel({ onShowSlots }: { onShowSlots: () => void }) {
-  return (
-    <div className="flex flex-col gap-3 p-4 text-xs text-zinc-600 dark:text-zinc-400">
-      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">No integrations installed</p>
-      <p>
-        Installing an integration adds its package, imports it, and places it in a slot — as a code change that is
-        type-checked before it reaches your preview, and undone if it breaks the build.
-      </p>
-      <p>The catalogue opens once that safety net is in place. Your slots are ready for it.</p>
-      <button
-        onClick={onShowSlots}
-        className="w-fit rounded-md border border-zinc-300 px-2.5 py-1 font-medium text-zinc-800 hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-      >
-        See the slots
-      </button>
     </div>
   );
 }

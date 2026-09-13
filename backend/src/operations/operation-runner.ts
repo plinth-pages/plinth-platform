@@ -10,7 +10,8 @@ import { GIT_TOKENS, type GitTokenSource } from "../sandbox/git-tokens";
 import { SANDBOX_DRIVER, SandboxNotRunningError, type ExecResult, type SandboxDriver, type WorkspaceRoot } from "../sandbox/sandbox-driver";
 import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
 import { parseBuildOutput, parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
-import { commitSubject, editInputSchema, type EditInput } from "./edit-input";
+import { commitSubject, editInputSchema } from "./edit-input";
+import { IntegrationPlanner, installInputSchema, moveInputSchema, uninstallInputSchema, type FileChange, type Plan } from "./integration-planner";
 import {
   EXIT,
   OPERATION_BRANCH_PREFIX,
@@ -28,6 +29,7 @@ import {
   publishStatusScript,
   revertScript,
   stageScript,
+  vendorScript,
 } from "./git-scripts";
 import { GitSync, PushFailedError } from "./git-sync";
 import { IN_PROGRESS } from "./operations.constants";
@@ -75,6 +77,7 @@ export class OperationRunner {
     @Inject(SANDBOX_WAKER) private readonly waker: SandboxWaker,
     @Inject(HOSTING) private readonly hosting: Hosting,
     @Inject(DEPLOYMENT_TRACKING) private readonly tracking: DeploymentTracking,
+    private readonly integrations: IntegrationPlanner,
   ) {}
 
   async drain(portfolioId: string): Promise<DrainOutcome> {
@@ -103,7 +106,7 @@ export class OperationRunner {
     await this.transition(operation, "staging", { startedAt: new Date(), attempts: { increment: 1 } });
 
     try {
-      const input = this.parseInput(operation);
+      this.validateInput(operation);
 
       // 0–1. Precondition and stage. An unpushed commit from an earlier operation is pushed first.
       let stage = await this.exec(externalId, "live", stageScript(), { PLINTH_BRANCH: branch }, STEP_TIMEOUT.short);
@@ -119,8 +122,19 @@ export class OperationRunner {
       }
       this.expectSuccess(stage, "Preparing a workspace for the change");
 
-      // 3. Mutate, in the staging worktree only.
-      await this.mutate(externalId, input);
+      // 3. Mutate, in the staging worktree only. Integrations are planned from the staged files by the codemod engine.
+      const plan = await this.planChange(operation, externalId);
+      if (plan.kind === "noop") {
+        await this.discard(externalId);
+        await this.finish(operation, "applied", began, { diff: plan.message });
+        return;
+      }
+      if (plan.kind === "reject") return this.reject(operation, externalId, began, plan.failures, null);
+      if (plan.tarball) {
+        const vendored = await this.exec(externalId, "staging", vendorScript(), { PLINTH_PATH: plan.tarball.path, PLINTH_B64: plan.tarball.base64 }, STEP_TIMEOUT.short);
+        this.expectSuccess(vendored, "Adding the package");
+      }
+      await this.mutate(externalId, plan.files);
 
       // 2 and 4. Dependencies and formatting.
       const prepared = await this.exec(externalId, "staging", prepareScript(), {}, STEP_TIMEOUT.prepare);
@@ -169,6 +183,11 @@ export class OperationRunner {
         STEP_TIMEOUT.apply,
       );
       const commitSha = reported(applied.stdout, "SHA");
+      if (!commitSha && applied.exitCode === EXIT.installFailed) {
+        // The new dependencies could not be linked in the live tree, so the merge never happened.
+        const detail = sections(applied.stdout).install ?? applied.stderr;
+        return this.reject(operation, externalId, began, [{ source: "install", message: detail.trim() || "The dependencies could not be installed." }], checkMs, diffStat);
+      }
       if (!commitSha) {
         await this.discard(externalId).catch(() => undefined);
         this.expectSuccess(applied, "Applying the change");
@@ -179,7 +198,7 @@ export class OperationRunner {
       await this.pushOrSchedule(sandbox);
 
       // 9. Health check: request the affected routes; a render failure is reverted.
-      const routes = affectedRoutes(input.files.map((file) => file.path));
+      const routes = affectedRoutes(plan.files.map((file) => file.path));
       const health = await this.exec(externalId, "live", healthScript(), { PLINTH_ROUTES: routes.join(" ") }, STEP_TIMEOUT.health);
       const unhealthy = reported(health.stdout, "UNHEALTHY");
       if (unhealthy) {
@@ -201,6 +220,7 @@ export class OperationRunner {
         return;
       }
 
+      if (plan.onApplied) await this.prisma.$transaction((tx) => plan.onApplied!(tx));
       await this.finish(operation, "applied", began, {});
     } catch (error) {
       const message = committed
@@ -302,9 +322,16 @@ export class OperationRunner {
     await this.finish(operation, "failed", began, { error: message });
   }
 
-  private async mutate(externalId: string, input: EditInput) {
-    const writes = input.files.filter((file) => file.content !== null);
-    const deletes = input.files.filter((file) => file.content === null).map((file) => file.path);
+  private async planChange(operation: Operation, externalId: string): Promise<Plan> {
+    if (operation.type === "edit") {
+      return { kind: "change", files: editInputSchema.parse(operation.input).files, tarball: null, onApplied: null };
+    }
+    return this.integrations.plan(operation, externalId);
+  }
+
+  private async mutate(externalId: string, files: FileChange[]) {
+    const writes = files.filter((file) => file.content !== null);
+    const deletes = files.filter((file) => file.content === null).map((file) => file.path);
     const dirs = [...new Set(writes.map((file) => posix.dirname(file.path)).filter((dir) => dir !== "."))];
 
     if (dirs.length || deletes.length) {
@@ -372,12 +399,12 @@ export class OperationRunner {
     }
   }
 
-  private parseInput(operation: Operation): EditInput {
-    // Publish is handled by publish(); anything else not yet supported fails here.
-    if (operation.type !== "edit") throw new OperationAborted(`Operations of type ${operation.type} aren't supported yet.`);
-    const parsed = editInputSchema.safeParse(operation.input);
+  /** Refuses malformed input before anything touches the sandbox. Publish is handled by publish(). */
+  private validateInput(operation: Operation): void {
+    const schema = { edit: editInputSchema, install: installInputSchema, uninstall: uninstallInputSchema, move: moveInputSchema }[operation.type as string];
+    if (!schema) throw new OperationAborted(`Operations of type ${operation.type} aren't supported yet.`);
+    const parsed = schema.safeParse(operation.input);
     if (!parsed.success) throw new OperationAborted(`The change is invalid: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
-    return parsed.data;
   }
 
   private discard(externalId: string) {

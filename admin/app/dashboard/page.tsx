@@ -1,6 +1,7 @@
 "use client";
 
 import type { SessionUser } from "@plinth-pages/shared";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { PlatformChecks } from "@/components/PlatformChecks";
@@ -60,6 +61,16 @@ export default function DashboardPage() {
       {user.role === "admin" ? (
         <section className="flex flex-col gap-3">
           <h2 className="font-mono text-xs tracking-widest text-zinc-500 uppercase">Platform setup</h2>
+          <Link
+            href="/admin/requests"
+            className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-4 text-sm hover:border-zinc-300 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
+          >
+            <span>
+              <span className="block font-medium">Integration requests</span>
+              <span className="block text-zinc-600 dark:text-zinc-400">What people want built next, ranked by requests.</span>
+            </span>
+            <span aria-hidden className="text-zinc-400">→</span>
+          </Link>
           <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
             <p className="font-medium">Provisioning GitHub App</p>
             <p className="mt-1 text-zinc-600 dark:text-zinc-400">

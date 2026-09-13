@@ -28,7 +28,8 @@ model User {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  portfolios Portfolio[]
+  portfolios          Portfolio[]
+  integrationRequests IntegrationRequest[]
 
   @@map("users")
 }
@@ -65,7 +66,7 @@ model Portfolio {
   createdAt         DateTime        @default(now()) @map("created_at")
   updatedAt         DateTime        @updatedAt @map("updated_at")
 
-  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sandbox               Sandbox?
   operations            Operation[]
   deployments           Deployment[]
@@ -97,22 +98,34 @@ model Sandbox {
   provider       String        @default("e2b")
   externalId     String?       @map("external_id")
   status         SandboxStatus @default(destroyed)
-  /** The provider URL of the dev server. Not reachable without `trafficToken`; browsers use the preview proxy. */
+  /**
+   * The provider URL of the dev server. Not reachable without `trafficToken`; browsers use the preview proxy.
+   */
   previewUrl     String?       @map("preview_url")
-  /** Sent by the preview proxy as `e2b-traffic-access-token`. Null only for sandboxes created before gate G2. */
+  /**
+   * Sent by the preview proxy as `e2b-traffic-access-token`. Null only for sandboxes created before gate G2.
+   */
   trafficToken   String?       @map("traffic_token")
-  /** Updated by the IDE heartbeat. Idle time is measured from here. */
+  /**
+   * Updated by the IDE heartbeat. Idle time is measured from here.
+   */
   lastAccessedAt DateTime?     @map("last_accessed_at")
-  /** Start of the current billed stretch (create or resume). Null unless running. */
+  /**
+   * Start of the current billed stretch (create or resume). Null unless running.
+   */
   runStartedAt   DateTime?     @map("run_started_at")
-  /** When the provider will pause the sandbox on its own if nothing extends it. */
+  /**
+   * When the provider will pause the sandbox on its own if nothing extends it.
+   */
   expiresAt      DateTime?     @map("expires_at")
   pausedAt       DateTime?     @map("paused_at")
   secondsUsed    Int           @default(0) @map("seconds_used")
   coldStartMs    Int?          @map("cold_start_ms")
   resumeMs       Int?          @map("resume_ms")
   lastError      String?       @map("last_error")
-  /** A commit was applied in the sandbox but not yet pushed to draft. It must be pushed before the sandbox is destroyed. */
+  /**
+   * A commit was applied in the sandbox but not yet pushed to draft. It must be pushed before the sandbox is destroyed.
+   */
   pendingPush    Boolean       @default(false) @map("pending_push")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
@@ -158,18 +171,26 @@ model Operation {
   type        OperationType
   actor       OperationActor
   status      OperationStatus @default(queued)
-  /** Short description, used as the commit subject. */
+  /**
+   * Short description, used as the commit subject.
+   */
   summary     String
   input       Json
   diff        String?
-  /** Parsed failures from plinth check, tsc or the render health check. */
+  /**
+   * Parsed failures from plinth check, tsc or the render health check.
+   */
   checkOutput Json?           @map("check_output")
-  /** Infrastructure failure message (status failed). */
+  /**
+   * Infrastructure failure message (status failed).
+   */
   error       String?
   attempts    Int             @default(0)
   commitSha   String?         @map("commit_sha")
   revertSha   String?         @map("revert_sha")
-  /** Duration of plinth check + tsc, for the p50/p95 budget. */
+  /**
+   * Duration of plinth check + tsc, for the p50/p95 budget.
+   */
   checkMs     Int?            @map("check_ms")
   totalMs     Int?            @map("total_ms")
   createdAt   DateTime        @default(now()) @map("created_at")
@@ -196,7 +217,9 @@ enum DeploymentStatus {
 model Deployment {
   id                 String           @id @default(cuid())
   portfolioId        String           @map("portfolio_id")
-  /** The publish operation that promoted this commit. */
+  /**
+   * The publish operation that promoted this commit.
+   */
   operationId        String?          @unique @map("operation_id")
   status             DeploymentStatus @default(pending)
   commitSha          String           @map("commit_sha")
@@ -212,6 +235,7 @@ model Deployment {
   @@map("deployments")
 }
 
+// The catalogue. Rows are ingested from integration packages; the manifest is the validated plinth.manifest.json.
 model Integration {
   id            String   @id // e.g. "leetcode-stats"
   name          String
@@ -219,6 +243,10 @@ model Integration {
   packageName   String   @map("package_name")
   latestVersion String   @map("latest_version")
   manifest      Json
+  /**
+   * Vendored tarball under integrations/, installed as file:vendor/<name>. Null means install from the npm registry.
+   */
+  tarball       String?
   isActive      Boolean  @default(false) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -242,6 +270,24 @@ model InstalledIntegration {
 
   @@unique([portfolioId, integrationId])
   @@map("installed_integrations")
+}
+
+/// A user asking for an integration that isn't built yet. One vote per user per integration; the superadmin ranks by count.
+model IntegrationRequest {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  /// A planned catalogue id ("spotify"), or `suggested:<slug>` for something not on the list.
+  key         String
+  name        String
+  note        String?
+  portfolioId String?  @map("portfolio_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key])
+  @@index([key])
+  @@map("integration_requests")
 }
 
 model Credential {

@@ -1,6 +1,6 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { Operation, User } from "@prisma/client";
+import type { Operation, OperationType, Prisma, User } from "@prisma/client";
 import type { OperationFailure, OperationSummary, OperationTimings } from "@plinth-pages/shared";
 import type { Queue } from "bullmq";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
@@ -29,9 +29,12 @@ export class OperationsService {
       throw new BadRequestException(parsed.error.issues.map((issue) => `${issue.path.join(".") || "body"}: ${issue.message}`).join("; "));
     }
 
-    const operation = await this.prisma.operation.create({
-      data: { portfolioId, type: "edit", actor: "user", summary: defaultSummary(parsed.data), input: parsed.data },
-    });
+    return this.enqueue(portfolioId, "edit", defaultSummary(parsed.data), parsed.data);
+  }
+
+  /** Records an operation and queues it for the worker. Callers have already checked ownership and validated the input. */
+  async enqueue(portfolioId: string, type: OperationType, summary: string, input: Prisma.InputJsonValue): Promise<OperationSummary> {
+    const operation = await this.prisma.operation.create({ data: { portfolioId, type, actor: "user", summary, input } });
     // A change counts as activity: the sandbox must not idle-pause while it waits in the queue.
     await this.prisma.sandbox.upsert({
       where: { portfolioId },
@@ -57,19 +60,7 @@ export class OperationsService {
     });
     if (existing) return toSummary(existing);
 
-    const operation = await this.prisma.operation.create({
-      data: { portfolioId, type: "publish", actor: "user", summary: "Publish", input: {} },
-    });
-    await this.prisma.sandbox.upsert({
-      where: { portfolioId },
-      create: { portfolioId, lastAccessedAt: new Date() },
-      update: { lastAccessedAt: new Date() },
-    });
-    await this.queue.add("run", { portfolioId, operationId: operation.id }, { jobId: operationJobId(operation.id), ...OPERATION_JOB_OPTIONS });
-    await this.events
-      .publish(portfolioId, { type: "operation", operationId: operation.id, status: "queued", at: new Date().toISOString() })
-      .catch(() => undefined);
-    return toSummary(operation);
+    return this.enqueue(portfolioId, "publish", "Publish", {});
   }
 
   async list(user: User, portfolioId: string, limit = 20): Promise<{ operations: OperationSummary[]; timings: OperationTimings }> {

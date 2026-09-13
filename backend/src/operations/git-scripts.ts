@@ -62,6 +62,12 @@ if [ -n "$PLINTH_DELETE" ]; then printf '%s' "$PLINTH_DELETE" | base64 -d | xarg
 
 export const nulList = (items: string[]) => Buffer.from(items.join("\0")).toString("base64");
 
+/** Writes a vendored package tarball into the staging tree (binary, so it travels base64-encoded). */
+export const vendorScript = () => `${header("vendor")}
+mkdir -p "$(dirname "$PLINTH_PATH")"
+printf '%s' "$PLINTH_B64" | base64 -d > "$PLINTH_PATH"
+`;
+
 /** 2 and 4. DEPENDENCIES and FORMAT (staging tree). */
 export const prepareScript = () => `${header("prepare")}
 git add -A
@@ -102,20 +108,44 @@ echo "---PLINTH:tsc---"; head -c 60000 ${STATE}/op-tsc.out
 `;
 
 /**
- * 8. APPLY. Commit in the worktree with an Operation-Id trailer, then fast-forward the live tree — the only moment
- * the dev server sees the change. The sha is reported as soon as the live tree has it.
+ * Shell function: makes the live tree's node_modules match a revision's package.json and lockfile *before* that
+ * revision's code reaches the dev server. Next compiles a file the moment it changes; if an import isn't linked yet
+ * the page fails with "Module not found", and that error stays until the file changes again. The manifest, lockfile
+ * and any vendored tarballs are borrowed from the revision for the install and put back afterwards, so the merge or
+ * revert that follows starts from a clean tree.
+ */
+const linkDependencies = `link_dependencies() {
+  rev="$1"
+  git show "$rev:package.json" > package.json
+  if git cat-file -e "$rev:pnpm-lock.yaml" 2>/dev/null; then git show "$rev:pnpm-lock.yaml" > pnpm-lock.yaml; fi
+  vendored=$(git diff --name-only --diff-filter=A HEAD "$rev" -- vendor)
+  for f in $vendored; do mkdir -p "$(dirname "$f")"; git show "$rev:$f" > "$f"; done
+  linked=0
+  CI=true pnpm install --frozen-lockfile --offline > ${STATE}/op-live-install.log 2>&1 \\
+    || CI=true pnpm install --frozen-lockfile --prefer-offline >> ${STATE}/op-live-install.log 2>&1 \\
+    || linked=1
+  git checkout -q -- package.json
+  git checkout -q -- pnpm-lock.yaml 2>/dev/null || true
+  for f in $vendored; do rm -f "$f"; done
+  return $linked
+}`;
+
+/**
+ * 8. APPLY. Commit in the worktree with an Operation-Id trailer, link any new dependencies, then fast-forward the
+ * live tree — the only moment the dev server sees the change. The sha is reported as soon as the live tree has it.
  */
 export const applyScript = () => `${header("apply")}
+${linkDependencies}
 cd ${STAGING_DIR}
 git add -A
 git commit -q -m "$PLINTH_SUBJECT" -m "Operation-Id: $PLINTH_OPERATION_ID"
 cd ${WORKSPACE_DIR}
+if [ "$PLINTH_DEPS" = "1" ] && ! link_dependencies "$PLINTH_BRANCH"; then
+  echo "---PLINTH:install---"; tail -n 40 ${STATE}/op-live-install.log
+  exit ${EXIT.installFailed}
+fi
 git merge -q --ff-only "$PLINTH_BRANCH"
 echo "PLINTH_SHA=$(git rev-parse HEAD)"
-if [ "$PLINTH_DEPS" = "1" ]; then
-  CI=true pnpm install --frozen-lockfile --offline > ${STATE}/op-live-install.log 2>&1 \\
-    || CI=true pnpm install --frozen-lockfile --prefer-offline >> ${STATE}/op-live-install.log 2>&1
-fi
 ${removeStaging}
 `;
 
@@ -153,6 +183,10 @@ echo "PLINTH_HEALTHY=1"
 
 /** Undoes the last commit with a revert commit carrying the same Operation-Id trailer. */
 export const revertScript = () => `${header("revert")}
+${linkDependencies}
+if git diff --name-only HEAD~1 HEAD | grep -qxE 'package\\.json|pnpm-lock\\.yaml'; then
+  link_dependencies HEAD~1 || true
+fi
 git revert --no-commit HEAD
 git commit -q -m "Revert: $PLINTH_SUBJECT" -m "The change broke rendering, so Plinth undid it." -m "Operation-Id: $PLINTH_OPERATION_ID"
 echo "PLINTH_SHA=$(git rev-parse HEAD)"

@@ -197,7 +197,8 @@ export type OperationType = "edit" | "install" | "uninstall" | "move" | "theme" 
 
 export interface OperationFailure {
   /** Which check refused the change. */
-  source: "tsc" | "plinth" | "format" | "install" | "render" | "build";
+  /** `codemod`: the engine couldn't apply the change — a template or engine problem, recorded separately. */
+  source: "tsc" | "plinth" | "format" | "install" | "render" | "build" | "codemod";
   message: string;
   file?: string;
   line?: number;
@@ -279,4 +280,133 @@ export interface PublishStatusResponse {
   liveUrl: string | null;
   /** False until a hosting provider is connected; publishing still promotes draft to main. */
   hostingConfigured: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Integrations (Phases 10–11)
+// ---------------------------------------------------------------------------
+
+export type IntegrationCategory = "coding" | "social" | "writing" | "analytics" | "contact" | "other";
+
+export type IntegrationPropSpec =
+  | { name: string; label: string; description?: string; required: boolean; type: "string"; default?: string; placeholder?: string; pattern?: string; patternMessage?: string; maxLength: number }
+  | { name: string; label: string; description?: string; required: boolean; type: "number"; default?: number; min?: number; max?: number; integer: boolean }
+  | { name: string; label: string; description?: string; required: boolean; type: "boolean"; default?: boolean };
+
+export interface CatalogueIntegration {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  /** The exact package and version installing adds to package.json. */
+  package: string;
+  version: string;
+  kind: "element" | "provider";
+  defaultSlot: string;
+  allowedSlots: string[];
+  props: IntegrationPropSpec[];
+  recommendedFor: string[];
+  homepage: string | null;
+  /** `vendored`: shipped with Plinth as a tarball in the repository until it is published to npm. */
+  source: "vendored" | "npm";
+}
+
+/** Not built yet: can be requested, not installed. */
+export interface PlannedIntegration {
+  id: string;
+  name: string;
+  description: string;
+  category: IntegrationCategory;
+  /** Whether the signed-in user has already asked for it. */
+  requested: boolean;
+}
+
+export interface IntegrationsResponse {
+  integrations: CatalogueIntegration[];
+  planned: PlannedIntegration[];
+  /** Keys of the user's own requests, including suggestions that aren't on the planned list. */
+  requestedKeys: string[];
+}
+
+export interface IntegrationRequestBody {
+  /** A planned integration's id. */
+  key?: string;
+  /** Something not on the list, in the user's words. Used when `key` is absent. */
+  name?: string;
+  note?: string;
+  portfolioId?: string;
+}
+
+export interface IntegrationRequestResponse {
+  key: string;
+  name: string;
+  requested: boolean;
+}
+
+export interface IntegrationRequestStat {
+  key: string;
+  name: string;
+  /** `null` for suggestions that aren't on the planned list. */
+  category: IntegrationCategory | null;
+  planned: boolean;
+  count: number;
+  firstRequestedAt: string;
+  lastRequestedAt: string;
+  /** The most recent notes people left, newest first. */
+  notes: string[];
+}
+
+export interface AdminIntegrationRequestsResponse {
+  totalRequests: number;
+  uniqueRequesters: number;
+  items: IntegrationRequestStat[];
+}
+
+export interface LiveCheck {
+  status: "found" | "not_found" | "unknown";
+  message: string;
+}
+
+export interface ValidatePropsResponse {
+  ok: boolean;
+  /** Messages keyed by prop name. */
+  fields: Record<string, string>;
+  /** Existence checks against the source, keyed by prop name. */
+  live: Record<string, LiveCheck>;
+}
+
+export interface InstalledIntegrationSummary {
+  id: string;
+  name: string;
+  package: string;
+  version: string;
+  slot: string;
+  props: Record<string, string | number | boolean>;
+  allowedSlots: string[];
+  installedAt: string;
+}
+
+/** An install, move or removal that is queued or running. */
+export interface PendingIntegrationChange {
+  integrationId: string;
+  type: "install" | "uninstall" | "move";
+  slot: string | null;
+  operationId: string;
+  status: OperationStatus;
+}
+
+export interface InstalledIntegrationsResponse {
+  installed: InstalledIntegrationSummary[];
+  pending: PendingIntegrationChange[];
+  limit: number;
+}
+
+export interface InstallIntegrationRequest {
+  integrationId: string;
+  slot?: string;
+  props: Record<string, string | number | boolean>;
+}
+
+export interface MoveIntegrationRequest {
+  slot: string;
 }

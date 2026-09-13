@@ -143,7 +143,11 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
         </div>
       </header>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_280px] lg:grid-cols-[260px_minmax(0,1fr)_300px]">
+      <div
+        className={`grid min-h-0 flex-1 ${
+          panel === "integrations" ? "grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[260px_minmax(0,1fr)_380px]" : "grid-cols-[minmax(0,1fr)_280px] lg:grid-cols-[260px_minmax(0,1fr)_300px]"
+        }`}
+      >
         <CopilotColumn />
 
         <main className="flex min-h-0 flex-col">
@@ -209,6 +213,8 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
           timings={operations.timings}
           isAdmin={isAdmin}
           working={operations.working}
+          revision={operations.revision}
+          activeOperationId={operations.active?.id ?? null}
         />
       </div>
       <OutcomeToast outcome={operations.outcome} onDismiss={operations.dismissOutcome} />

@@ -32,6 +32,8 @@ const envSchema = z
      * repositories are not changed.
      */
     PORTFOLIO_REPO_VISIBILITY: z.enum(["public", "private"]).default("private"),
+    /** Vendored integration packages (worker). Defaults to ../integrations beside the backend. */
+    INTEGRATIONS_DIR: z.string().optional(),
     // The GitHub App that creates portfolio repositories — worker role only.
     GITHUB_APP_ID: z.string().regex(/^\d+$/, "Must be the numeric App ID").optional(),
     /** Base64 of the App's PEM private key, so it fits on one .env line. */
