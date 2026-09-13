@@ -4,6 +4,7 @@ import type {
   EditOperationRequest,
   OperationResponse,
   OperationsResponse,
+  PublishStatusResponse,
   EnqueuePingResponse,
   JobStatusResponse,
   MeResponse,
@@ -66,6 +67,9 @@ export const api = {
     request<WorkspaceFileResponse>(`/portfolios/${id}/files/content?path=${encodeURIComponent(path)}`),
   slots: (id: string) => request<SlotsResponse>(`/portfolios/${id}/slots`),
   checkContract: (id: string) => request<ContractCheckResponse>(`/portfolios/${id}/slots/check`, { method: "POST" }),
+  publishStatus: (id: string) => request<PublishStatusResponse>(`/portfolios/${id}/publish`),
+  /** Queues a publish; returns immediately. */
+  publish: (id: string) => request<OperationResponse>(`/portfolios/${id}/publish`, { method: "POST" }),
   operations: (id: string) => request<OperationsResponse>(`/portfolios/${id}/operations`),
   /** Development only: runs an edit through the safety net. */
   devEdit: (id: string, body: EditOperationRequest) =>

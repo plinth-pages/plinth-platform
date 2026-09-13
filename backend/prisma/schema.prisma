@@ -183,16 +183,21 @@ model Operation {
   @@map("operations")
 }
 
+// unconfigured — main was updated, but no hosting provider is connected yet, so nothing was deployed (gate G3)
 enum DeploymentStatus {
   pending
   building
   ready
   failed
+  unconfigured
 }
 
+// One row per publish that reached main.
 model Deployment {
   id                 String           @id @default(cuid())
   portfolioId        String           @map("portfolio_id")
+  /** The publish operation that promoted this commit. */
+  operationId        String?          @unique @map("operation_id")
   status             DeploymentStatus @default(pending)
   commitSha          String           @map("commit_sha")
   vercelDeploymentId String?          @map("vercel_deployment_id")

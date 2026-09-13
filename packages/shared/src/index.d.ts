@@ -196,7 +196,7 @@ export type OperationType = "edit" | "install" | "uninstall" | "move" | "theme" 
 
 export interface OperationFailure {
   /** Which check refused the change. */
-  source: "tsc" | "plinth" | "format" | "install" | "render";
+  source: "tsc" | "plinth" | "format" | "install" | "render" | "build";
   message: string;
   file?: string;
   line?: number;
@@ -209,6 +209,8 @@ export interface OperationSummary {
   actor: "user" | "copilot" | "system";
   status: OperationStatus;
   summary: string;
+  /** A short description of what changed, e.g. "Published 3 changes to main." */
+  diff: string | null;
   failures: OperationFailure[];
   /** Infrastructure error, when `status` is `failed`. */
   error: string | null;
@@ -243,4 +245,35 @@ export interface OperationResponse {
 export interface EditOperationRequest {
   summary?: string;
   files: { path: string; content: string | null }[];
+}
+
+// ---------------------------------------------------------------------------
+// Publishing (Phase 6)
+// ---------------------------------------------------------------------------
+
+/** `unconfigured`: main was updated, but no hosting provider is connected yet. */
+export type DeploymentStatus = "pending" | "building" | "ready" | "failed" | "unconfigured";
+
+export interface DeploymentSummary {
+  id: string;
+  status: DeploymentStatus;
+  commitSha: string;
+  url: string | null;
+  error: string | null;
+  createdAt: string;
+  finishedAt: string | null;
+}
+
+export interface PublishStatusResponse {
+  /** Commits on draft (on GitHub) that are not on main. */
+  unpublishedCount: number;
+  draftSha: string | null;
+  mainSha: string | null;
+  /** A change is committed in the sandbox but not yet on GitHub; publishing pushes it first. */
+  pendingPush: boolean;
+  /** The publish operation queued or running, if any. */
+  publishing: OperationSummary | null;
+  lastDeployment: DeploymentSummary | null;
+  /** False until a hosting provider is connected; publishing still promotes draft to main. */
+  hostingConfigured: boolean;
 }

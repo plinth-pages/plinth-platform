@@ -58,6 +58,9 @@ class FakeGitHub implements GitHubRepos {
     if (this.failCreateBranch) throw this.failCreateBranch;
     this.repos.get(name)!.branches.set(branch, sha);
   }
+  async compare() {
+    return { aheadBy: 0, behindBy: 0 };
+  }
   async deleteRepo(name: string) {
     this.deleted.push(name);
     this.repos.delete(name);

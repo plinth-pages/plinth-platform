@@ -39,8 +39,10 @@ export function useOperations(portfolioId: string) {
         const before = seen.current.get(operation.id);
         const wasActive = before ? ACTIVE_STATUSES.includes(before) : loaded.current;
         if (wasActive && !ACTIVE_STATUSES.includes(operation.status)) {
-          finished = true;
-          if (UNSUCCESSFUL.includes(operation.status)) setOutcome((o) => ({ operation, key: (o?.key ?? 0) + 1 }));
+          // Only a change to the code needs the preview covered while hot reload catches up.
+          if (operation.type !== "publish") finished = true;
+          const announce = UNSUCCESSFUL.includes(operation.status) || operation.type === "publish";
+          if (announce) setOutcome((o) => ({ operation, key: (o?.key ?? 0) + 1 }));
         }
         seen.current.set(operation.id, operation.status);
       }
@@ -65,12 +67,15 @@ export function useOperations(portfolioId: string) {
     if (event.type === "operation") void refresh();
   });
 
-  const active = operations.find((operation) => ACTIVE_STATUSES.includes(operation.status)) ?? null;
+  const running = operations.filter((operation) => ACTIVE_STATUSES.includes(operation.status));
+  // Publishing builds a copy and moves the live branch; the preview doesn't change, so it isn't covered.
+  const active = running.find((operation) => operation.type !== "publish") ?? null;
+  const anyRunning = running.length > 0;
   useEffect(() => {
-    if (!active) return;
+    if (!anyRunning) return;
     const timer = setInterval(() => void refresh(), ACTIVE_POLL_MS);
     return () => clearInterval(timer);
-  }, [active, refresh]);
+  }, [anyRunning, refresh]);
 
   return {
     operations,

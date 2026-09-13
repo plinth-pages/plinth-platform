@@ -1,4 +1,4 @@
-import { parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
+import { parseBuildOutput, parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
 import { commitSubject, defaultSummary, editInputSchema } from "./edit-input";
 import { affectedRoutes } from "./git-scripts";
 import { percentile, timings } from "./operations.service";
@@ -46,6 +46,43 @@ describe("parsePlinthCheck", () => {
       { source: "plinth", message: "plinth check did not produce a report: Error: Cannot find module 'ts-morph'" },
     ]);
     expect(parsePlinthCheck(JSON.stringify({ ok: true, issues: [] }), "", 1)).toHaveLength(1);
+  });
+});
+
+describe("parseBuildOutput", () => {
+  it("reads lint errors grouped under their file", () => {
+    const log = [
+      "   Linting and checking validity of types ...",
+      "",
+      "Failed to compile.",
+      "",
+      "./app/page.tsx",
+      "20:14  Error: `'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.  react/no-unescaped-entities",
+      "",
+      "info  - Need to disable some ESLint rules? Learn more here: https://nextjs.org/docs/app/api-reference/config/eslint#disabling-rules",
+    ].join("\n");
+    expect(parseBuildOutput(log)).toEqual([
+      {
+        source: "build",
+        file: "app/page.tsx",
+        line: 20,
+        code: "react/no-unescaped-entities",
+        message: "`'` can be escaped with `&apos;`, `&lsquo;`, `&#39;`, `&rsquo;`.",
+      },
+    ]);
+  });
+
+  it("reads type errors with their location", () => {
+    const log = "Failed to compile.\n\n./app/page.tsx:12:7\nType error: Property 'x' does not exist on type '{}'.\n";
+    expect(parseBuildOutput(log)).toEqual([
+      { source: "build", file: "app/page.tsx", line: 12, message: "Type error: Property 'x' does not exist on type '{}'." },
+    ]);
+  });
+
+  it("falls back to the end of the log", () => {
+    expect(parseBuildOutput("> Build error occurred\nError: something odd\n")).toEqual([
+      { source: "build", message: "> Build error occurred\nError: something odd" },
+    ]);
   });
 });
 

@@ -158,6 +158,44 @@ git commit -q -m "Revert: $PLINTH_SUBJECT" -m "The change broke rendering, so Pl
 echo "PLINTH_SHA=$(git rev-parse HEAD)"
 `;
 
+/**
+ * PUBLISH 1. Fetches main and reports how draft relates to it. Publishing is always a fast-forward, because only
+ * Publish writes main: if main has commits draft doesn't, something outside Plinth changed it and publishing stops.
+ */
+export const publishStatusScript = () => `${header("publish-status")}
+git fetch -q origin +refs/heads/main:refs/remotes/origin/main
+head=$(git rev-parse HEAD)
+main=$(git rev-parse origin/main)
+echo "PLINTH_HEAD=$head"
+echo "PLINTH_MAIN=$main"
+echo "PLINTH_AHEAD_BY=$(git rev-list --count origin/main..HEAD)"
+if git merge-base --is-ancestor origin/main HEAD; then echo "PLINTH_FAST_FORWARD=1"; else echo "PLINTH_FAST_FORWARD=0"; fi
+`;
+
+/**
+ * PUBLISH 2. Pre-flight in the staging worktree: the slot contract, then a production build — the same build the host
+ * will run, so a failure is caught before anything is published.
+ */
+export const buildScript = () => `# plinth:step=build
+set -o pipefail
+started=$(date +%s%3N)
+pnpm exec plinth check --json > ${STATE}/op-plinth.json 2> ${STATE}/op-plinth.err
+echo "PLINTH_PLINTH_CODE=$?"
+NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=1536 pnpm exec next build > ${STATE}/op-build.log 2>&1
+echo "PLINTH_BUILD_CODE=$?"
+echo "PLINTH_CHECK_MS=$(( $(date +%s%3N) - started ))"
+echo "---PLINTH:plinth---"; head -c 60000 ${STATE}/op-plinth.json
+echo
+echo "---PLINTH:plinth-err---"; tail -c 4000 ${STATE}/op-plinth.err
+echo "---PLINTH:build---"; tail -n 60 ${STATE}/op-build.log | tail -c 12000
+`;
+
+/** PUBLISH 3. Moves main to the checked commit. Never forced: GitHub refuses anything that isn't a fast-forward. */
+export const publishPushScript = () => `${header("publish-push")}
+git push -q origin "$PLINTH_SHA:refs/heads/main"
+echo "PLINTH_PUBLISHED=$PLINTH_SHA"
+`;
+
 /** Finds the commit an interrupted operation made, if it got that far. */
 export const findOperationCommitScript = () => `${header("find-commit")}
 git log -n 50 --format='%H %s' --grep="Operation-Id: $PLINTH_OPERATION_ID" | head -n 1

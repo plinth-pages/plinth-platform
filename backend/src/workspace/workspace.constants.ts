@@ -8,7 +8,8 @@ export type WorkspaceJob =
   | { name: "tree"; data: { portfolioId: string } }
   | { name: "file"; data: { portfolioId: string; path: string } }
   | { name: "slots"; data: { portfolioId: string } }
-  | { name: "check"; data: { portfolioId: string } };
+  | { name: "check"; data: { portfolioId: string } }
+  | { name: "publish-state"; data: { portfolioId: string } };
 
 /** Failure reasons carried in the job's error message, so the api can map them to HTTP statuses. */
 export const WORKSPACE_ERROR = {

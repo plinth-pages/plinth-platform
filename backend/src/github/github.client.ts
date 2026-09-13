@@ -20,6 +20,8 @@ export interface GitHubRepos {
   getBranchSha(repo: string, branch: string): Promise<string | null>;
   createBranch(repo: string, branch: string, sha: string): Promise<void>;
   deleteRepo(name: string): Promise<void>;
+  /** How many commits `head` has that `base` doesn't, and the reverse. Null if either branch is missing. */
+  compare(repo: string, base: string, head: string): Promise<{ aheadBy: number; behindBy: number } | null>;
 }
 
 export const GITHUB_REPOS = Symbol("GITHUB_REPOS");
@@ -101,6 +103,16 @@ export class GitHubClient implements GitHubRepos {
 
   async deleteRepo(name: string): Promise<void> {
     await this.request("DELETE", `/repos/${this.org}/${name}`, undefined, [404]);
+  }
+
+  async compare(repo: string, base: string, head: string): Promise<{ aheadBy: number; behindBy: number } | null> {
+    const json = await this.request<{ ahead_by: number; behind_by: number }>(
+      "GET",
+      `/repos/${this.org}/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+      undefined,
+      [404],
+    );
+    return json ? { aheadBy: json.ahead_by, behindBy: json.behind_by } : null;
   }
 
   private async request<T>(method: string, path: string, body?: unknown, tolerated: number[] = []): Promise<T | null> {

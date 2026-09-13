@@ -137,6 +137,23 @@ credential itself, so the IDE reaches previews through Plinth.
 **Verified live:** the raw sandbox URL returns 403; the preview link serves the page, its assets and the HMR websocket;
 a guessed label gets 410; another user gets 404.
 
+### G3 result — checked 2026-09-14
+
+**Verdict: blocked on a decision, not on engineering.** Source: vercel.com/docs/git/vercel-for-github and Vercel's
+community answers on Hobby and organisations.
+
+| Question | Answer |
+|---|---|
+| Can a Hobby team deploy a **private** repository owned by a **GitHub organisation**? | **No.** Hobby deploys private repos only from a personal account. Private org repos need **Pro** ($20/member/month). |
+| Is Hobby allowed for this use? | Hobby is for personal, non-commercial projects; a platform hosting other people's sites is commercial use. |
+| Can automatic deployments be disabled for `draft`? | Yes: `git.deploymentEnabled.draft: false` in `vercel.json` (already in the template). |
+| Is there a path without the Git integration? | Yes: build and upload with the Vercel CLI (`vercel build` + `vercel deploy --prebuilt --prod`) using a token. It sidesteps the org restriction, but not the terms of use. |
+
+**Options:** (a) Vercel Pro — about ₹1,700/month, fits the budget alongside E2B's free tier; (b) CLI deploys from the
+worker on a token — no Git integration needed, same Pro question for commercial use; (c) another host with an API
+(e.g. Cloudflare Pages or Netlify). **Until one is chosen, Publish promotes `draft` to `main` and records the
+deployment as `unconfigured`.** The hosting step plugs in after the push without changing the flow before it.
+
 ---
 
 ## Phase overview
@@ -743,13 +760,38 @@ Codemods and co-pilot tools — they arrive later as new operation types on this
 - **Unpublish:** detach the domain; repository and `draft` untouched
 
 ### Definition of done
-- [ ] Publish produces a live site at `<slug>.plinth.dev`
-- [ ] Edits after publishing do not change the live site
-- [ ] Editing on `draft` does not trigger a Vercel build
-- [ ] A deliberately broken build fails pre-flight, before Vercel is touched
-- [ ] A build that fails on Vercel leaves the previous deployment serving
-- [ ] Publish waits for a running operation rather than interleaving with it
-- [ ] The unpublished-changes count is correct
+- [ ] Publish produces a live site at `<slug>.plinth.dev` — **waiting on the G3 hosting decision**
+- [x] Edits after publishing do not change the live site (`main` stays where it was)
+- [x] Editing on `draft` does not trigger a Vercel build (`vercel.json` in the template; to confirm once hosting is connected)
+- [x] A deliberately broken build fails pre-flight, before `main` or any host is touched
+- [ ] A build that fails on Vercel leaves the previous deployment serving — **with hosting**
+- [x] Publish waits for a running operation rather than interleaving with it
+- [x] The unpublished-changes count is correct
+
+### As built — 2026-09-14 (promotion to main; hosting pending G3)
+
+Verified live on a throwaway portfolio through the real api, worker, sandbox and GitHub: **15/15 checks**.
+Production build in the sandbox: **17 s**; whole publish: **21 s**. `POST /publish` answers in
+**0.7 s** — the work happens in the worker.
+
+- **Publish is an operation** (`type: publish`) on the same queue and lock as edits: it waits for an edit submitted
+  before it, and an edit submitted during it waits for it. Pressing Publish again while one is queued or running
+  returns the same operation.
+- **Steps:** push any unpushed commit to `draft` → fetch `main` and require a fast-forward (if `main` has commits
+  `draft` doesn't, stop rather than overwrite) → in a worktree of that exact commit, run `plinth check` and
+  `next build` (type-check and lint included) → `git push origin <sha>:refs/heads/main`, never forced → record a
+  `deployments` row.
+- **Nothing to publish** is a successful no-op. **A failed build** is `rejected` with the build's errors (lint errors
+  are parsed with file, line and rule) and `main` is untouched. **A refused push** is `failed` and is not retried:
+  a delayed retry could publish a different commit than the one that was built.
+- Publishing never touches the live tree, so the preview isn't covered while it runs.
+- `GET /v1/portfolios/:id/publish` — unpublished-changes count (GitHub compare `main...draft`, read by the worker so
+  it works while the sandbox sleeps), draft and main shas, pending push, the publish in progress, the last deployment.
+- **Editor:** a **Publish** button in the top bar with the unpublished count; while publishing it shows the step
+  (Preparing, Building, Publishing). A toast reports **Published** or **Couldn't publish** with the build errors.
+- Edit-check p50/p95 exclude publish builds.
+- **Not built yet:** creating the hosting project and domain, tracking the deployment to a live URL, slug claiming,
+  unpublish, and pausing an idle sandbox after publishing.
 
 **Duration: 3–4 days**
 

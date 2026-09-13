@@ -21,6 +21,8 @@ export class WorkspaceProcessor extends WorkerHost {
         return this.reader.slots(portfolioId);
       case "check":
         return this.reader.check(portfolioId);
+      case "publish-state":
+        return this.reader.publishState(portfolioId);
       default:
         throw new UnrecoverableError(`Unknown workspace job: ${job.name}`);
     }

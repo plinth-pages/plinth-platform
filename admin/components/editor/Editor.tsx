@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
 import { useOperations } from "@/lib/useOperations";
+import { usePublish } from "@/lib/usePublish";
 import { usePreview, type PreviewPhase } from "@/lib/usePreview";
 import { CodeView, type CodeTarget } from "./CodeView";
 import { OutcomeToast } from "./OutcomeToast";
+import { PublishButton } from "./PublishButton";
 import { DEVICES, PreviewFrame, type Device } from "./PreviewFrame";
 import { SidePanels, type SidePanel } from "./SidePanels";
 
@@ -58,6 +60,7 @@ function WideEnough({ children, fallback }: { children: React.ReactNode; fallbac
 function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   const { preview, phase, error, liveGeneration, reloadFrame, restart, rebuild } = usePreview(portfolio.id);
   const operations = useOperations(portfolio.id);
+  const publishing = usePublish(portfolio.id);
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
@@ -124,11 +127,12 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
               href={preview.previewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+              className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-900"
             >
               Open preview ↗
             </a>
           ) : null}
+          <PublishButton status={publishing.status} publishing={publishing.publishing} onPublish={() => void publishing.publish()} error={publishing.error} />
         </div>
       </header>
 

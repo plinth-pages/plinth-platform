@@ -20,6 +20,7 @@ import { DevEditController, OperationsController } from "./operations/operations
 import { OPERATIONS_QUEUE } from "./operations/operations.constants";
 import { OperationsProcessor, QueuedPushRetries } from "./operations/operations.processor";
 import { OperationsService } from "./operations/operations.service";
+import { PublishController } from "./operations/publish.controller";
 import { PENDING_PUSHES } from "./operations/pending-pushes";
 import { previewApiProviders } from "./preview/preview.providers";
 import { PrismaModule } from "./prisma/prisma.module";
@@ -61,6 +62,7 @@ class RoleModule {
     PreviewController,
     WorkspaceController,
     OperationsController,
+    PublishController,
     DevEditController,
     GitHubAppSetupController,
   ],

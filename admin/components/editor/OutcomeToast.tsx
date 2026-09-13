@@ -12,6 +12,7 @@ const SOURCE_LABEL: Record<OperationFailure["source"], string> = {
   format: "Formatting",
   install: "Installing packages",
   render: "Page render",
+  build: "Production build",
 };
 
 /** A gentle notice that a change was not applied. Details are one click away and never shown by default. */
@@ -29,7 +30,16 @@ export function OutcomeToast({ outcome, onDismiss }: { outcome: Outcome | null; 
 
   if (!outcome) return null;
   const { operation } = outcome;
-  const detail =
+  const isPublish = operation.type === "publish";
+  const published = isPublish && operation.status === "applied";
+  const title = published ? "Published" : isPublish ? "Couldn't publish" : "This change couldn't be applied safely";
+  const detail = published
+    ? `${operation.diff ?? "Your draft is now the live version."} Connect hosting to put it online.`
+    : isPublish && operation.status === "rejected"
+      ? "The production build failed, so the live version didn't change."
+      : isPublish
+        ? "The live version didn't change."
+        :
     operation.status === "reverted"
       ? "It broke the page, so Plinth undid it. Your site is as it was."
       : operation.status === "failed"
@@ -45,11 +55,11 @@ export function OutcomeToast({ outcome, onDismiss }: { outcome: Outcome | null; 
       className="pointer-events-auto fixed right-4 bottom-4 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-lg bg-white p-4 shadow-xl ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-700"
     >
       <div className="flex items-start gap-3">
-        <span aria-hidden className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+        <span aria-hidden className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${published ? "bg-emerald-500" : "bg-amber-500"}`} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">This change couldn&apos;t be applied safely</p>
+          <p className="text-sm font-medium">{title}</p>
           <p className="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
-            {detail} <span className="text-zinc-500">“{operation.summary}”</span>
+            {detail} {isPublish ? null : <span className="text-zinc-500">“{operation.summary}”</span>}
           </p>
           {expanded ? (
             <ul className="mt-3 flex max-h-56 flex-col gap-2 overflow-auto">

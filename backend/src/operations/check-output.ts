@@ -52,3 +52,37 @@ export function reported(stdout: string, key: string): string | null {
   const match = new RegExp(`^PLINTH_${key}=(.*)$`, "m").exec(stdout);
   return match ? match[1].trim() : null;
 }
+
+/**
+ * Picks the useful lines out of a failed `next build`: compiler and lint errors with their locations, or the tail of
+ * the log when nothing matches.
+ */
+export function parseBuildOutput(log: string): OperationFailure[] {
+  const lines = log.split(/\r?\n/).map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+  const failures: OperationFailure[] = [];
+
+  // ESLint, as printed by next build:  ./app/page.tsx  then  12:7  Error: `'` can be escaped…  react/no-unescaped-entities
+  let file: string | undefined;
+  for (const line of lines) {
+    const fileLine = /^\.\/(\S+\.(?:tsx?|jsx?|mjs|cjs))$/.exec(line.trim());
+    if (fileLine) {
+      file = fileLine[1];
+      continue;
+    }
+    const lint = /^(\d+):\d+\s+Error:\s+(.*?)(?:\s{2,}(\S+))?$/.exec(line.trim());
+    if (lint && file) failures.push({ source: "build", file, line: Number(lint[1]), code: lint[3], message: lint[2] });
+  }
+
+  // Type and compile errors:  ./app/page.tsx:12:7  then  Type error: …
+  for (let i = 0; i < lines.length; i++) {
+    const located = /^\.\/(\S+):(\d+):\d+$/.exec(lines[i].trim());
+    const next = lines[i + 1]?.trim() ?? "";
+    if (located && /(Type error|Error|error):/.test(next)) {
+      failures.push({ source: "build", file: located[1], line: Number(located[2]), message: next });
+    }
+  }
+
+  if (failures.length) return failures.slice(0, 50);
+  const tail = lines.filter((line) => line.trim()).slice(-15).join("\n");
+  return [{ source: "build", message: tail || "The production build failed without printing an error." }];
+}

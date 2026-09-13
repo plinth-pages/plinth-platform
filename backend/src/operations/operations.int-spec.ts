@@ -43,6 +43,11 @@ class SimulatedSandbox implements SandboxDriver {
   dirty = false;
   running = true;
   pushFails = false;
+  /** The remote main branch. */
+  main = "base";
+  /** Returns build log lines when the production build should fail for this tree. */
+  buildErrors = (tree: Tree): string[] => ([...tree.values()].some((c) => c.includes("BUILD_BREAKS")) ? ["./app/page.tsx", "20:14  Error: Unescaped entity.  react/no-unescaped-entities"] : []);
+  mainPushFails = false;
   /** Every distinct live tree, in order. */
   liveHistory: string[] = [snapshot(this.live)];
   steps: string[] = [];
@@ -123,6 +128,39 @@ class SimulatedSandbox implements SandboxDriver {
         this.head = sha;
         return ok(`PLINTH_SHA=${sha}`);
       }
+      case "publish-status": {
+        const known = ["base", ...this.commits.map((c) => c.sha)];
+        const mainIndex = known.indexOf(this.main);
+        const headIndex = known.indexOf(this.head);
+        return ok(
+          [
+            `PLINTH_HEAD=${this.head}`,
+            `PLINTH_MAIN=${this.main}`,
+            `PLINTH_AHEAD_BY=${Math.max(0, headIndex - mainIndex)}`,
+            `PLINTH_FAST_FORWARD=${mainIndex !== -1 && mainIndex <= headIndex ? 1 : 0}`,
+          ].join("\n"),
+        );
+      }
+      case "build": {
+        const errors = this.buildErrors(this.staging!);
+        const plinth = this.plinth(this.staging!);
+        return ok(
+          [
+            `PLINTH_PLINTH_CODE=${plinth.ok ? 0 : 1}`,
+            `PLINTH_BUILD_CODE=${errors.length ? 1 : 0}`,
+            "PLINTH_CHECK_MS=41000",
+            "---PLINTH:plinth---",
+            JSON.stringify(plinth),
+            "---PLINTH:plinth-err---",
+            "---PLINTH:build---",
+            ...(errors.length ? ["Failed to compile.", "", ...errors] : ["✓ Compiled successfully"]),
+          ].join("\n"),
+        );
+      }
+      case "publish-push":
+        if (this.mainPushFails) return exit(1, "", "! [rejected] main (non-fast-forward)");
+        this.main = env.PLINTH_SHA;
+        return ok(`PLINTH_PUBLISHED=${env.PLINTH_SHA}`);
       case "find-commit": {
         const commit = this.commits.find((c) => c.message.includes(`Operation-Id: ${env.PLINTH_OPERATION_ID}`));
         return ok(commit ? `${commit.sha} ${commit.message.split("\n")[0]}` : "");
@@ -352,6 +390,114 @@ describe("pushing", () => {
     expect(sandbox.steps.slice(0, 3)).toEqual(["stage", "push", "stage"]);
     expect(sandbox.remote).toBe("c2");
     expect(await prisma.sandbox.findUniqueOrThrow({ where: { portfolioId: portfolio.id } })).toMatchObject({ pendingPush: false });
+  });
+});
+
+async function queuePublish(portfolioId: string): Promise<Operation> {
+  return prisma.operation.create({ data: { portfolioId, type: "publish", actor: "user", summary: "Publish", input: {} } });
+}
+
+describe("publishing", () => {
+  it("builds the draft and fast-forwards main to it, recording the deployment", async () => {
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Live" };\n' }]);
+    await runner.drain(portfolio.id);
+    const publish = await queuePublish(portfolio.id);
+    sandbox.steps = [];
+
+    await runner.drain(portfolio.id);
+
+    const done = await reload(publish.id);
+    expect(done).toMatchObject({ status: "applied", commitSha: "c1", checkMs: 41000, diff: "Published 1 change to main." });
+    expect(sandbox.main).toBe("c1");
+    expect(sandbox.steps).toEqual(["stage", "publish-status", "build", "publish-push", "discard"]);
+    expect(sandbox.liveHistory).toHaveLength(2); // publishing never touches the live tree
+    const deployment = await prisma.deployment.findUniqueOrThrow({ where: { operationId: publish.id } });
+    expect(deployment).toMatchObject({ commitSha: "c1", status: "unconfigured" });
+  });
+
+  it("does nothing when main already has every change", async () => {
+    const portfolio = await portfolioWithSandbox();
+    const publish = await queuePublish(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(await reload(publish.id)).toMatchObject({ status: "applied", diff: expect.stringContaining("Nothing new to publish") });
+    expect(sandbox.steps).not.toContain("build");
+    expect(await prisma.deployment.count({ where: { operationId: publish.id } })).toBe(0);
+  });
+
+  it("rejects a draft whose production build fails, before main is touched", async () => {
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "app/page.tsx", content: 'export default function Page() {\n  return <main><Slot name="sidebar" /><p>BUILD_BREAKS</p></main>;\n}\n' }]);
+    await runner.drain(portfolio.id);
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    const done = await reload(publish.id);
+    expect(done.status).toBe("rejected");
+    expect(failuresOf(done)).toEqual([
+      { source: "build", file: "app/page.tsx", line: 20, code: "react/no-unescaped-entities", message: "Unescaped entity." },
+    ]);
+    expect(sandbox.main).toBe("base");
+    expect(sandbox.staging).toBeNull();
+    expect(await prisma.deployment.count({ where: { operationId: publish.id } })).toBe(0);
+  });
+
+  it("waits for an edit submitted before it, then publishes that edit", async () => {
+    const portfolio = await portfolioWithSandbox();
+    const edit = await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Before publish" };\n' }]);
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    const [editDone, publishDone] = [await reload(edit.id), await reload(publish.id)];
+    expect(editDone.finishedAt!.getTime()).toBeLessThanOrEqual(publishDone.startedAt!.getTime());
+    expect(publishDone).toMatchObject({ status: "applied", commitSha: editDone.commitSha });
+    expect(sandbox.main).toBe(editDone.commitSha);
+  });
+
+  it("pushes an unpushed commit to draft before publishing it", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.pushFails = true;
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Unpushed" };\n' }]);
+    await runner.drain(portfolio.id);
+    sandbox.pushFails = false;
+    const publish = await queuePublish(portfolio.id);
+    sandbox.steps = [];
+
+    await runner.drain(portfolio.id);
+
+    expect(sandbox.steps.slice(0, 3)).toEqual(["stage", "push", "stage"]);
+    expect(sandbox.remote).toBe("c1");
+    expect(await reload(publish.id)).toMatchObject({ status: "applied", commitSha: "c1" });
+  });
+
+  it("stops if main has commits that draft doesn't", async () => {
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Draft" };\n' }]);
+    await runner.drain(portfolio.id);
+    sandbox.main = "someone-else";
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    expect(await reload(publish.id)).toMatchObject({ status: "failed", error: expect.stringContaining("main) has changes that aren't in your draft") });
+    expect(sandbox.steps).not.toContain("publish-push");
+  });
+
+  it("fails without retrying when GitHub refuses the update to main", async () => {
+    const portfolio = await portfolioWithSandbox();
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Refused" };\n' }]);
+    await runner.drain(portfolio.id);
+    sandbox.mainPushFails = true;
+    const publish = await queuePublish(portfolio.id);
+
+    await runner.drain(portfolio.id);
+
+    expect(await reload(publish.id)).toMatchObject({ status: "failed", error: expect.stringContaining("GitHub refused the update to main") });
+    expect(sandbox.main).toBe("base");
+    expect(scheduledPushes).toEqual([]);
   });
 });
 

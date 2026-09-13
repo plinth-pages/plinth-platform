@@ -45,12 +45,40 @@ export class OperationsService {
     return toSummary(operation);
   }
 
+  /** Queues a publish, or returns the one already queued or running — pressing Publish twice publishes once. */
+  async submitPublish(user: User, portfolioId: string): Promise<OperationSummary> {
+    const portfolio = await this.prisma.portfolio.findFirst({ where: { id: portfolioId, userId: user.id } });
+    if (!portfolio) throw new NotFoundException("Portfolio not found");
+    if (portfolio.status !== "ready") throw new ConflictException("The portfolio's repository isn't ready yet.");
+
+    const existing = await this.prisma.operation.findFirst({
+      where: { portfolioId, type: "publish", status: { in: ["queued", "staging", "checking", "applying"] } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (existing) return toSummary(existing);
+
+    const operation = await this.prisma.operation.create({
+      data: { portfolioId, type: "publish", actor: "user", summary: "Publish", input: {} },
+    });
+    await this.prisma.sandbox.upsert({
+      where: { portfolioId },
+      create: { portfolioId, lastAccessedAt: new Date() },
+      update: { lastAccessedAt: new Date() },
+    });
+    await this.queue.add("run", { portfolioId, operationId: operation.id }, { jobId: operationJobId(operation.id), ...OPERATION_JOB_OPTIONS });
+    await this.events
+      .publish(portfolioId, { type: "operation", operationId: operation.id, status: "queued", at: new Date().toISOString() })
+      .catch(() => undefined);
+    return toSummary(operation);
+  }
+
   async list(user: User, portfolioId: string, limit = 20): Promise<{ operations: OperationSummary[]; timings: OperationTimings }> {
     await this.owned(user, portfolioId);
     const [operations, timed] = await Promise.all([
       this.prisma.operation.findMany({ where: { portfolioId }, orderBy: { createdAt: "desc" }, take: Math.min(Math.max(limit, 1), 100) }),
       this.prisma.operation.findMany({
-        where: { portfolioId, status: { in: FINISHED }, checkMs: { not: null } },
+        // Edits only: a publish runs a full production build and would swamp the edit-check budget.
+        where: { portfolioId, type: "edit", status: { in: FINISHED }, checkMs: { not: null } },
         orderBy: { createdAt: "desc" },
         take: TIMING_SAMPLE,
         select: { checkMs: true, totalMs: true },
@@ -79,6 +107,7 @@ export function toSummary(operation: Operation): OperationSummary {
     actor: operation.actor,
     status: operation.status,
     summary: operation.summary,
+    diff: operation.diff,
     failures: (operation.checkOutput as OperationFailure[] | null) ?? [],
     error: operation.error,
     commitSha: operation.commitSha,

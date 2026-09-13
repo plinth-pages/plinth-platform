@@ -4,16 +4,18 @@ import type { OperationFailure } from "@plinth-pages/shared";
 import { posix } from "path";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { PrismaService } from "../prisma/prisma.service";
+import { gitAuthEnv } from "../sandbox/e2b.driver";
 import { GIT_TOKENS, type GitTokenSource } from "../sandbox/git-tokens";
 import { SANDBOX_DRIVER, SandboxNotRunningError, type ExecResult, type SandboxDriver, type WorkspaceRoot } from "../sandbox/sandbox-driver";
 import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
-import { parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
+import { parseBuildOutput, parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
 import { commitSubject, editInputSchema, type EditInput } from "./edit-input";
 import {
   EXIT,
   OPERATION_BRANCH_PREFIX,
   affectedRoutes,
   applyScript,
+  buildScript,
   checkScript,
   discardScript,
   findOperationCommitScript,
@@ -21,6 +23,8 @@ import {
   nulList,
   prepareFilesScript,
   prepareScript,
+  publishPushScript,
+  publishStatusScript,
   revertScript,
   stageScript,
 } from "./git-scripts";
@@ -39,7 +43,7 @@ export type DrainOutcome = "drained" | "sandbox_not_running";
 /** An infrastructure failure: the operation ends `failed`, never `rejected`. */
 class OperationAborted extends Error {}
 
-const STEP_TIMEOUT = { short: 60_000, prepare: 6 * 60_000, check: 3 * 60_000, apply: 6 * 60_000, health: 4 * 60_000 };
+const STEP_TIMEOUT = { short: 60_000, prepare: 6 * 60_000, check: 3 * 60_000, apply: 6 * 60_000, health: 4 * 60_000, build: 8 * 60_000 };
 
 /**
  * The safety net (Phase 5). Runs a portfolio's queued operations one at a time, oldest first:
@@ -81,6 +85,7 @@ export class OperationRunner {
   }
 
   private async run(operation: Operation, sandbox: Sandbox): Promise<void> {
+    if (operation.type === "publish") return this.publish(operation, sandbox);
     const began = Date.now();
     const externalId = sandbox.externalId!;
     const branch = `${OPERATION_BRANCH_PREFIX}${operation.id}`;
@@ -188,20 +193,96 @@ export class OperationRunner {
 
       await this.finish(operation, "applied", began, {});
     } catch (error) {
-      await this.discard(externalId).catch(() => undefined);
-      const detail = error instanceof Error ? error.message : String(error);
       const message = committed
-        ? `The change was applied, but Plinth couldn't confirm the page still renders: ${detail}`
-        : error instanceof OperationAborted || error instanceof PushFailedError
-          ? detail
-          : error instanceof SandboxNotRunningError
-            ? "The preview stopped while the change was being checked. Nothing was applied."
-            : `Something went wrong, so nothing was applied: ${detail}`;
-      this.logger.warn(`Operation ${operation.id} failed: ${message}`);
-      // The database may still say running; have the lifecycle rebuild or resume it straight away.
-      if (error instanceof SandboxNotRunningError) await this.waker.wake(operation.portfolioId).catch(() => undefined);
-      await this.finish(operation, "failed", began, { error: message });
+        ? `The change was applied, but Plinth couldn't confirm the page still renders: ${errorText(error)}`
+        : describeFailure(error, "The preview stopped while the change was being checked. Nothing was applied.");
+      await this.failed(operation, externalId, began, error, message);
     }
+  }
+
+  /**
+   * Publish (Phase 6): promote the checked draft to main. It runs as an operation, so it holds the portfolio's lock
+   * and can never interleave with an edit.
+   *
+   *   pending push → fetch main (must be a fast-forward) → plinth check + next build in a worktree → push draft:main
+   *
+   * main only moves after a production build of that exact commit succeeded. A failed push is not retried
+   * automatically: a delayed retry could publish a different commit than the one that was checked.
+   */
+  private async publish(operation: Operation, sandbox: Sandbox): Promise<void> {
+    const began = Date.now();
+    const externalId = sandbox.externalId!;
+    const branch = `${OPERATION_BRANCH_PREFIX}${operation.id}`;
+    await this.transition(operation, "staging", { startedAt: new Date(), attempts: { increment: 1 } });
+
+    try {
+      // Unpushed work is pushed first, so what is published is exactly what is on draft.
+      let stage = await this.exec(externalId, "live", stageScript(), { PLINTH_BRANCH: branch }, STEP_TIMEOUT.short);
+      if (stage.exitCode === EXIT.ahead) {
+        await this.sync.push(sandbox);
+        stage = await this.exec(externalId, "live", stageScript(), { PLINTH_BRANCH: branch }, STEP_TIMEOUT.short);
+      }
+      if (stage.exitCode === EXIT.dirty) {
+        throw new OperationAborted("The workspace has changes Plinth didn't make, so nothing was published. Rebuild the preview to reset it.");
+      }
+      if (stage.exitCode === EXIT.diverged) {
+        throw new OperationAborted("The draft branch changed outside Plinth, so nothing was published. Rebuild the preview to pick up the changes.");
+      }
+      this.expectSuccess(stage, "Preparing to publish");
+
+      const token = await this.git.installationToken();
+      const status = await this.exec(externalId, "live", publishStatusScript(), gitAuthEnv(token), STEP_TIMEOUT.short);
+      this.expectSuccess(status, "Reading the published version");
+      const head = reported(status.stdout, "HEAD")!;
+      const aheadBy = Number(reported(status.stdout, "AHEAD_BY") ?? 0);
+      if (reported(status.stdout, "FAST_FORWARD") !== "1") {
+        throw new OperationAborted("The live branch (main) has changes that aren't in your draft, so publishing stopped rather than overwrite them.");
+      }
+      if (aheadBy === 0) {
+        await this.discard(externalId);
+        await this.finish(operation, "applied", began, { commitSha: head, diff: "Nothing new to publish: the live site already has every change." });
+        return;
+      }
+
+      // Pre-flight: the slot contract and a production build of exactly this commit.
+      await this.transition(operation, "checking", { diff: `${aheadBy} change${aheadBy === 1 ? "" : "s"} to publish` });
+      const built = await this.exec(externalId, "staging", buildScript(), {}, STEP_TIMEOUT.build);
+      const parts = sections(built.stdout);
+      const checkMs = Number(reported(built.stdout, "CHECK_MS")) || null;
+      const buildCode = Number(reported(built.stdout, "BUILD_CODE") ?? 1);
+      const failures = [
+        ...parsePlinthCheck(parts.plinth ?? "", parts["plinth-err"] ?? "", Number(reported(built.stdout, "PLINTH_CODE") ?? 1)),
+        ...(buildCode === 0 ? [] : parseBuildOutput(parts.build ?? built.stderr)),
+      ];
+      if (failures.length) return this.reject(operation, externalId, began, failures, checkMs, `${aheadBy} change${aheadBy === 1 ? "" : "s"} not published`);
+
+      await this.transition(operation, "applying", { checkMs });
+      const pushed = await this.exec(externalId, "live", publishPushScript(), { ...gitAuthEnv(token), PLINTH_SHA: head }, STEP_TIMEOUT.short);
+      await this.discard(externalId).catch(() => undefined);
+      if (pushed.exitCode !== 0 || reported(pushed.stdout, "PUBLISHED") !== head) {
+        const detail = (pushed.stderr || pushed.stdout).split(token).join("[redacted]").trim().slice(-400);
+        throw new OperationAborted(`GitHub refused the update to main, so nothing was published: ${detail}`);
+      }
+
+      // No hosting provider is connected yet (gate G3), so main is the published version and nothing is deployed.
+      await this.prisma.deployment.create({
+        data: { portfolioId: operation.portfolioId, operationId: operation.id, commitSha: head, status: "unconfigured", finishedAt: new Date() },
+      });
+      await this.finish(operation, "applied", began, {
+        commitSha: head,
+        diff: `Published ${aheadBy} change${aheadBy === 1 ? "" : "s"} to main.`,
+      });
+    } catch (error) {
+      await this.failed(operation, externalId, began, error, describeFailure(error, "The preview stopped while publishing was being checked. Nothing was published."));
+    }
+  }
+
+  private async failed(operation: Operation, externalId: string, began: number, error: unknown, message: string) {
+    await this.discard(externalId).catch(() => undefined);
+    this.logger.warn(`Operation ${operation.id} failed: ${message}`);
+    // The database may still say running; have the lifecycle rebuild or resume it straight away.
+    if (error instanceof SandboxNotRunningError) await this.waker.wake(operation.portfolioId).catch(() => undefined);
+    await this.finish(operation, "failed", began, { error: message });
   }
 
   private async mutate(externalId: string, input: EditInput) {
@@ -275,6 +356,7 @@ export class OperationRunner {
   }
 
   private parseInput(operation: Operation): EditInput {
+    // Publish is handled by publish(); anything else not yet supported fails here.
     if (operation.type !== "edit") throw new OperationAborted(`Operations of type ${operation.type} aren't supported yet.`);
     const parsed = editInputSchema.safeParse(operation.input);
     if (!parsed.success) throw new OperationAborted(`The change is invalid: ${parsed.error.issues.map((i) => i.message).join("; ")}`);
@@ -312,6 +394,16 @@ export class OperationRunner {
     }
     return operation;
   }
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function describeFailure(error: unknown, sandboxGone: string): string {
+  if (error instanceof OperationAborted || error instanceof PushFailedError) return error.message;
+  if (error instanceof SandboxNotRunningError) return sandboxGone;
+  return `Something went wrong, so nothing changed: ${errorText(error)}`;
 }
 
 function authorEnv(identity: { name: string; email: string }): Record<string, string> {
