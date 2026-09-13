@@ -647,16 +647,70 @@ Git worktrees · designing for atomicity · parsing compiler output · health ch
 harder than "don't".
 
 ### Definition of done
-- [ ] An edit with a type error is **rejected**, and a poller on the preview during the operation never
+- [x] An edit with a type error is **rejected**, and a poller on the preview during the operation never
       observes the error
-- [ ] The live tree's HEAD is unchanged after a rejection
-- [ ] A valid edit is applied, hot-reloads, is committed with an Operation-Id trailer and pushed to `draft`
-- [ ] An edit deleting a slot is rejected by `plinth check`
-- [ ] An edit that type-checks but throws at render is **reverted** by the health check
-- [ ] Two operations submitted together run one after the other
-- [ ] Destroying a sandbox with a pending push flushes the push first
-- [ ] Killing the sandbox mid-operation leaves `draft` on GitHub consistent and the next `ensure()` clean
-- [ ] Check duration p50 and p95 are recorded per operation
+- [x] The live tree's HEAD is unchanged after a rejection
+- [x] A valid edit is applied, hot-reloads, is committed with an Operation-Id trailer and pushed to `draft`
+- [x] An edit deleting a slot is rejected by `plinth check`
+- [x] An edit that type-checks but throws at render is **reverted** by the health check
+- [x] Two operations submitted together run one after the other
+- [x] Destroying a sandbox with a pending push flushes the push first
+- [x] Killing the sandbox mid-operation leaves `draft` on GitHub consistent and the next `ensure()` clean
+- [x] Check duration p50 and p95 are recorded per operation
+
+### As built — 2026-09-13
+
+Verified live on a throwaway portfolio (provisioned, exercised, and its repository deleted afterwards) through the
+real api, worker, E2B sandbox and GitHub: **23/23 checks**.
+
+| Measurement (2 vCPU sandbox, the base template) | Result |
+|---|---|
+| `plinth check` + `tsc --noEmit`, in parallel | p50 **2.2 s**, p95 3.0 s |
+| Whole operation, queued → applied (includes push and health check) | p50 **10.8 s**, p95 14.0 s |
+
+**The two checks.** `pnpm exec tsc --noEmit --incremental` (the project's own TypeScript — equivalent to
+`npx tsc --noEmit`, without `npx` ever downloading a different version) and `pnpm exec plinth check --json`. Both
+run in the staging worktree, in parallel. Either failing rejects the change; unparseable output from either also
+rejects it, so a broken checker can never pass a change.
+
+**Where "revert the commit" happens.** A change that fails a check is never committed to the live tree, so there is
+nothing to revert: the worktree is discarded and `draft` on GitHub never sees it. The only change that reaches the
+live tree and is then undone is one that passes both checks but breaks rendering; that one is undone with a real
+`git revert` commit (carrying the same `Operation-Id` trailer) and pushed.
+
+**How it's wired.**
+- `operations` queue, one job per operation; the job drains the portfolio's **oldest** queued operation while holding
+  the same Redis lock as the sandbox lifecycle, so a sweep can never pause a sandbox mid-operation and operations never
+  interleave. A job that finds the lock taken, or the sandbox asleep, waits without spending an attempt.
+- The driver gained workspace roots: `live` (`/home/user/app`, served by `next dev`) and `staging`
+  (`/home/user/.plinth/staging`, outside the dev server's view). The runner only ever writes to `staging`.
+- Staging shares the live tree's `node_modules` through a symlink unless the change touches `package.json` or the
+  lockfile, in which case it installs from the warm pnpm store.
+- Commits are authored by the GitHub App's bot account (`<slug>[bot]`), never by a person.
+- A failed push leaves the change applied and sets `sandboxes.pending_push`; a `push` job retries with backoff. The
+  next operation pushes it first, an idle pause tries to, and **destroying a sandbox refuses to proceed until the push
+  succeeds** (resuming a paused sandbox to do it).
+- When an operation or a code-viewer read finds its sandbox paused or gone while the database still says running, it
+  queues `ensure` immediately. Found by the live test: without this, a sandbox killed mid-operation stayed "running"
+  in the database until the next sweep, and the editor couldn't read files for up to a minute. Measured with the fix:
+  a rebuild starts about 4 s after the sandbox dies.
+- An operation interrupted by a crashed worker is settled on the next run: `applied` if its trailer is in the live
+  history, `failed` otherwise. A leftover worktree is removed by the next stage.
+- Every status change is published as an `operation` event on the existing SSE stream.
+- `POST /v1/dev/portfolios/:id/edit` (development only) submits an edit; `GET /v1/portfolios/:id/operations` lists
+  history with p50/p95 timings.
+- Health check: the affected routes (always `/`, plus any page file touched) are requested twice after the fast-forward;
+  a 5xx, no response, or Next's error document means the change broke rendering. Errors that only happen in the
+  browser after hydration are not detected yet.
+
+**Editor.**
+- While an operation is queued or running, the preview is **blurred, non-interactive and covered by "Working on it…"**
+  with the current step. It stays covered ~1 s after the operation finishes, so hot reload repaints before it is seen.
+- If a change is rejected, reverted or fails, the preview is uncovered and a toast says **"This change couldn't be
+  applied safely"**, with the errors behind *Show details*. After a revert the frame is reloaded as well.
+- Settings shows recent changes with their check times and the p50/p95, and — for admins, in development — **Test the
+  safety net** buttons that submit a valid edit, a type error, a slot deletion and a render crash.
+
 
 ### Not in this phase
 Codemods and co-pilot tools — they arrive later as new operation types on this engine.

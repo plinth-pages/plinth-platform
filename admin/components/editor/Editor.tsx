@@ -5,8 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { useOperations } from "@/lib/useOperations";
 import { usePreview, type PreviewPhase } from "@/lib/usePreview";
 import { CodeView, type CodeTarget } from "./CodeView";
+import { OutcomeToast } from "./OutcomeToast";
 import { DEVICES, PreviewFrame, type Device } from "./PreviewFrame";
 import { SidePanels, type SidePanel } from "./SidePanels";
 
@@ -54,7 +56,21 @@ function WideEnough({ children, fallback }: { children: React.ReactNode; fallbac
 }
 
 function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
-  const { preview, phase, error, liveGeneration, restart, rebuild } = usePreview(portfolio.id);
+  const { preview, phase, error, liveGeneration, reloadFrame, restart, rebuild } = usePreview(portfolio.id);
+  const operations = useOperations(portfolio.id);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    api.me().then(({ user }) => setIsAdmin(user.role === "admin"), () => undefined);
+  }, []);
+
+  // A reverted change may have left an error state inside the page's own JavaScript; start it fresh.
+  const outcomeStatus = operations.outcome?.operation.status;
+  const outcomeKey = operations.outcome?.key;
+  useEffect(() => {
+    if (outcomeStatus === "reverted") reloadFrame();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outcomeKey]);
   const [tab, setTab] = useState<Tab>("preview");
   const [device, setDevice] = useState<Device>("desktop");
   const [panel, setPanel] = useState<SidePanel>("slots");
@@ -156,9 +172,15 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
           </div>
           <div className="min-h-0 flex-1 bg-white dark:bg-zinc-950">
             {tab === "preview" ? (
-              <PreviewFrame url={preview?.previewUrl ?? null} phase={phase} device={device} generation={liveGeneration} />
+              <PreviewFrame
+                url={preview?.previewUrl ?? null}
+                phase={phase}
+                device={device}
+                generation={liveGeneration}
+                working={operations.working ? workingLabel(operations.active?.status) : null}
+              />
             ) : (
-              <CodeView portfolioId={portfolio.id} live={phase === "live"} target={codeTarget} onOpen={openCode} />
+              <CodeView portfolioId={portfolio.id} live={phase === "live"} target={codeTarget} onOpen={openCode} revision={operations.revision} />
             )}
           </div>
         </main>
@@ -172,10 +194,30 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
           onOpenCode={openCode}
           onRestart={() => void restart()}
           onRebuild={() => void rebuild()}
+          operations={operations.operations}
+          timings={operations.timings}
+          isAdmin={isAdmin}
+          working={operations.working}
         />
       </div>
+      <OutcomeToast outcome={operations.outcome} onDismiss={operations.dismissOutcome} />
     </div>
   );
+}
+
+function workingLabel(status: string | undefined): string {
+  switch (status) {
+    case "queued":
+      return "Getting ready";
+    case "staging":
+      return "Preparing your change";
+    case "checking":
+      return "Checking types and slots";
+    case "applying":
+      return "Applying and checking the page";
+    default:
+      return "Finishing up";
+  }
 }
 
 function CopilotColumn() {

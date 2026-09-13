@@ -1,6 +1,9 @@
 import type {
   AdminPingResponse,
   ContractCheckResponse,
+  EditOperationRequest,
+  OperationResponse,
+  OperationsResponse,
   EnqueuePingResponse,
   JobStatusResponse,
   MeResponse,
@@ -63,6 +66,10 @@ export const api = {
     request<WorkspaceFileResponse>(`/portfolios/${id}/files/content?path=${encodeURIComponent(path)}`),
   slots: (id: string) => request<SlotsResponse>(`/portfolios/${id}/slots`),
   checkContract: (id: string) => request<ContractCheckResponse>(`/portfolios/${id}/slots/check`, { method: "POST" }),
+  operations: (id: string) => request<OperationsResponse>(`/portfolios/${id}/operations`),
+  /** Development only: runs an edit through the safety net. */
+  devEdit: (id: string, body: EditOperationRequest) =>
+    request<OperationResponse>(`/dev/portfolios/${id}/edit`, { method: "POST", body: JSON.stringify(body) }),
   /** Server-sent events; open with `new EventSource(url, { withCredentials: true })`. */
   eventsUrl: (id: string) => `${API_URL}/portfolios/${id}/events`,
 };

@@ -2,6 +2,7 @@ import { BullModule } from "@nestjs/bullmq";
 import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Env } from "../config/env";
+import { OPERATIONS_QUEUE } from "../operations/operations.constants";
 import { PROVISIONING_QUEUE } from "../provisioning/provisioning.constants";
 import { SANDBOX_QUEUE } from "../sandbox/sandbox.constants";
 import { WORKSPACE_QUEUE } from "../workspace/workspace.constants";
@@ -22,6 +23,7 @@ import { redisConnection } from "./redis-connection";
       { name: PROVISIONING_QUEUE },
       { name: SANDBOX_QUEUE },
       { name: WORKSPACE_QUEUE },
+      { name: OPERATIONS_QUEUE },
     ),
   ],
   exports: [BullModule],

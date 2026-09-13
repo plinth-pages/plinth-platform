@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import type { Portfolio, Sandbox, SandboxStatus } from "@prisma/client";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
+import { PENDING_PUSHES, type PendingPushes } from "../operations/pending-pushes";
 import { PrismaService } from "../prisma/prisma.service";
 import {
   SANDBOX_DRIVER,
@@ -12,6 +13,7 @@ import {
   type SandboxDriver,
   type SandboxInfo,
 } from "./sandbox-driver";
+import { GIT_TOKENS, type GitTokenSource } from "./git-tokens";
 import { SANDBOX_LOCKS, type SandboxLocks } from "./sandbox-locks";
 import {
   BOOTSTRAP_TIMEOUT_MS,
@@ -23,12 +25,6 @@ import {
   type SandboxTimings,
 } from "./sandbox.constants";
 
-/** Mints a short-lived token that can clone the organisation's repositories. */
-export interface GitTokenSource {
-  installationToken(): Promise<string>;
-}
-
-export const GIT_TOKENS = Symbol("GIT_TOKENS");
 export const SANDBOX_LIFECYCLE_OPTIONS = Symbol("SANDBOX_LIFECYCLE_OPTIONS");
 
 export interface SandboxLifecycleOptions {
@@ -61,6 +57,7 @@ export class SandboxLifecycle {
     @Inject(GIT_TOKENS) private readonly tokens: GitTokenSource,
     @Inject(SANDBOX_LIFECYCLE_OPTIONS) private readonly options: SandboxLifecycleOptions,
     @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
+    @Inject(PENDING_PUSHES) private readonly pushes: PendingPushes,
   ) {}
 
   /** Makes the preview reachable: keeps a running sandbox, resumes a paused one, or builds a new one from `draft`. */
@@ -295,6 +292,10 @@ export class SandboxLifecycle {
   }
 
   private async pause(sandbox: Sandbox, reason: PauseReason, now: Date) {
+    if (reason === "idle") {
+      // A paused sandbox keeps its files, so a failed push here loses nothing; destroying it later retries.
+      await this.pushes.flush(sandbox).catch((error: unknown) => this.logger.warn(errorMessage(error)));
+    }
     await this.driver.pause(sandbox.externalId!, reason);
     return this.update(sandbox.id, { ...PAUSED(now), secondsUsed: { increment: billedSeconds(sandbox, now) } });
   }
@@ -318,6 +319,7 @@ export class SandboxLifecycle {
 
   /** Destroys the provider sandbox (if any), bills the open stretch and leaves the row with nothing live. */
   private async stop(sandbox: Sandbox, reason: DestroyReason, status: "destroyed" | "unhealthy", lastError: string | null) {
+    if (sandbox.externalId && sandbox.pendingPush) await this.flushBeforeDestroy(sandbox);
     if (sandbox.externalId) await this.driver.destroy(sandbox.externalId, reason);
     await this.update(sandbox.id, {
       ...STOPPED,
@@ -325,6 +327,20 @@ export class SandboxLifecycle {
       lastError,
       secondsUsed: { increment: billedSeconds(sandbox, new Date()) },
     });
+  }
+
+  /**
+   * The one path by which work could be lost: a commit applied in the sandbox but not yet on GitHub. Push it first —
+   * resuming a paused sandbox to do so — and refuse to destroy if the push fails.
+   */
+  private async flushBeforeDestroy(sandbox: Sandbox) {
+    const live = await this.driver.info(sandbox.externalId!);
+    if (live.state === "gone") {
+      this.logger.warn(`Portfolio ${sandbox.portfolioId} had an unpushed commit, but its sandbox is already gone`);
+      return;
+    }
+    if (live.state === "paused") await this.driver.resume(sandbox.externalId!, { timeoutMs: 5 * 60_000 });
+    await this.pushes.flush(sandbox);
   }
 
   private async markRunning(sandbox: Sandbox, live: SandboxInfo) {

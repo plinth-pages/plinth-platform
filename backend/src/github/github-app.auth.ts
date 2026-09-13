@@ -19,6 +19,7 @@ const base64url = (value: string) => Buffer.from(value).toString("base64url");
 export class GitHubAppAuth {
   private cached?: { token: string; expiresAt: number };
   private installationId?: number;
+  private identity?: { name: string; email: string };
 
   constructor(
     private readonly appId: string,
@@ -53,6 +54,30 @@ export class GitHubAppAuth {
 
     this.cached = { token: body.token, expiresAt: Date.parse(body.expires_at) };
     return body.token;
+  }
+
+  /**
+   * The App's bot account, used as the author of commits Plinth makes in portfolio repositories — so GitHub shows
+   * them as `<slug>[bot]` rather than as any person.
+   */
+  async botIdentity(): Promise<{ name: string; email: string }> {
+    if (this.identity) return this.identity;
+
+    const appResponse = await this.fetchImpl(`${GITHUB_API}/app`, {
+      headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${this.appJwt()}` },
+    });
+    const app = (await appResponse.json().catch(() => null)) as { slug?: string; message?: string } | null;
+    if (!appResponse.ok || !app?.slug) throw toGitHubError(appResponse, app);
+
+    const login = `${app.slug}[bot]`;
+    const userResponse = await this.fetchImpl(`${GITHUB_API}/users/${encodeURIComponent(login)}`, {
+      headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${await this.installationToken()}` },
+    });
+    const user = (await userResponse.json().catch(() => null)) as { id?: number; message?: string } | null;
+    if (!userResponse.ok || !user?.id) throw toGitHubError(userResponse, user);
+
+    this.identity = { name: login, email: `${user.id}+${login}@users.noreply.github.com` };
+    return this.identity;
   }
 
   /** Forget the cached token, e.g. after a 401. */

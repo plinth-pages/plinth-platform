@@ -51,8 +51,21 @@ export interface Workspace {
   env: Record<string, string>;
 }
 
+/**
+ * `live` is the checkout `next dev` serves. `staging` is the worktree where an operation's change is made and checked
+ * before it may touch the live tree (Phase 5) — outside the live tree, so the dev server never sees it.
+ */
+export type WorkspaceRoot = "live" | "staging";
+
+export interface WorkspaceFile {
+  root: WorkspaceRoot;
+  /** Relative to the root. */
+  path: string;
+}
+
 export interface ExecOptions {
-  /** Relative to the workspace root. */
+  root: WorkspaceRoot;
+  /** Relative to the root. */
   cwd: string;
   envs: Record<string, string>;
   timeoutMs: number;
@@ -88,9 +101,9 @@ export interface SandboxDriver {
   restartDevServer(externalId: string, opts: { clearCache: boolean }): Promise<void>;
 
   exec(externalId: string, command: string, opts: ExecOptions): Promise<ExecResult>;
-  readFile(externalId: string, path: string): Promise<string>;
-  writeFile(externalId: string, path: string, content: string): Promise<void>;
-  listFiles(externalId: string, dir: string): Promise<FileEntry[]>;
+  readFile(externalId: string, file: WorkspaceFile): Promise<string>;
+  writeFile(externalId: string, file: WorkspaceFile, content: string): Promise<void>;
+  listFiles(externalId: string, dir: WorkspaceFile): Promise<FileEntry[]>;
 }
 
 export type SandboxDriverMethod = {

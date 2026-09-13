@@ -108,6 +108,18 @@ const createdUsers: string[] = [];
 /** Portfolios created by the current test; every sweep is scoped to them. */
 const mine: string[] = [];
 const TOKEN = "ghs_fake_installation_token";
+const tokens = { installationToken: async () => TOKEN, botIdentity: async () => ({ name: "plinth[bot]", email: "1+plinth[bot]@users.noreply.github.com" }) };
+/** Records flushes; set `failFlush` to make the push fail. */
+let flushed: string[];
+let failFlush: boolean;
+const pushes = {
+  flush: async (sandbox: Sandbox) => {
+    if (!sandbox.pendingPush) return;
+    if (failFlush) throw new Error("Pushing to draft failed: network unreachable");
+    flushed.push(sandbox.portfolioId);
+    await prisma.sandbox.update({ where: { id: sandbox.id }, data: { pendingPush: false } });
+  },
+};
 
 let driver: FakeDriver;
 let locks: InMemorySandboxLocks;
@@ -135,9 +147,11 @@ beforeAll(() => prisma.$connect());
 beforeEach(() => {
   mine.length = 0;
   events = [];
+  flushed = [];
+  failFlush = false;
   driver = new FakeDriver();
   locks = new InMemorySandboxLocks();
-  lifecycle = new SandboxLifecycle(prisma, driver, locks, { installationToken: async () => TOKEN }, { org: "plinth-pages", timings }, publisher);
+  lifecycle = new SandboxLifecycle(prisma, driver, locks, tokens, { org: "plinth-pages", timings }, publisher, pushes);
 });
 
 afterAll(async () => {
@@ -268,6 +282,50 @@ describe("private previews (gate G2)", () => {
   });
 });
 
+describe("unpushed work", () => {
+  it("pushes a pending commit before destroying the sandbox", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await setRow(portfolio.id, { pendingPush: true });
+
+    expect(await lifecycle.rebuild(portfolio.id)).toBe("created");
+    expect(flushed).toEqual([portfolio.id]);
+    expect(driver.called("destroy")[0].args).toEqual(["fake-1", "rebuild"]);
+  });
+
+  it("refuses to destroy a sandbox whose pending commit could not be pushed", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await setRow(portfolio.id, { pendingPush: true });
+    failFlush = true;
+
+    await expect(lifecycle.rebuild(portfolio.id)).rejects.toThrow(/Pushing to draft failed/);
+    expect(driver.called("destroy")).toHaveLength(0);
+    expect(await row(portfolio.id)).toMatchObject({ externalId: "fake-1", pendingPush: true });
+  });
+
+  it("resumes a paused sandbox to push its pending commit before the long-idle destroy", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await driver.pause("fake-1", "idle");
+    await setRow(portfolio.id, { status: "paused", pausedAt: ago(25 * 60 * MIN), runStartedAt: null, pendingPush: true });
+
+    expect((await lifecycle.sweep(new Date(), mine)).destroyed).toContain(portfolio.id);
+    expect(driver.called("resume")).toHaveLength(1);
+    expect(flushed).toEqual([portfolio.id]);
+  });
+
+  it("flushes before an idle pause, and still pauses if the push fails", async () => {
+    const portfolio = await readyPortfolio();
+    await lifecycle.ensure(portfolio.id);
+    await setRow(portfolio.id, { pendingPush: true, lastAccessedAt: ago(10 * MIN) });
+    failFlush = true;
+
+    expect((await lifecycle.sweep(new Date(), mine)).paused).toEqual([portfolio.id]);
+    expect(await row(portfolio.id)).toMatchObject({ status: "paused", pendingPush: true });
+  });
+});
+
 describe("recovery ladder", () => {
   it("restarts the dev server first, without clearing the cache", async () => {
     const portfolio = await readyPortfolio();
@@ -334,10 +392,10 @@ describe("sweep", () => {
 
   it("never sets a deadline past the continuous-runtime cap", async () => {
     // With the default timings rotation happens first; a late rotation must still not ask for more than the cap.
-    lifecycle = new SandboxLifecycle(prisma, driver, locks, { installationToken: async () => TOKEN }, {
+    lifecycle = new SandboxLifecycle(prisma, driver, locks, tokens, {
       org: "plinth-pages",
       timings: { ...timings, rotateAfterMs: 57 * MIN },
-    }, publisher);
+    }, publisher, pushes);
     const portfolio = await readyPortfolio();
     await lifecycle.ensure(portfolio.id);
     const now = new Date();

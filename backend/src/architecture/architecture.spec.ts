@@ -6,6 +6,7 @@ import { PingProcessor } from "../jobs/ping.processor";
 import { ProvisioningProcessor } from "../provisioning/provisioning.processor";
 import { SandboxProcessor } from "../sandbox/sandbox.processor";
 import { WorkspaceProcessor } from "../workspace/workspace.processor";
+import { OperationsProcessor } from "../operations/operations.processor";
 import { findProcessors } from "./topology";
 
 const baseEnv = {
@@ -41,9 +42,9 @@ describe("process role topology", () => {
     expect(await findProcessors(graphFor("api"))).toEqual([]);
   });
 
-  it("registers the ping, provisioning, sandbox and workspace processors in the worker role", async () => {
+  it("registers the ping, provisioning, sandbox, workspace and operations processors in the worker role", async () => {
     expect(await findProcessors(graphFor("worker"))).toEqual(
-      expect.arrayContaining([PingProcessor, ProvisioningProcessor, SandboxProcessor, WorkspaceProcessor]),
+      expect.arrayContaining([PingProcessor, ProvisioningProcessor, SandboxProcessor, WorkspaceProcessor, OperationsProcessor]),
     );
   });
 

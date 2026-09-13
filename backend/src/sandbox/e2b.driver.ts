@@ -14,10 +14,14 @@ import {
   type SandboxDriver,
   type SandboxInfo,
   type Workspace,
+  type WorkspaceFile,
+  type WorkspaceRoot,
 } from "./sandbox-driver";
 
 export const WORKSPACE_DIR = "/home/user/app";
 const STATE_DIR = "/home/user/.plinth";
+export const STAGING_DIR = `${STATE_DIR}/staging`;
+const ROOTS: Record<WorkspaceRoot, string> = { live: WORKSPACE_DIR, staging: STAGING_DIR };
 const DEV_LOG = `${STATE_DIR}/dev.log`;
 export const DEV_SERVER_PORT = 3000;
 
@@ -155,20 +159,20 @@ export class E2BDriver implements SandboxDriver {
 
   exec(externalId: string, command: string, opts: ExecOptions): Promise<ExecResult> {
     return this.withSandbox(externalId, (sandbox) =>
-      sandbox.run(command, { cwd: workspacePath(opts.cwd), envs: opts.envs, timeoutMs: opts.timeoutMs }),
+      sandbox.run(command, { cwd: workspacePath(opts.cwd, opts.root), envs: opts.envs, timeoutMs: opts.timeoutMs }),
     );
   }
 
-  readFile(externalId: string, path: string): Promise<string> {
-    return this.withSandbox(externalId, (sandbox) => sandbox.readFile(workspacePath(path)));
+  readFile(externalId: string, file: WorkspaceFile): Promise<string> {
+    return this.withSandbox(externalId, (sandbox) => sandbox.readFile(workspacePath(file.path, file.root)));
   }
 
-  writeFile(externalId: string, path: string, content: string): Promise<void> {
-    return this.withSandbox(externalId, (sandbox) => sandbox.writeFile(workspacePath(path), content));
+  writeFile(externalId: string, file: WorkspaceFile, content: string): Promise<void> {
+    return this.withSandbox(externalId, (sandbox) => sandbox.writeFile(workspacePath(file.path, file.root), content));
   }
 
-  listFiles(externalId: string, dir: string): Promise<FileEntry[]> {
-    return this.withSandbox(externalId, (sandbox) => sandbox.list(workspacePath(dir)));
+  listFiles(externalId: string, dir: WorkspaceFile): Promise<FileEntry[]> {
+    return this.withSandbox(externalId, (sandbox) => sandbox.list(workspacePath(dir.path, dir.root)));
   }
 
   private async startDevServer(sandbox: E2BSandbox) {
@@ -245,8 +249,8 @@ export class E2BDriver implements SandboxDriver {
   }
 }
 
-/** Resolves a workspace-relative path. Absolute paths and paths that climb out of the workspace are rejected. */
-export function workspacePath(relative: string): string {
+/** Resolves a path relative to a workspace root. Absolute paths and paths that climb out of the root are rejected. */
+export function workspacePath(relative: string, root: WorkspaceRoot): string {
   if (relative.includes("\0") || posix.isAbsolute(relative)) {
     throw new Error(`Paths must be relative to the workspace: ${JSON.stringify(relative)}`);
   }
@@ -254,7 +258,7 @@ export function workspacePath(relative: string): string {
   if (normalized === ".." || normalized.startsWith("../")) {
     throw new Error(`Path leaves the workspace: ${JSON.stringify(relative)}`);
   }
-  return normalized === "." ? WORKSPACE_DIR : `${WORKSPACE_DIR}/${normalized}`;
+  return normalized === "." ? ROOTS[root] : `${ROOTS[root]}/${normalized}`;
 }
 
 /** Git reads an extra header from the environment, so the token reaches neither the remote URL nor `.git/config`. */

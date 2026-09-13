@@ -1,5 +1,5 @@
 import type { E2BApi, E2BInfo, E2BSandbox } from "./e2b-api";
-import { E2BDriver, WORKSPACE_DIR, renderEnvFile, workspacePath } from "./e2b.driver";
+import { E2BDriver, STAGING_DIR, WORKSPACE_DIR, renderEnvFile, workspacePath } from "./e2b.driver";
 import {
   DRIVER_METHOD_ARITY,
   SandboxNotRunningError,
@@ -194,22 +194,26 @@ describe("E2BDriver passes its parameters through", () => {
   it("exec: cwd, envs and timeout reach the command", async () => {
     const { api, driver } = setup();
     const { externalId } = await driver.create("p", { timeoutMs: 60_000 });
-    await driver.exec(externalId, "pnpm typecheck", { cwd: "app/..", envs: { CI: "1" }, timeoutMs: 9_000 });
+    await driver.exec(externalId, "pnpm typecheck", { root: "live", cwd: "app/..", envs: { CI: "1" }, timeoutMs: 9_000 });
     expect(api.called("sandbox.run")[0].args).toEqual(["pnpm typecheck", { cwd: WORKSPACE_DIR, envs: { CI: "1" }, timeoutMs: 9_000 }]);
+
+    api.calls = [];
+    await driver.exec(externalId, "pnpm exec tsc --noEmit", { root: "staging", cwd: ".", envs: {}, timeoutMs: 1_000 });
+    expect(api.called("sandbox.run")[0].args[1]).toMatchObject({ cwd: STAGING_DIR });
   });
 
   it("readFile, writeFile and listFiles resolve paths inside the workspace", async () => {
     const { api, driver } = setup();
     const { externalId } = await driver.create("p", { timeoutMs: 60_000 });
-    await driver.readFile(externalId, "content/profile.ts");
-    await driver.writeFile(externalId, "app/page.tsx", "export default 1");
-    await driver.listFiles(externalId, "components");
+    await driver.readFile(externalId, { root: "live", path: "content/profile.ts" });
+    await driver.writeFile(externalId, { root: "staging", path: "app/page.tsx" }, "export default 1");
+    await driver.listFiles(externalId, { root: "live", path: "components" });
 
     expect(api.called("sandbox.readFile")[0].args).toEqual([`${WORKSPACE_DIR}/content/profile.ts`]);
-    expect(api.called("sandbox.writeFile")[0].args).toEqual([`${WORKSPACE_DIR}/app/page.tsx`, "export default 1"]);
+    expect(api.called("sandbox.writeFile")[0].args).toEqual([`${STAGING_DIR}/app/page.tsx`, "export default 1"]);
     expect(api.called("sandbox.list")[0].args).toEqual([`${WORKSPACE_DIR}/components`]);
-    await expect(driver.readFile(externalId, "../.bashrc")).rejects.toThrow(/leaves the workspace/);
-    await expect(driver.readFile(externalId, "/etc/passwd")).rejects.toThrow(/relative to the workspace/);
+    await expect(driver.readFile(externalId, { root: "live", path: "../.bashrc" })).rejects.toThrow(/leaves the workspace/);
+    await expect(driver.readFile(externalId, { root: "staging", path: "/etc/passwd" })).rejects.toThrow(/relative to the workspace/);
   });
 });
 
@@ -281,7 +285,7 @@ describe("E2BDriver never resumes a sandbox implicitly", () => {
     api.calls = [];
 
     await expect(driver.health(externalId)).rejects.toBeInstanceOf(SandboxNotRunningError);
-    await expect(driver.exec(externalId, "ls", { cwd: ".", envs: {}, timeoutMs: 1000 })).rejects.toMatchObject({
+    await expect(driver.exec(externalId, "ls", { root: "live", cwd: ".", envs: {}, timeoutMs: 1000 })).rejects.toMatchObject({
       state: "paused",
     });
     expect(api.called("connect")).toHaveLength(0);
@@ -292,7 +296,7 @@ describe("E2BDriver never resumes a sandbox implicitly", () => {
     const { externalId } = await driver.create("p", { timeoutMs: 60_000 });
     api.infos.delete(externalId);
     expect(await driver.info(externalId)).toEqual({ state: "gone", startedAt: null, expiresAt: null });
-    await expect(driver.readFile(externalId, "package.json")).rejects.toMatchObject({ state: "gone" });
+    await expect(driver.readFile(externalId, { root: "live", path: "package.json" })).rejects.toMatchObject({ state: "gone" });
   });
 });
 
@@ -301,9 +305,13 @@ describe("workspacePath", () => {
     [".", WORKSPACE_DIR],
     ["app/page.tsx", `${WORKSPACE_DIR}/app/page.tsx`],
     ["content/../app/./layout.tsx", `${WORKSPACE_DIR}/app/layout.tsx`],
-  ])("%s → %s", (input, expected) => expect(workspacePath(input)).toBe(expected));
+  ])("%s → %s", (input, expected) => expect(workspacePath(input, "live")).toBe(expected));
+
+  it("resolves staging paths outside the live tree", () => {
+    expect(workspacePath("app/page.tsx", "staging")).toBe(`${STAGING_DIR}/app/page.tsx`);
+  });
 
   it.each(["..", "../x", "a/../../x", "/abs", "a\0b"])("rejects %j", (input) => {
-    expect(() => workspacePath(input)).toThrow();
+    expect(() => workspacePath(input, "live")).toThrow();
   });
 });

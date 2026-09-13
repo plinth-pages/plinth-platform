@@ -32,11 +32,14 @@ export function PreviewFrame({
   phase,
   device,
   generation,
+  working,
 }: {
   url: string | null;
   phase: PreviewPhase;
   device: Device;
   generation: number;
+  /** A change is being checked or applied: the frame is blurred and covered, so a half-applied state is never seen. */
+  working: string | null;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ width: 0, height: 0 });
@@ -63,8 +66,11 @@ export function PreviewFrame({
     <div ref={container} className="relative h-full w-full overflow-hidden bg-zinc-100 dark:bg-zinc-900">
       {url && phase === "live" ? (
         <div
-          className={deviceWidth ? "absolute top-4 left-1/2 origin-top" : "absolute inset-0"}
+          className={`${deviceWidth ? "absolute top-4 left-1/2 origin-top" : "absolute inset-0"} transition-[filter] duration-300 motion-reduce:transition-none ${
+            working ? "pointer-events-none blur-md saturate-50 select-none" : ""
+          }`}
           style={deviceWidth ? { width, height, transform: `translateX(-50%) scale(${scale})` } : undefined}
+          aria-hidden={working ? true : undefined}
         >
           <iframe
             key={generation}
@@ -83,6 +89,18 @@ export function PreviewFrame({
           />
           <p className="text-sm font-medium">{PHASE_MESSAGE[phase].title}</p>
           {PHASE_MESSAGE[phase].detail ? <p className="max-w-sm text-xs text-zinc-500">{PHASE_MESSAGE[phase].detail}</p> : null}
+        </div>
+      ) : null}
+
+      {working && phase === "live" ? (
+        <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-white/30 dark:bg-zinc-950/30">
+          <div className="flex items-center gap-3 rounded-full bg-white/95 py-2 pr-5 pl-3 shadow-lg ring-1 ring-zinc-200 dark:bg-zinc-900/95 dark:ring-zinc-700">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 motion-reduce:animate-none dark:border-zinc-600 dark:border-t-zinc-100" />
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">Working on it…</span>
+              <span className="text-xs text-zinc-500">{working}</span>
+            </span>
+          </div>
         </div>
       ) : null}
 

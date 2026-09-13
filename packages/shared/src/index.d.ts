@@ -123,7 +123,9 @@ export interface PreviewResponse {
 }
 
 /** Pushed to the IDE over server-sent events. Events are hints to refetch; the REST endpoints stay authoritative. */
-export type PortfolioEvent = { type: "sandbox"; status: PreviewStatus; at: string };
+export type PortfolioEvent =
+  | { type: "sandbox"; status: PreviewStatus; at: string }
+  | { type: "operation"; operationId: string; status: OperationStatus; at: string };
 
 export type WorkspaceFileKind = "file" | "binary" | "too_large";
 
@@ -176,4 +178,69 @@ export interface ContractCheckResponse {
 export interface SandboxNotRunningApiError extends ApiError {
   statusCode: 409;
   code: "SANDBOX_NOT_RUNNING";
+}
+
+// ---------------------------------------------------------------------------
+// Operations — the safety net (Phase 5)
+// ---------------------------------------------------------------------------
+
+/**
+ * queued → staging → checking → applying → applied
+ *                             └→ rejected  (checks failed; nothing reached the preview or GitHub)
+ *                    applied └→ reverted  (it broke rendering; undone with a revert commit)
+ *                         any └→ failed    (infrastructure error)
+ */
+export type OperationStatus = "queued" | "staging" | "checking" | "applying" | "applied" | "rejected" | "reverted" | "failed";
+
+export type OperationType = "edit" | "install" | "uninstall" | "move" | "theme" | "fleet_update" | "publish";
+
+export interface OperationFailure {
+  /** Which check refused the change. */
+  source: "tsc" | "plinth" | "format" | "install" | "render";
+  message: string;
+  file?: string;
+  line?: number;
+  code?: string;
+}
+
+export interface OperationSummary {
+  id: string;
+  type: OperationType;
+  actor: "user" | "copilot" | "system";
+  status: OperationStatus;
+  summary: string;
+  failures: OperationFailure[];
+  /** Infrastructure error, when `status` is `failed`. */
+  error: string | null;
+  commitSha: string | null;
+  revertSha: string | null;
+  checkMs: number | null;
+  totalMs: number | null;
+  createdAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
+export interface OperationTimings {
+  /** Over the most recent checked operations. Null until there are any. */
+  checkP50Ms: number | null;
+  checkP95Ms: number | null;
+  totalP50Ms: number | null;
+  totalP95Ms: number | null;
+  sampleSize: number;
+}
+
+export interface OperationsResponse {
+  operations: OperationSummary[];
+  timings: OperationTimings;
+}
+
+export interface OperationResponse {
+  operation: OperationSummary;
+}
+
+/** Development only: `POST /v1/dev/portfolios/:id/edit`. `content: null` deletes the file. */
+export interface EditOperationRequest {
+  summary?: string;
+  files: { path: string; content: string | null }[];
 }

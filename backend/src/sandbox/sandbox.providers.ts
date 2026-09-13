@@ -10,7 +10,8 @@ import { DEFAULT_E2B_DRIVER_TIMINGS, E2BDriver } from "./e2b.driver";
 import { SANDBOX_DRIVER } from "./sandbox-driver";
 import { RedisSandboxLocks, SANDBOX_LOCKS } from "./sandbox-locks";
 import { SANDBOX_QUEUE, sandboxTimings } from "./sandbox.constants";
-import { GIT_TOKENS, SANDBOX_LIFECYCLE_OPTIONS, SandboxLifecycle, type SandboxLifecycleOptions } from "./sandbox.lifecycle";
+import { GIT_TOKENS } from "./git-tokens";
+import { SANDBOX_LIFECYCLE_OPTIONS, SandboxLifecycle, type SandboxLifecycleOptions } from "./sandbox.lifecycle";
 import { SandboxProcessor, SandboxScheduler } from "./sandbox.processor";
 
 /** Worker only: everything that talks to E2B. */

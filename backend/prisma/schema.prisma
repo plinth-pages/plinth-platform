@@ -112,6 +112,8 @@ model Sandbox {
   coldStartMs    Int?          @map("cold_start_ms")
   resumeMs       Int?          @map("resume_ms")
   lastError      String?       @map("last_error")
+  /** A commit was applied in the sandbox but not yet pushed to draft. It must be pushed before the sandbox is destroyed. */
+  pendingPush    Boolean       @default(false) @map("pending_push")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
@@ -148,17 +150,28 @@ enum OperationStatus {
   failed
 }
 
+// Every change to a portfolio's code runs as an operation: staged in a worktree, formatted, validated by plinth check,
+// type-checked, and only then committed to the live tree and pushed to draft (Phase 5).
 model Operation {
   id          String          @id @default(cuid())
   portfolioId String          @map("portfolio_id")
   type        OperationType
   actor       OperationActor
   status      OperationStatus @default(queued)
+  /** Short description, used as the commit subject. */
+  summary     String
   input       Json
   diff        String?
+  /** Parsed failures from plinth check, tsc or the render health check. */
   checkOutput Json?           @map("check_output")
+  /** Infrastructure failure message (status failed). */
+  error       String?
   attempts    Int             @default(0)
   commitSha   String?         @map("commit_sha")
+  revertSha   String?         @map("revert_sha")
+  /** Duration of plinth check + tsc, for the p50/p95 budget. */
+  checkMs     Int?            @map("check_ms")
+  totalMs     Int?            @map("total_ms")
   createdAt   DateTime        @default(now()) @map("created_at")
   startedAt   DateTime?       @map("started_at")
   finishedAt  DateTime?       @map("finished_at")
@@ -166,6 +179,7 @@ model Operation {
   portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@index([portfolioId, createdAt])
+  @@index([portfolioId, status])
   @@map("operations")
 }
 

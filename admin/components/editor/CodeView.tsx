@@ -19,11 +19,14 @@ export function CodeView({
   live,
   target,
   onOpen,
+  revision,
 }: {
   portfolioId: string;
   live: boolean;
   target: CodeTarget | null;
   onOpen: (target: CodeTarget) => void;
+  /** Changes when an operation finishes, so the tree and the open file show the result. */
+  revision: number;
 }) {
   const [files, setFiles] = useState<string[] | null>(null);
   const [treeError, setTreeError] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export function CodeView({
 
   useEffect(() => {
     if (live) void loadTree();
-  }, [live, loadTree]);
+  }, [live, loadTree, revision]);
 
   useEffect(() => {
     if (!target || !live) return;
@@ -61,7 +64,7 @@ export function CodeView({
     return () => {
       cancelled = true;
     };
-  }, [portfolioId, target, live]);
+  }, [portfolioId, target, live, revision]);
 
   const tree = useMemo(() => buildTree(files ?? []), [files]);
 

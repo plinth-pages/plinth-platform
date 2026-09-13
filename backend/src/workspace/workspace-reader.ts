@@ -8,6 +8,7 @@ import type {
 import { UnrecoverableError } from "bullmq";
 import { PrismaService } from "../prisma/prisma.service";
 import { SANDBOX_DRIVER, SandboxNotRunningError, type SandboxDriver } from "../sandbox/sandbox-driver";
+import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
 import { isViewable, viewablePath } from "./workspace-policy";
 import { MAX_TREE_ENTRIES, MAX_VIEWABLE_BYTES, WORKSPACE_ERROR } from "./workspace.constants";
 
@@ -20,6 +21,7 @@ export class WorkspaceReader {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(SANDBOX_DRIVER) private readonly driver: SandboxDriver,
+    @Inject(SANDBOX_WAKER) private readonly waker: SandboxWaker,
   ) {}
 
   async tree(portfolioId: string): Promise<WorkspaceTreeResponse> {
@@ -42,7 +44,7 @@ export class WorkspaceReader {
 
     const size = Number(sizeText);
     if (size > MAX_VIEWABLE_BYTES) return { path, kind: "too_large", content: null, size };
-    const content = await this.call(portfolioId, (externalId) => this.driver.readFile(externalId, real));
+    const content = await this.call(portfolioId, (externalId) => this.driver.readFile(externalId, { root: "live", path: real }));
     if (content.includes("\0") || /�{3,}/.test(content)) return { path, kind: "binary", content: null, size };
     return { path, kind: "file", content, size };
   }
@@ -98,7 +100,7 @@ export class WorkspaceReader {
   }
 
   private exec(portfolioId: string, command: string, timeoutMs: number) {
-    return this.call(portfolioId, (externalId) => this.driver.exec(externalId, command, { cwd: ".", envs: {}, timeoutMs }));
+    return this.call(portfolioId, (externalId) => this.driver.exec(externalId, command, { root: "live", cwd: ".", envs: {}, timeoutMs }));
   }
 
   private async call<T>(portfolioId: string, use: (externalId: string) => Promise<T>): Promise<T> {
@@ -107,7 +109,10 @@ export class WorkspaceReader {
     try {
       return await use(sandbox.externalId);
     } catch (error) {
-      if (error instanceof SandboxNotRunningError) throw new UnrecoverableError(WORKSPACE_ERROR.notRunning);
+      if (error instanceof SandboxNotRunningError) {
+        await this.waker.wake(portfolioId).catch(() => undefined);
+        throw new UnrecoverableError(WORKSPACE_ERROR.notRunning);
+      }
       throw error;
     }
   }

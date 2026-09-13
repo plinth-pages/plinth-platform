@@ -1,4 +1,6 @@
+import { getQueueToken } from "@nestjs/bullmq";
 import { DynamicModule, Global, Module } from "@nestjs/common";
+import type { Queue } from "bullmq";
 import { ConfigModule } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
 import { AuthModule } from "./auth/auth.module";
@@ -10,7 +12,15 @@ import { GitHubModule } from "./github/github.module";
 import { HealthController } from "./health/health.controller";
 import { JobsController } from "./jobs/jobs.controller";
 import { PingProcessor } from "./jobs/ping.processor";
+import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "./events/portfolio-events";
 import { PortfolioEventsHub } from "./events/portfolio-events.hub";
+import { GitSync } from "./operations/git-sync";
+import { OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
+import { DevEditController, OperationsController } from "./operations/operations.controller";
+import { OPERATIONS_QUEUE } from "./operations/operations.constants";
+import { OperationsProcessor, QueuedPushRetries } from "./operations/operations.processor";
+import { OperationsService } from "./operations/operations.service";
+import { PENDING_PUSHES } from "./operations/pending-pushes";
 import { previewApiProviders } from "./preview/preview.providers";
 import { PrismaModule } from "./prisma/prisma.module";
 import { PortfoliosController } from "./provisioning/portfolios.controller";
@@ -21,6 +31,7 @@ import { ProvisioningProcessor } from "./provisioning/provisioning.processor";
 import { QueueModule } from "./queue/queue.module";
 import { PreviewController } from "./sandbox/preview.controller";
 import { PreviewService } from "./sandbox/preview.service";
+import { QueuedSandboxWaker, SANDBOX_WAKER } from "./sandbox/sandbox-waker";
 import { sandboxWorkerProviders } from "./sandbox/sandbox.providers";
 import { WorkspaceReader } from "./workspace/workspace-reader";
 import { WorkspaceController } from "./workspace/workspace.controller";
@@ -49,9 +60,24 @@ class RoleModule {
     PortfoliosController,
     PreviewController,
     WorkspaceController,
+    OperationsController,
+    DevEditController,
     GitHubAppSetupController,
   ],
-  providers: [DevOnlyGuard, PortfoliosService, PreviewService, WorkspaceService, PortfolioEventsHub, ...previewApiProviders],
+  providers: [
+    DevOnlyGuard,
+    PortfoliosService,
+    PreviewService,
+    WorkspaceService,
+    OperationsService,
+    PortfolioEventsHub,
+    ...previewApiProviders,
+    {
+      provide: PORTFOLIO_EVENTS,
+      inject: [getQueueToken(OPERATIONS_QUEUE)],
+      useFactory: (queue: Queue) => new RedisPortfolioEventPublisher(async () => (await queue.client) as never),
+    },
+  ],
 })
 export class ApiModule {}
 
@@ -68,6 +94,12 @@ export class ApiModule {}
     ...sandboxWorkerProviders,
     WorkspaceProcessor,
     WorkspaceReader,
+    OperationsProcessor,
+    OperationRunner,
+    GitSync,
+    { provide: PENDING_PUSHES, useExisting: GitSync },
+    { provide: PUSH_RETRIES, useClass: QueuedPushRetries },
+    { provide: SANDBOX_WAKER, useClass: QueuedSandboxWaker },
   ],
 })
 export class WorkerModule {}

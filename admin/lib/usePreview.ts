@@ -1,8 +1,9 @@
 "use client";
 
-import type { PortfolioEvent, PreviewSummary } from "@plinth-pages/shared";
+import type { PreviewSummary } from "@plinth-pages/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
+import { usePortfolioEvents } from "./portfolioEvents";
 
 const HEARTBEAT_MS = 30_000;
 /** Fallback polling. Live events normally make this redundant; it covers a dropped event stream. */
@@ -71,14 +72,9 @@ export function usePreview(portfolioId: string) {
     };
   }, [portfolioId, run]);
 
-  useEffect(() => {
-    const source = new EventSource(api.eventsUrl(portfolioId), { withCredentials: true });
-    source.onmessage = (message) => {
-      const event = JSON.parse(message.data) as PortfolioEvent | { type: "ping" };
-      if (event.type === "sandbox") void refresh();
-    };
-    return () => source.close();
-  }, [portfolioId, refresh]);
+  usePortfolioEvents(portfolioId, (event) => {
+    if (event.type === "sandbox") void refresh();
+  });
 
   const phase = phaseOf(preview);
   // Paused or stopped while someone is looking (the provider paused it, or a sweep did): wake it now rather than at
@@ -100,6 +96,8 @@ export function usePreview(portfolioId: string) {
     phase,
     error,
     liveGeneration,
+    /** Reloads the frame, e.g. after a change was reverted, so no stale error state survives in the page. */
+    reloadFrame: () => setLiveGeneration((n) => n + 1),
     restart: () => run(() => api.restartPreview(portfolioId)),
     rebuild: () => run(() => api.rebuildPreview(portfolioId)),
   };

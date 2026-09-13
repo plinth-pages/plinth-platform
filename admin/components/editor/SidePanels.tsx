@@ -1,10 +1,20 @@
 "use client";
 
-import type { ContractCheckResponse, PortfolioSummary, PreviewSummary, SlotInfo, SlotsResponse } from "@plinth-pages/shared";
+import type {
+  ContractCheckResponse,
+  OperationStatus,
+  OperationSummary,
+  OperationTimings,
+  PortfolioSummary,
+  PreviewSummary,
+  SlotInfo,
+  SlotsResponse,
+} from "@plinth-pages/shared";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import type { PreviewPhase } from "@/lib/usePreview";
 import type { CodeTarget } from "./CodeView";
+import { SafetyNetTester } from "./SafetyNetTester";
 
 export type SidePanel = "slots" | "integrations" | "settings";
 
@@ -23,6 +33,10 @@ export function SidePanels(props: {
   onOpenCode: (target: CodeTarget) => void;
   onRestart: () => void;
   onRebuild: () => void;
+  operations: OperationSummary[];
+  timings: OperationTimings | null;
+  isAdmin: boolean;
+  working: boolean;
 }) {
   return (
     <aside className="flex min-h-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -49,7 +63,17 @@ export function SidePanels(props: {
         ) : null}
         {props.panel === "integrations" ? <IntegrationsPanel onShowSlots={() => props.onPanel("slots")} /> : null}
         {props.panel === "settings" ? (
-          <SettingsPanel portfolio={props.portfolio} preview={props.preview} phase={props.phase} onRestart={props.onRestart} onRebuild={props.onRebuild} />
+          <SettingsPanel
+            portfolio={props.portfolio}
+            preview={props.preview}
+            phase={props.phase}
+            onRestart={props.onRestart}
+            onRebuild={props.onRebuild}
+            operations={props.operations}
+            timings={props.timings}
+            isAdmin={props.isAdmin}
+            working={props.working}
+          />
         ) : null}
       </div>
     </aside>
@@ -193,12 +217,20 @@ function SettingsPanel({
   phase,
   onRestart,
   onRebuild,
+  operations,
+  timings,
+  isAdmin,
+  working,
 }: {
   portfolio: PortfolioSummary;
   preview: PreviewSummary | null;
   phase: PreviewPhase;
   onRestart: () => void;
   onRebuild: () => void;
+  operations: OperationSummary[];
+  timings: OperationTimings | null;
+  isAdmin: boolean;
+  working: boolean;
 }) {
   const [confirming, setConfirming] = useState(false);
   const running = preview?.runStartedAt ? Math.max(0, (Date.now() - Date.parse(preview.runStartedAt)) / 1000) : 0;
@@ -226,6 +258,30 @@ function SettingsPanel({
           <pre className="max-h-48 overflow-auto rounded-md bg-red-50 p-2 font-mono text-[11px] whitespace-pre-wrap text-red-900 dark:bg-red-950 dark:text-red-200">
             {preview.lastError}
           </pre>
+        ) : null}
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="font-medium">Recent changes</h3>
+        {operations.length === 0 ? <p className="text-zinc-500">No changes yet.</p> : null}
+        <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
+          {operations.slice(0, 8).map((operation) => (
+            <li key={operation.id} className="flex items-center justify-between gap-3 py-1.5">
+              <span className="min-w-0 truncate" title={operation.summary}>
+                {operation.summary}
+              </span>
+              <span className="flex shrink-0 items-center gap-2 tabular-nums">
+                {operation.checkMs ? <span className="text-[11px] text-zinc-500">{(operation.checkMs / 1000).toFixed(1)} s</span> : null}
+                <OperationBadge status={operation.status} />
+              </span>
+            </li>
+          ))}
+        </ul>
+        {timings?.sampleSize ? (
+          <p className="text-[11px] text-zinc-500 tabular-nums">
+            Checks p50 {seconds(timings.checkP50Ms)} · p95 {seconds(timings.checkP95Ms)} · end to end p50 {seconds(timings.totalP50Ms)} (last{" "}
+            {timings.sampleSize})
+          </p>
         ) : null}
       </section>
 
@@ -264,8 +320,29 @@ function SettingsPanel({
           )}
         </div>
       </section>
+
+      {isAdmin ? <SafetyNetTester portfolioId={portfolio.id} disabled={phase !== "live" || working} /> : null}
     </div>
   );
+}
+
+const BADGE: Record<OperationStatus, { label: string; tone: string }> = {
+  queued: { label: "Queued", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+  staging: { label: "Preparing", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  checking: { label: "Checking", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  applying: { label: "Applying", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  applied: { label: "Applied", tone: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
+  rejected: { label: "Not applied", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+  reverted: { label: "Undone", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+  failed: { label: "Failed", tone: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
+};
+
+function OperationBadge({ status }: { status: OperationStatus }) {
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${BADGE[status].tone}`}>{BADGE[status].label}</span>;
+}
+
+function seconds(ms: number | null) {
+  return ms === null ? "—" : `${(ms / 1000).toFixed(1)} s`;
 }
 
 function PanelNote({ children, tone }: { children: React.ReactNode; tone?: "error" }) {
