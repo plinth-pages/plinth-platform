@@ -3,7 +3,7 @@ import { z } from "zod";
 const url = z.string().url();
 
 const API_ONLY = ["SESSION_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const;
-const WORKER_ONLY = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY"] as const;
+const WORKER_ONLY = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "E2B_API_KEY"] as const;
 
 const envSchema = z
   .object({
@@ -36,6 +36,16 @@ const envSchema = z
         "Must be the base64-encoded PEM private key",
       )
       .optional(),
+
+    // Preview sandboxes — worker role only. The timers are deliberately short: running sandboxes are billed per
+    // second, a paused one costs nothing, and resuming takes under a second.
+    E2B_API_KEY: z.string().optional(),
+    /** Built by scripts/build-e2b-template.js. */
+    E2B_TEMPLATE: z.string().default("plinth-portfolio"),
+    SANDBOX_IDLE_PAUSE_MINUTES: z.coerce.number().positive().default(5),
+    SANDBOX_DESTROY_AFTER_PAUSED_HOURS: z.coerce.number().positive().default(24),
+    /** E2B Hobby caps continuous runtime at 1 hour; an active sandbox is paused and resumed before then to reset it. */
+    SANDBOX_ROTATE_AFTER_MINUTES: z.coerce.number().positive().max(55).default(50),
   })
   .superRefine((env, ctx) => {
     const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;
@@ -44,14 +54,17 @@ const envSchema = z
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: [key],
-          message:
-            env.ORCHESTRATOR_ROLE === "worker"
-              ? "Required when ORCHESTRATOR_ROLE=worker (create the GitHub App at /v1/dev/github-app/new)"
-              : "Required when ORCHESTRATOR_ROLE=api",
+          message: requiredMessage(env.ORCHESTRATOR_ROLE, key),
         });
       }
     }
   });
+
+function requiredMessage(role: "api" | "worker", key: string): string {
+  if (role === "api") return "Required when ORCHESTRATOR_ROLE=api";
+  if (key === "E2B_API_KEY") return "Required when ORCHESTRATOR_ROLE=worker (create a key at e2b.dev/dashboard)";
+  return "Required when ORCHESTRATOR_ROLE=worker (create the GitHub App at /v1/dev/github-app/new)";
+}
 
 export type Env = z.infer<typeof envSchema>;
 

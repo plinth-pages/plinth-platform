@@ -78,9 +78,10 @@ docs.e2b.dev/sandbox/persistence.
 **What this changes in Phase 3:**
 1. **Stay on Hobby.** Pro's fee alone exceeds the budget. Revisit only with revenue.
 2. **The 1-hour runtime cap is designed around, not hit.** The lifecycle manager pauses and immediately resumes a
-   sandbox that nears 55 minutes of continuous runtime (resuming resets the clock). Keep sandbox RAM at 2 GiB if it
-   runs the template, because pause time grows ~4 s per GiB — that interruption is visible to an active user.
-3. **Destroying paused sandboxes is our job.** E2B never expires them, so the 48-hour destroy sweep is required,
+   sandbox that reaches 50 minutes of continuous runtime (resuming resets the clock). Keep sandbox RAM at 2 GiB if it
+   runs the template, because pause time grows with RAM — that interruption is visible to an active user.
+   (Measured in Phase 3: a 2 GiB pause takes 0.5 s and the resume 0.4 s.)
+3. **Destroying paused sandboxes is our job.** E2B never expires them, so the 24-hour destroy sweep is required,
    not a nicety.
 4. **Cost alarm from day one** on sandbox-seconds per day, since the credit is one-time.
 
@@ -397,19 +398,70 @@ The E2B SDK · process management in a remote VM · lifecycle state machines · 
 conformance tests.
 
 ### Definition of done
-- [ ] `ensure()` serves the portfolio at a public URL
-- [ ] Editing a file inside the sandbox hot-reloads the preview
-- [ ] A paused sandbox resumes with its workspace intact
-- [ ] A destroyed sandbox rebuilds from `draft` with nothing lost
-- [ ] The git remote in the sandbox contains no token
-- [ ] Conformance tests fail when a method drops a parameter
-- [ ] Cold start and warm resume times are measured and recorded
-- [ ] Sandbox minutes are recorded per portfolio
+- [x] `ensure()` serves the portfolio at a public URL
+- [x] Editing a file inside the sandbox hot-reloads the preview
+- [x] A paused sandbox resumes with its workspace intact
+- [x] A destroyed sandbox rebuilds from `draft` with nothing lost
+- [x] The git remote in the sandbox contains no token
+- [x] Conformance tests fail when a method drops a parameter
+- [x] Cold start and warm resume times are measured and recorded
+- [x] Sandbox minutes are recorded per portfolio (as seconds)
 
 ### Not in this phase
 Any mutation logic — that is the safety net's job.
 
 **Duration: 6–8 days**
+
+### As built — 2026-09-13
+
+**Verified live** against E2B Hobby and `plinth-pages/portfolio-sumitverma77`, through the real api and worker
+(21/21 checks). The measurements below are the Phase 3 baseline.
+
+| Measurement | Result |
+|---|---|
+| Cold start (open → dev server answering) | **19–22 s**: create 1.3 s · clone ~4.5 s · `pnpm install` from the warm store ~4 s · `next dev` ready + first compile ~10 s |
+| Pause (2 GiB) / resume | 0.5 s / **0.4 s**; the preview answers ~2 s after resume |
+| Dev server restart (recovery rung 1) | ~5 s |
+| Memory in use with `next dev` running | ~950 MiB of 2 GiB |
+| Paused preview | 502 from E2B until woken |
+| Framing | no `X-Frame-Options` or CSP from E2B or `next dev`, so the IDE can use an iframe |
+
+**Custom template** `plinth-portfolio` (`backend/scripts/build-e2b-template.js`, `pnpm e2b:template`): `node:24`,
+pnpm 9.15.9, git, 2 vCPU / 2 GiB, and a pnpm store pre-filled with `pnpm fetch` from `plinth-template`'s lockfile and
+vendored tarballs. Builds in ~30 s. Rebuild it whenever the template's dependencies change.
+
+**Where the design differs from the sketch above:**
+- **The driver is addressed by the provider's sandbox id, not the portfolio id.** It knows E2B and nothing about the
+  database; `SandboxLifecycle` maps portfolios to sandboxes, decides when to pause, and meters. `create` and
+  `bootstrap` are separate so the sandbox id is saved before the slow part — a crash cannot leak a running sandbox.
+  `extend` and `info` were added for the idle deadline and reconciliation.
+- **Conformance is enforced twice.** `DRIVER_METHOD_ARITY` is typed from the interface, so it stops compiling when a
+  signature changes; the test compares each implementation's `Function.length` with it, and includes a driver that
+  drops `reason` to prove the check fails. Behavioural tests assert that every argument reaches the E2B SDK.
+  Consequence: driver methods must not use default parameters.
+- **A paused sandbox is never resumed by accident.** `Sandbox.connect` resumes a paused sandbox, so every driver
+  operation checks the state first and throws `SandboxNotRunningError`; only `resume()` connects to a paused one.
+- **The token travels only in the clone command's environment** (`GIT_CONFIG_COUNT` / `http.extraheader`). Clone
+  URLs with credentials are rejected, and error output is redacted.
+- **Idle pause is two-layered.** The api records `last_accessed_at` on every heartbeat (the IDE sends one every 30 s
+  while the tab is visible). A sweep every minute pauses anything idle for 5 minutes, rotates anything that has run
+  for 50, destroys anything paused for 24 hours, and moves E2B's own deadline to 2 minutes after the idle pause is
+  due. If the worker is down, E2B pauses the sandbox itself at that deadline (`onTimeout: pause`), so an idle
+  sandbox cannot run up cost.
+- **Wake on request goes through the queue.** The api never talks to E2B: a heartbeat on a sandbox that isn't
+  running queues `ensure`, and the worker resumes it. Job ids are per portfolio and kind, so repeated heartbeats are
+  no-ops.
+- **One operation per sandbox at a time** via a Redis lock (15-minute TTL). A job that finds it taken is delayed
+  3 s without spending an attempt; the sweep skips it until the next tick.
+- **Bootstrap failures do not retry.** A repository that fails to install or start fails the same way again, so the
+  sandbox is destroyed and the error (with the tail of the log) is shown with **Try again** and **Rebuild**.
+  Infrastructure errors retry up to 3 times.
+- **Metering is per second** (`seconds_used`), capped at E2B's deadline when E2B paused the sandbox first.
+- **Not done yet:** pushing pending changes before pause/destroy (nothing is written in the sandbox until Phase 5),
+  and a daily cost alarm (Phase 14). The preview URL is still public — gate G2, before Phase 4.
+
+**Settings** (worker env, defaults shown): `E2B_TEMPLATE=plinth-portfolio`, `SANDBOX_IDLE_PAUSE_MINUTES=5`,
+`SANDBOX_DESTROY_AFTER_PAUSED_HOURS=24`, `SANDBOX_ROTATE_AFTER_MINUTES=50`.
 
 ---
 

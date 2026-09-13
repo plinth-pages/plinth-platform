@@ -18,6 +18,7 @@ const worker = {
   ORCHESTRATOR_ROLE: "worker",
   GITHUB_APP_ID: "123456",
   GITHUB_APP_PRIVATE_KEY: Buffer.from(pem).toString("base64"),
+  E2B_API_KEY: "e2b_test",
 };
 
 const api = {

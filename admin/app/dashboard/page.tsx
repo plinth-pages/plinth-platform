@@ -30,7 +30,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-12 px-6 py-12">
+    <main className="mx-auto flex max-w-4xl flex-col gap-12 px-6 py-12">
       <header className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           {user.avatarUrl ? (

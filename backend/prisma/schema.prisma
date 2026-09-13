@@ -78,6 +78,11 @@ model Portfolio {
   @@map("portfolios")
 }
 
+// starting  — being created, bootstrapped or recovered (a worker holds the portfolio's sandbox lock)
+// running   — live; the dev server answered at the last check
+// paused    — snapshotted; costs nothing, resumes in about a second
+// destroyed — no live sandbox; the next visit rebuilds it from the draft branch
+// unhealthy — no live sandbox, because the last start failed (see last_error)
 enum SandboxStatus {
   starting
   running
@@ -91,15 +96,25 @@ model Sandbox {
   portfolioId    String        @unique @map("portfolio_id")
   provider       String        @default("e2b")
   externalId     String?       @map("external_id")
-  status         SandboxStatus @default(starting)
+  status         SandboxStatus @default(destroyed)
   previewUrl     String?       @map("preview_url")
+  /** Updated by the IDE heartbeat. Idle time is measured from here. */
   lastAccessedAt DateTime?     @map("last_accessed_at")
-  minutesUsed    Int           @default(0) @map("minutes_used")
+  /** Start of the current billed stretch (create or resume). Null unless running. */
+  runStartedAt   DateTime?     @map("run_started_at")
+  /** When the provider will pause the sandbox on its own if nothing extends it. */
+  expiresAt      DateTime?     @map("expires_at")
+  pausedAt       DateTime?     @map("paused_at")
+  secondsUsed    Int           @default(0) @map("seconds_used")
+  coldStartMs    Int?          @map("cold_start_ms")
+  resumeMs       Int?          @map("resume_ms")
+  lastError      String?       @map("last_error")
   createdAt      DateTime      @default(now()) @map("created_at")
   updatedAt      DateTime      @updatedAt @map("updated_at")
 
   portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
+  @@index([status, updatedAt])
   @@map("sandboxes")
 }
 

@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "test:int": "jest --testRegex \"\\.int-spec\\.ts$\" --runInBand"
+    "test:int": "jest --testRegex \"\\.int-spec\\.ts$\" --runInBand",
+    "e2b:template": "node scripts/build-e2b-template.js"
   },
   "jest": {
     "moduleFileExtensions": [

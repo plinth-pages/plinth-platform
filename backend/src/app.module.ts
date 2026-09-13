@@ -17,6 +17,9 @@ import { DEFAULT_PROVISIONER_OPTIONS, PROVISIONER_OPTIONS, Provisioner } from ".
 import { ProvisioningRecovery, ProvisioningScheduler } from "./provisioning/provisioning-recovery";
 import { ProvisioningProcessor } from "./provisioning/provisioning.processor";
 import { QueueModule } from "./queue/queue.module";
+import { PreviewController } from "./sandbox/preview.controller";
+import { PreviewService } from "./sandbox/preview.service";
+import { sandboxWorkerProviders } from "./sandbox/sandbox.providers";
 
 @Global()
 @Module({})
@@ -33,12 +36,19 @@ class RoleModule {
 /** HTTP only. Must never register a queue processor or cron — see architecture.spec.ts. */
 @Module({
   imports: [QueueModule, AuthModule],
-  controllers: [HealthController, AdminController, JobsController, PortfoliosController, GitHubAppSetupController],
-  providers: [DevOnlyGuard, PortfoliosService],
+  controllers: [
+    HealthController,
+    AdminController,
+    JobsController,
+    PortfoliosController,
+    PreviewController,
+    GitHubAppSetupController,
+  ],
+  providers: [DevOnlyGuard, PortfoliosService, PreviewService],
 })
 export class ApiModule {}
 
-/** Queue consumers, schedulers and anything that acts on GitHub as the App. No controllers. */
+/** Queue consumers, schedulers, and anything that acts on GitHub as the App or on E2B. No controllers. */
 @Module({
   imports: [QueueModule, GitHubModule],
   providers: [
@@ -48,6 +58,7 @@ export class ApiModule {}
     ProvisioningRecovery,
     ProvisioningScheduler,
     { provide: PROVISIONER_OPTIONS, useValue: DEFAULT_PROVISIONER_OPTIONS },
+    ...sandboxWorkerProviders,
   ],
 })
 export class WorkerModule {}

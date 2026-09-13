@@ -6,6 +6,7 @@ import type {
   PortfolioResponse,
   PortfolioRole,
   PortfoliosResponse,
+  PreviewResponse,
 } from "@plinth-pages/shared";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
@@ -48,4 +49,9 @@ export const api = {
   createPortfolio: (role: PortfolioRole) =>
     request<PortfolioResponse>("/portfolios", { method: "POST", body: JSON.stringify({ role }) }),
   retryPortfolio: (id: string) => request<PortfolioResponse>(`/portfolios/${id}/retry`, { method: "POST" }),
+  preview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview`),
+  /** Opens the preview, waking or building it if needed. Also the heartbeat that keeps it from pausing. */
+  openPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview`, { method: "POST" }),
+  restartPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview/restart`, { method: "POST" }),
+  rebuildPreview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview/rebuild`, { method: "POST" }),
 };

@@ -3,6 +3,7 @@ import { Module } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Env } from "../config/env";
 import { PROVISIONING_QUEUE } from "../provisioning/provisioning.constants";
+import { SANDBOX_QUEUE } from "../sandbox/sandbox.constants";
 import { PING_QUEUE } from "./queue.constants";
 
 function redisConnection(redisUrl: string) {
@@ -27,7 +28,7 @@ function redisConnection(redisUrl: string) {
         connection: redisConnection(config.get("REDIS_URL", { infer: true })),
       }),
     }),
-    BullModule.registerQueue({ name: PING_QUEUE }, { name: PROVISIONING_QUEUE }),
+    BullModule.registerQueue({ name: PING_QUEUE }, { name: PROVISIONING_QUEUE }, { name: SANDBOX_QUEUE }),
   ],
   exports: [BullModule],
 })

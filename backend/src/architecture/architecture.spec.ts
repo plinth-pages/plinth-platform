@@ -4,6 +4,7 @@ import { generateKeyPairSync } from "crypto";
 import { AppModule } from "../app.module";
 import { PingProcessor } from "../jobs/ping.processor";
 import { ProvisioningProcessor } from "../provisioning/provisioning.processor";
+import { SandboxProcessor } from "../sandbox/sandbox.processor";
 import { findProcessors } from "./topology";
 
 const baseEnv = {
@@ -18,6 +19,7 @@ const baseEnv = {
   GITHUB_APP_PRIVATE_KEY: Buffer.from(
     generateKeyPairSync("rsa", { modulusLength: 2048 }).privateKey.export({ type: "pkcs1", format: "pem" }),
   ).toString("base64"),
+  E2B_API_KEY: "e2b_test",
 };
 
 function graphFor(role: "api" | "worker") {
@@ -38,9 +40,9 @@ describe("process role topology", () => {
     expect(await findProcessors(graphFor("api"))).toEqual([]);
   });
 
-  it("registers the ping and provisioning processors in the worker role", async () => {
+  it("registers the ping, provisioning and sandbox processors in the worker role", async () => {
     expect(await findProcessors(graphFor("worker"))).toEqual(
-      expect.arrayContaining([PingProcessor, ProvisioningProcessor]),
+      expect.arrayContaining([PingProcessor, ProvisioningProcessor, SandboxProcessor]),
     );
   });
 

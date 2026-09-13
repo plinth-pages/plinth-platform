@@ -3,6 +3,7 @@
 import type { PortfolioRole, PortfolioSummary } from "@plinth-pages/shared";
 import { useCallback, useEffect, useState } from "react";
 import { ApiError, api } from "@/lib/api";
+import { PreviewPanel } from "./PreviewPanel";
 
 const ROLES: { role: PortfolioRole; label: string; hint: string }[] = [
   { role: "developer", label: "Developer", hint: "Projects, GitHub, coding stats" },
@@ -95,7 +96,10 @@ export function PortfolioPanel() {
   return (
     <div className="flex flex-col gap-3">
       {portfolios.map((portfolio) => (
-        <PortfolioCard key={portfolio.id} portfolio={portfolio} onRetry={() => retry(portfolio.id)} />
+        <div key={portfolio.id} className="flex flex-col gap-3">
+          <PortfolioCard portfolio={portfolio} onRetry={() => retry(portfolio.id)} />
+          {portfolio.status === "ready" ? <PreviewPanel portfolioId={portfolio.id} /> : null}
+        </div>
       ))}
       {error ? <ErrorNote message={error} /> : null}
     </div>
