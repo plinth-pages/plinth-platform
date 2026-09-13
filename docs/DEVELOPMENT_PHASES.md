@@ -988,7 +988,7 @@ them in the worker, writes them back, and continues at step 4 of Phase 5.
 - **API** (`@plinth-pages/codemod`, TypeScript compiler API + text splices, no reprinting): `installIntegration`,
   `uninstallIntegration`, `moveIntegration` over the three portfolio files (`app/layout.tsx`, `app/page.tsx`,
   `plinth.json`), plus the primitives `addImport`, `removeImport`, `insertElement`, `insertProvider`, `removeBlock`,
-  `listBlocks`. `renameSlot` is deferred to fleet updates (Phase 16).
+  `listBlocks`. `renameSlot` is deferred until fleet updates are built (post-MVP).
 - **Props** are rendered as `name={JSON.stringify(value)}` — finite numbers, booleans and strings only; reserved names
   (`children`, `key`, `ref`, `dangerouslySetInnerHTML`, `style`, `className`, `on*`) are refused. Prettier keeps the
   braces, e.g. `username={"octocat"}`.
