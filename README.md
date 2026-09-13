@@ -1,7 +1,7 @@
 # plinth-platform
 
 The Plinth control plane: NestJS backend (api + worker roles), Next.js admin, shared API types.
-Architecture and roadmap: `../plinth/docs/`.
+Architecture, product blueprint and roadmap: [`docs/`](docs/).
 
 ## Run locally
 

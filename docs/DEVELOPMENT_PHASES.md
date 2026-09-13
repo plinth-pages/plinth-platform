@@ -1,0 +1,962 @@
+# DEVELOPMENT PHASES — Plinth
+
+> **Version:** 2.0 — written from scratch. Supersedes every earlier version of this document.
+> **Architecture:** Sandbox Web IDE + AST Codemods — see the five rules in `PRODUCT_BLUEPRINT.md` §0
+> **Structure:** 16 phases (0–15), each ending in something that runs
+> **Date:** September 2026
+
+---
+
+## Read this first
+
+### The estimate, computed from the table below
+
+| Path | Phases | Working days | At 5 days/week |
+|---|---|---|---|
+| **Path B — spine demo** (no integrations) | 0–8, 15 | **41–55** | **8–11 weeks** |
+| **Path A — full MVP** | 0–15 | **65–86** | **13–17 weeks** |
+
+These totals exclude buffer. Add 20% for the unknowns that E2B, GitHub and Vercel will
+produce.
+
+> **A correction to the previous version of this file:** its headline estimates ("4–5 weeks",
+> "8–10 weeks") did not add up to its own phase table, which summed to considerably more. The
+> numbers above are the sum of the durations listed, and nothing else.
+
+### Why it is this long
+
+This is not one system. It is six, and each is a real engineering project:
+
+1. A **provisioning** system that creates private repositories and Vercel projects on a user's behalf
+2. A **sandbox** system that runs, pauses, wakes and rebuilds a dev server per portfolio
+3. A **safety net** that stages, validates and type-checks every change before it reaches the preview
+4. An **AST codemod engine** that edits other people's React code deterministically
+5. An **AI co-pilot** whose tools route every write through the safety net
+6. An **integration platform**: packages, a catalogue, credentials and an install pipeline
+
+### Two paths
+
+**Path B** proves the core loop — sign in, get a real repo and a live sandbox, change it by
+conversation, publish to production — with no integrations. **Path A** adds the codemod engine and
+the integration platform.
+
+Path B's phases are a strict prefix of Path A's. **Nothing is thrown away by shipping Path B first**,
+provided Phase 1 builds the full slot contract (it does). Recommendation: ship Path B, then continue.
+
+### Verification gates
+
+Three external facts can invalidate a phase's design. Each must be checked **before** that phase
+starts, not during it.
+
+| Gate | Check | Blocks |
+|---|---|---|
+| **G1** | E2B: pricing, maximum session length, pause/resume availability, concurrency limits on the intended plan | Phase 3 |
+| **G2** | E2B: whether a sandbox's public preview URL can require a token | Phase 4 |
+| **G3** | Vercel: plan support for private repos owned by a GitHub organisation; disabling automatic deployments per branch | Phase 6 |
+
+---
+
+## Phase overview
+
+| # | Phase | Days | Path | Repos |
+|---|---|---|---|---|
+| **PART 1 — Foundations** |||||
+| 0 | Platform scaffold: NestJS, admin, database, queue, auth | 3–4 | A B | platform |
+| 1 | `@plinth-pages/core`, slot contract, and the base template | 5–7 | A B | packages, template |
+| 2 | GitHub App and private repository provisioning | 3–4 | A B | platform |
+| **PART 2 — Sandbox and IDE** |||||
+| 3 | E2B sandbox driver and lifecycle | 6–8 | A B | platform |
+| 4 | Web IDE shell: preview, code viewer, live events | 3–4 | A B | platform |
+| **PART 3 — Safety net and publish** |||||
+| 5 | **The safety net: staged operations engine** | 6–8 | A B | platform, packages |
+| 6 | Publish: `draft` → `main` → Vercel production | 3–4 | A B | platform |
+| **PART 4 — Co-pilot** |||||
+| 7 | AI co-pilot core: file tools through the safety net | 5–7 | A B | platform |
+| 8 | Onboarding and first portfolio — **Path B milestone** | 3–4 | A B | platform |
+| **PART 5 — Codemods and integrations** |||||
+| 9 | **AST codemod engine** | 5–7 | A | platform |
+| 10 | Integration packages and catalogue | 4–5 | A | packages, platform |
+| 11 | Install, uninstall and move pipeline | 5–6 | A | platform |
+| 12 | Credentials and secret-backed integrations | 3–4 | A | platform, packages |
+| 13 | Co-pilot integration tools and requests | 3–4 | A | platform |
+| **PART 6 — Productisation** |||||
+| 14 | Plans, limits and super admin | 4–5 | A | platform |
+| 15 | Landing page and production launch | 4–5 | A B | platform |
+
+**Critical path: 1 → 5 → 9.** The slot contract, the safety net and the codemod engine. If any of the
+three is weak, nothing above it can be trusted. Everything else can be shortened; these cannot.
+
+### Repositories
+
+| Repository | Created | Contains |
+|---|---|---|
+| `plinth-platform` | Phase 0 | `backend/` NestJS (api + worker), `admin/` Next.js, `packages/shared`, `packages/codemod` |
+| `plinth-packages` | Phase 1 | `@plinth-pages/core`; integration packages from Phase 10 |
+| `plinth-template` | Phase 1 | The starting portfolio; a GitHub template repository |
+| `portfolio-<slug>` | Phase 2 onward | One per portfolio, private, in the platform organisation |
+
+### What carries over from earlier work
+
+An early prototype app (since removed) built ten portfolio sections, a Zod content schema and a theme engine. In
+Phase 1 these become the template's `components/sections/*.tsx` and `content/*.ts`. That work is kept.
+
+---
+
+# PART 1 — FOUNDATIONS
+
+## PHASE 0 — Platform scaffold
+
+**Goal.** A NestJS backend running as both an API and a worker from one codebase, a Next.js admin
+authenticating against it with GitHub, Postgres migrated, and a queue proven end to end.
+
+**Why now.** Everything is orchestrated from here.
+
+**Depends on.** Nothing.
+
+### What you build
+
+**Monorepo** (`plinth-platform`, pnpm workspaces)
+```
+backend/            NestJS
+admin/              Next.js (App Router, Tailwind)
+packages/shared/    API contract types used by both
+packages/codemod/   empty until Phase 9
+```
+
+**Two process roles from one codebase**
+```
+ORCHESTRATOR_ROLE=api     HTTP controllers only
+ORCHESTRATOR_ROLE=worker  BullMQ processors, crons, sandbox sweeps
+```
+Add an architecture test that fails if a queue processor or cron is registered when the role is `api`.
+A processor leaking into the API tier runs once per API instance — a bug that only appears in
+production.
+
+**Configuration.** Every environment variable declared and validated at boot. A missing variable
+crashes at startup, never silently at request time.
+
+**Database** (Postgres + Prisma). Initial tables: `users`, `portfolios`, `sandboxes`, `operations`,
+`deployments`, `integrations`, `installed_integrations`, `credentials`, `conversations`, `messages`.
+Add columns as phases need them; do not design every column now.
+
+**Queue.** Redis + BullMQ. Prove it with a trivial job enqueued by the API and executed by the worker.
+
+**Auth.** GitHub OAuth. The backend issues a session in an httpOnly cookie; capture the GitHub `login`.
+Roles `user | admin`; a guard for `/admin/*` routes.
+
+### What you learn
+NestJS modules and dependency injection · BullMQ · why API and worker tiers are separated · OAuth ·
+cookie sessions across two apps.
+
+### Definition of done
+- [ ] Backend boots in both roles; the architecture test fails if a processor is registered in `api`
+- [ ] A job enqueued over HTTP is executed by the worker process
+- [ ] GitHub sign-in works from the admin; `githubLogin` is stored
+- [ ] A non-admin receives 403 on an admin route
+- [ ] Both apps import types from `packages/shared`
+- [ ] A missing environment variable fails boot with a clear message
+
+### Not in this phase
+GitHub repositories, sandboxes, any integration code.
+
+**Duration: 3–4 days**
+
+---
+
+## PHASE 1 — `@plinth-pages/core`, the slot contract, and the base template
+
+**Goal.** Two repositories. `plinth-packages` publishes `@plinth-pages/core` — the `Slot` component and the slot
+vocabulary — and `@plinth-pages/check`, the `plinth check` validator. `plinth-template` is a good-looking portfolio whose
+`app/page.tsx` and `app/layout.tsx` contain every slot, and whose CI enforces the contract.
+
+**Why now.** Every generated repository is a copy of this template, frozen at the moment it is
+generated. The codemod engine (Phase 9) targets these slots, and the safety net (Phase 5) runs this
+validator. **This is the most expensive phase to get wrong.**
+
+**Depends on.** Phase 0 (only for the GitHub organisation).
+
+### What you build
+
+**`@plinth-pages/core`**
+```
+Slot.tsx          <Slot name="afterProjects">{children}</Slot>
+                  renders children; emits data-plinth-slot="<name>" for the IDE and health checks
+slots.ts          SLOT_NAMES — the frozen vocabulary, with a version number
+plinth-json.ts    Zod schema for plinth.json
+```
+
+**`@plinth-pages/check`** (separate package, installed as a devDependency — it bundles the TypeScript compiler via
+ts-morph, which must not become a production dependency of every portfolio)
+```
+check.ts          checkSources() — pure, called directly by the safety net
+cli.ts            `plinth check [--json] [--cwd]`
+```
+
+**The vocabulary** — freeze it now:
+`head`, `bodyEnd`, `providers` (in `app/layout.tsx`); `heroAfter`, `beforeProjects`, `afterProjects`,
+`sidebar`, `beforeContact`, `contact`, `footer` (in `app/page.tsx`).
+Adding a slot later is safe. Renaming one is a fleet-wide migration.
+
+**`plinth check`** parses `app/page.tsx` and `app/layout.tsx` with ts-morph and fails if:
+- a vocabulary slot is missing, or appears more than once
+- a `<Slot>` has a name outside the vocabulary
+- a slot's children do not match the integrations `plinth.json` places there
+- the `// plinth:imports:start … end` region does not match the installed packages
+- a `{/* plinth:<id>:start */}` marker is unpaired
+
+Output is machine-readable (`--json`), because the safety net and the co-pilot both parse it.
+
+**`plinth-template`**
+```
+app/layout.tsx              head, bodyEnd, providers slots
+app/page.tsx                composes sections; seven slot call sites; empty imports region
+components/sections/*.tsx   raw React + Tailwind — ported from the existing plinth app
+content/*.ts                profile, projects, experience, skills, theme
+plinth.json                 { "coreVersion": "0.1.0", "integrations": [] }
+.prettierrc                 formatting is part of the contract (see Phase 9)
+tsconfig.json               strict: true, skipLibCheck: true
+vercel.json                 disables automatic deployments for the draft branch  (confirm under G3)
+.github/workflows/ci.yml    pnpm install --frozen-lockfile · plinth check · tsc --noEmit · next build
+```
+Mark the repository as a **template repository**, private, in the platform organisation.
+
+**Publish** `@plinth-pages/core@0.1.0` and `@plinth-pages/check@0.1.0`. Until they are on npm, the template installs them
+from packed tarballs in `vendor/`, so its lockfile and CI work without a registry.
+
+### What you learn
+ts-morph and the TypeScript AST · designing a validator other tools depend on · publishing a package ·
+why frozen copies make a contract expensive to change.
+
+### Definition of done
+- [ ] A fresh clone of the template passes CI
+- [ ] Deleting a slot fails `plinth check` with the slot's name in the error
+- [ ] Duplicating a slot fails
+- [ ] Adding a JSX element inside a slot without a matching `plinth.json` entry fails
+- [ ] Changing Tailwind classes outside every slot passes
+- [ ] The page looks genuinely good at 375, 768 and 1440 px, light and dark
+- [ ] The template contains no integration-specific code
+
+### Not in this phase
+Any integration package. Any codemod.
+
+**Duration: 5–7 days**
+
+---
+
+## PHASE 2 — GitHub App and private repository provisioning
+
+**Goal.** Signing up and choosing a role produces a private `portfolio-<slug>` repository with `main`
+and `draft` branches, exactly once, even under concurrent requests.
+
+**Why now.** The sandbox (Phase 3) clones this repository.
+
+**Depends on.** Phases 0–1.
+
+### What you build
+- **GitHub App** installed on the platform organisation — repository administration and contents
+  permissions only. Mint short-lived installation tokens per operation; never store them.
+- **Generate from template** with `private: true`, then create `draft` from `main`.
+- **Provisioning service**
+  - advisory lock keyed on the user; re-check state inside the lock
+  - **plan limit checked inside the lock** (one free portfolio)
+  - idempotent: if the repository already exists, adopt it
+  - status: `provisioning → ready | failed`
+  - compensation: a later failure deletes what was created
+- **Recovery job:** retries portfolios stuck in `provisioning`
+- **Rate limits:** GitHub's secondary rate limit returns `422` with no retry guidance. Back off, throttle
+  bulk work, and never let one leave a portfolio permanently `failed`.
+
+### What you learn
+GitHub Apps versus OAuth apps · installation tokens · advisory locks · idempotent, compensating workflows.
+
+### Definition of done
+- [ ] Sign-up creates a private repository with `main` and `draft`
+- [ ] Two concurrent provisioning requests for one user produce one repository
+- [ ] A second portfolio on the free plan is refused, including via a direct API call
+- [ ] A simulated mid-provision failure cleans up
+- [ ] A portfolio stuck in `provisioning` is completed by the recovery job
+
+### Not in this phase
+The Vercel project — created lazily at first publish (Phase 6), so sign-ups that never publish cost nothing.
+
+**Duration: 3–4 days**
+
+---
+
+# PART 2 — SANDBOX AND IDE
+
+## PHASE 3 — E2B sandbox driver and lifecycle
+
+**Gate G1 must pass before this phase starts.**
+
+**Goal.** For any portfolio, `ensure()` returns a running `next dev` on the `draft` branch at a public
+URL; idle sandboxes pause and wake; destroyed ones rebuild from GitHub with no loss.
+
+**Why now.** It is the preview, the co-pilot's filesystem, and where the safety net runs.
+
+**Depends on.** Phase 2.
+
+### What you build
+
+**A custom E2B template (image):** Node LTS, pnpm, git, and a pnpm store pre-populated from the
+template's lockfile. This makes `pnpm install` a hard-link operation instead of a download, and is the
+biggest lever on cold-start time.
+
+**The driver interface**
+```ts
+interface SandboxDriver {
+  ensure(portfolioId): Promise<{ sandboxId: string; previewUrl: string }>;
+  pause(portfolioId, reason): Promise<void>;
+  resume(portfolioId): Promise<void>;
+  destroy(portfolioId, reason): Promise<void>;
+  restartDevServer(portfolioId): Promise<void>;
+  health(portfolioId): Promise<"healthy" | "starting" | "unreachable">;
+  exec(portfolioId, cmd, opts): Promise<ExecResult>;
+  readFile / writeFile / listFiles
+}
+```
+One implementation: `E2BDriver`. The interface exists so a self-hosted driver stays possible if G1
+reveals a budget problem.
+
+**Conformance tests** that call every method with every parameter and assert the driver received them.
+TypeScript lets a class implement a method with *fewer* parameters than the interface declares and still
+compile — a driver that drops a `reason` or `symptom` argument cannot make the right decision, and the
+compiler will not tell you.
+
+**`ensure()`**
+1. connect to an existing sandbox, or create one from the template
+2. clone the repository and check out `draft` — the installation token is passed per command and
+   **never written into the git remote**
+3. write `.env.local` from the credential vault (empty until Phase 12)
+4. `pnpm install --prefer-offline`
+5. start `next dev` on `0.0.0.0:3000` as a background process
+6. poll until the dev server responds; return the preview URL
+
+**Lifecycle**
+- The IDE sends a heartbeat; `sandboxes.last_accessed_at` is updated
+- Pause after idle; destroy after long inactivity (thresholds from G1)
+- Wake on request: an IDE visit to a paused sandbox resumes it
+- Recovery ladder for unhealthy: restart `next dev` → clear `.next` → destroy and rebuild. **An
+  unreachable preview means "restart first", never "rebuild first".**
+- **Before pausing or destroying, confirm nothing is waiting to be pushed** (see Phase 5)
+- Record sandbox minutes per portfolio for plan limits and cost tracking
+
+### What you learn
+The E2B SDK · process management in a remote VM · lifecycle state machines · why interfaces need
+conformance tests.
+
+### Definition of done
+- [ ] `ensure()` serves the portfolio at a public URL
+- [ ] Editing a file inside the sandbox hot-reloads the preview
+- [ ] A paused sandbox resumes with its workspace intact
+- [ ] A destroyed sandbox rebuilds from `draft` with nothing lost
+- [ ] The git remote in the sandbox contains no token
+- [ ] Conformance tests fail when a method drops a parameter
+- [ ] Cold start and warm resume times are measured and recorded
+- [ ] Sandbox minutes are recorded per portfolio
+
+### Not in this phase
+Any mutation logic — that is the safety net's job.
+
+**Duration: 6–8 days**
+
+---
+
+## PHASE 4 — Web IDE shell
+
+**Gate G2 must be checked before this phase starts.**
+
+**Goal.** The editor screen: live preview, a read-only code viewer, sandbox status, and a real-time event
+channel — with empty slots waiting for the co-pilot and integrations.
+
+**Depends on.** Phase 3.
+
+### What you build
+- **Layout:** co-pilot column (placeholder), Preview and Code tabs, side panels for Integrations, Slots
+  and Settings (placeholders)
+- **Preview:** an iframe onto the sandbox URL; device widths resize the iframe, so real CSS breakpoints fire
+- **Sandbox status chip:** starting / running / waking / unhealthy, with a Restart action
+- **Code tab:** file tree and a read-only, syntax-highlighted viewer. Files are served by a backend
+  endpoint that reads from the sandbox and **refuses** `.env*`, `.git/` and `node_modules/`
+- **Live events:** a server-sent events stream from the backend for sandbox and (from Phase 5) operation events
+- **Dashboard:** the portfolio card with status and repository link
+
+### Definition of done
+- [ ] The editor shows the running sandbox
+- [ ] A file changed in the sandbox updates the iframe without a manual reload
+- [ ] The code viewer cannot open `.env.local`, even by URL manipulation
+- [ ] A paused sandbox shows "Waking" and recovers on its own
+- [ ] Device widths trigger real responsive layouts
+- [ ] Below tablet width, the IDE shows a "use a larger screen" message
+
+**Duration: 3–4 days**
+
+---
+
+# PART 3 — SAFETY NET AND PUBLISH
+
+## PHASE 5 — The safety net: staged operations engine
+
+**Goal.** Every mutation to a portfolio — whatever produces it — runs as an **operation**: queued,
+locked, applied in a staging worktree, formatted, validated by `plinth check`, type-checked with `tsc`,
+and either applied to the live tree and pushed to `draft`, or discarded without the preview ever
+seeing it.
+
+**Why now.** Rule 4. It is built **before** anything that mutates code, so that neither the codemod
+engine nor the co-pilot ever has an unsafe write path, even temporarily.
+
+**Depends on.** Phases 1 and 3.
+
+### The operation model
+
+```
+operations
+  id · portfolio_id · type (edit | install | uninstall | move | theme | fleet_update | publish)
+  actor (user | copilot | system) · status · input · diff · check_output
+  attempts · commit_sha · started_at · finished_at
+
+status:  queued → staging → checking → applying → applied
+                                    └─→ rejected   (failed checks; nothing applied)
+                             applied └─→ reverted   (render health check failed)
+                                  any └─→ failed    (infrastructure error)
+```
+
+One operation at a time per portfolio, enforced by a lock. Operations queue; the IDE shows the queue.
+
+### The algorithm
+
+```
+sandbox layout:
+  /home/user/app              live tree — next dev serves this
+  /home/user/.plinth/staging  staging worktree — created per operation
+
+ 0. PRECONDITION   live tree is clean, HEAD equals origin/draft
+                   (if not: stop, alert — this indicates a bug elsewhere)
+ 1. STAGE          git worktree add -B plinth/op-<id> ../.plinth/staging HEAD
+ 2. DEPENDENCIES   dependency change → pnpm install in staging (hard links from the store)
+                   otherwise → link staging/node_modules to the live tree's
+ 3. MUTATE         write files / run the codemod / pnpm add
+ 4. FORMAT         prettier --write on every touched file
+ 5. VALIDATE       plinth check --json
+ 6. TYPE-CHECK     tsc --noEmit --incremental  (build info kept between operations)
+ 7. REJECT         any failure →
+                     git worktree remove --force; delete branch
+                     status = rejected; store parsed errors (file, line, message)
+                     live tree untouched → preview never changed
+ 8. APPLY          all pass →
+                     commit in staging with an Operation-Id trailer
+                     live tree: git merge --ff-only plinth/op-<id>
+                     dependencies changed → pnpm install --frozen-lockfile --offline in live tree
+                     next dev hot-reloads
+                     git push origin draft
+                     remove worktree
+ 9. HEALTH CHECK   request the preview's affected routes;
+                   non-2xx or Next's error overlay present →
+                     git revert --no-edit HEAD; push; status = reverted
+```
+
+**Why a worktree, and not "apply, check, then revert":** a file written into the live tree is picked up
+by `next dev` immediately, so the user sees the broken intermediate state before any revert. Checking in
+a separate worktree is the only way to guarantee the preview never renders a change that failed.
+
+### Pushing, and not losing work
+- A push failure after a successful local apply is retried with backoff; the portfolio is marked
+  **pending push**
+- Publish is blocked while a push is pending
+- **The lifecycle manager (Phase 3) must flush pending pushes before pausing or destroying a sandbox.**
+  This is the one path by which work could be lost; test it deliberately.
+
+### Performance budget
+Measure p50 and p95 for steps 5–6 on the real template. Target: **under 10 seconds p50** for a
+single-file edit. `skipLibCheck` and incremental build info are the main levers.
+
+### A development-only edit endpoint
+`POST /dev/portfolios/:id/edit { path, content }` runs an `edit` operation. It lets you exercise the net
+fully before the codemod engine or co-pilot exist. Remove it before launch.
+
+### What you learn
+Git worktrees · designing for atomicity · parsing compiler output · health checks · why "undo" is
+harder than "don't".
+
+### Definition of done
+- [ ] An edit with a type error is **rejected**, and a poller on the preview during the operation never
+      observes the error
+- [ ] The live tree's HEAD is unchanged after a rejection
+- [ ] A valid edit is applied, hot-reloads, is committed with an Operation-Id trailer and pushed to `draft`
+- [ ] An edit deleting a slot is rejected by `plinth check`
+- [ ] An edit that type-checks but throws at render is **reverted** by the health check
+- [ ] Two operations submitted together run one after the other
+- [ ] Destroying a sandbox with a pending push flushes the push first
+- [ ] Killing the sandbox mid-operation leaves `draft` on GitHub consistent and the next `ensure()` clean
+- [ ] Check duration p50 and p95 are recorded per operation
+
+### Not in this phase
+Codemods and co-pilot tools — they arrive later as new operation types on this engine.
+
+**Duration: 6–8 days**
+
+---
+
+## PHASE 6 — Publish: `draft` → `main` → Vercel production
+
+**Gate G3 must pass before this phase starts.**
+
+**Goal.** Publish promotes `draft` to `main`, which triggers a Vercel production deployment to
+`<slug>.plinth.dev`. A failed build leaves the previous deployment live.
+
+**Depends on.** Phase 5.
+
+### What you build
+- **Vercel project**, created at first publish: linked to the repository, production branch `main`,
+  automatic deployments disabled for `draft`, environment variables synced from the vault
+- **Slug claim** on first publish: reserved-word list, uniqueness, `<slug>.plinth.dev` attached to the project
+- **Publish runs as an operation** (it takes the portfolio lock, so it can never race an edit)
+  1. pre-flight: no pending push · `plinth check` · `next build` in a staging worktree — catching
+     build-only failures before Vercel does
+  2. `git push origin draft:main` — always a fast-forward, because only Publish writes `main`
+  3. track the Vercel deployment until it is terminal
+- **A deployment is never retried automatically.** A retry can race and publish the wrong commit.
+- **Unpublished changes** = commits on `draft` not on `main`, shown on the Publish button
+- **Publish demotion:** after success, pause an idle sandbox
+- **Unpublish:** detach the domain; repository and `draft` untouched
+
+### Definition of done
+- [ ] Publish produces a live site at `<slug>.plinth.dev`
+- [ ] Edits after publishing do not change the live site
+- [ ] Editing on `draft` does not trigger a Vercel build
+- [ ] A deliberately broken build fails pre-flight, before Vercel is touched
+- [ ] A build that fails on Vercel leaves the previous deployment serving
+- [ ] Publish waits for a running operation rather than interleaving with it
+- [ ] The unpublished-changes count is correct
+
+**Duration: 3–4 days**
+
+---
+
+# PART 4 — CO-PILOT
+
+## PHASE 7 — AI co-pilot core
+
+**Goal.** The user types "make the hero darker and add these projects", and the co-pilot edits the raw
+React, Tailwind and content files — as one operation, through the safety net — while the chat shows
+exactly what it did.
+
+**Depends on.** Phases 4 and 5.
+
+### What you build
+
+**Tools**
+
+| Tool | Behaviour |
+|---|---|
+| `list_files`, `read_file`, `search` | Read the sandbox; deny list applies |
+| `edit_file(path, search, replace)` | Targeted edits, not whole-file rewrites — smaller diffs, fewer tokens |
+| `apply_theme(preset)` | Edits `content/theme.ts` |
+| `check` | Runs `plinth check` + `tsc` on the pending changes without applying |
+| `ask_user` | Asks a clarifying question |
+
+**One operation per turn.** Edits accumulate in the turn's pending change set and run through the safety
+net together, so a multi-file request applies entirely or not at all.
+
+**Retry within the turn.** When the net rejects, the parsed errors are returned to the model, which may
+revise and resubmit — **at most three attempts**. After that the change is discarded and the co-pilot
+explains what it tried.
+
+**Tool-level enforcement — not prompt instructions**
+- Deny read and write: `.env*`, `.git/`, `node_modules/`
+- Deny write: `plinth.json`, `package.json`, lockfiles
+- **Slot interiors and the imports region:** `edit_file` checks whether a replacement overlaps a
+  `<Slot>` body or the imports region, and refuses with a redirect — *"Integrations are placed with
+  `move_integration`"* (available from Phase 13). `plinth check` still backstops this.
+- Scrub tool output for anything resembling a secret before it reaches the model
+
+**Context** the model receives: file tree, `plinth.json`, the slot vocabulary, the rules above. Not the
+whole repository.
+
+**Chat UI:** streaming responses; an **operation card** per turn showing status, a one-line summary and
+a diff link.
+
+**Built-in intents**
+- *Paste résumé* — a tuned prompt that populates `content/*.ts`
+- *Undo last change* — a revert operation for the previous applied commit, through the net
+
+**Metering:** tokens per user; daily message limit enforced server-side.
+
+### Definition of done
+- [ ] "Make the hero darker" changes Tailwind in the Hero component and the preview updates
+- [ ] A pasted résumé populates projects, experience and skills
+- [ ] An edit the model gets wrong is rejected, retried, and either applied or clearly explained
+- [ ] The co-pilot cannot read `.env.local` by any tool, path trick or search
+- [ ] An attempt to edit inside a slot is refused by the tool, before the net
+- [ ] "Undo last change" restores the previous state
+- [ ] The daily message limit is enforced by the backend
+
+**Duration: 5–7 days**
+
+---
+
+## PHASE 8 — Onboarding and first portfolio · **Path B milestone**
+
+**Goal.** Sign in → pick a role → watch named provisioning steps → land in the IDE with a portfolio
+already populated from the GitHub profile.
+
+**Depends on.** Phases 2, 3, 6, 7.
+
+### What you build
+- **Role selection** — one click, never restricts anything
+- **Provisioning progress** streamed over the event channel as real steps: *creating repository →
+  starting preview → installing → personalising*. The repository link appears the moment it exists.
+- **Personalisation as a system operation:** GitHub profile plus role starting content written into
+  `content/*.ts` through the safety net — the net dogfooded from the very first change
+- **First-turn chips:** "Paste your résumé", "Make it dark", "Show my best repos"
+- **Routing:** a returning user goes straight to their portfolio; a failed provisioning shows a real
+  error and a retry
+
+### Definition of done
+- [ ] A new user reaches a populated, running portfolio with visible progress throughout
+- [ ] The personalisation commit appears on `draft` as an ordinary operation
+- [ ] A failure during provisioning is recoverable from the UI
+- [ ] Different roles produce visibly different starting content
+- [ ] **End-to-end:** sign up → edit by conversation → publish → live URL, with no manual intervention
+
+**Path B: continue to Phase 15.**
+
+**Duration: 3–4 days**
+
+---
+
+# PART 5 — CODEMODS AND INTEGRATIONS
+
+## PHASE 9 — AST codemod engine
+
+**Goal.** A pure library — source text in, source text out — that adds, moves and removes an
+integration's import and JSX inside locked slots, deterministically, on both pristine template code
+and heavily co-pilot-edited code.
+
+**Why now.** Rule 3. Built as its own phase, against fixtures, before any installation UI depends on it.
+
+**Depends on.** Phases 1 and 5.
+
+### What you build (`plinth-platform/packages/codemod`)
+
+```ts
+addImport(src, { pkg, named })                     → src
+insertIntoSlot(src, { slot, integrationId, jsx })   → src
+removeFromSlot(src, { slot, integrationId })        → src
+moveIntegration(src, { integrationId, from, to })   → src
+renameSlot(src, { from, to })                       → src   // fleet migrations only
+```
+
+**Anchoring.** Locate `<Slot name="…">` JSX elements by name — never by surrounding code, line numbers
+or indentation. This is what makes codemods robust to a co-pilot that has restyled everything around them.
+
+**Markers.** Each integration's JSX sits between `{/* plinth:<id>:start */}` and `{/* plinth:<id>:end */}`;
+imports sit inside the `plinth:imports` region. Removal deletes exactly the marked range.
+
+**Props are data, never code.** Values from manifests and user input (a LeetCode username, say) are
+emitted as escaped **string, number or boolean literals only**. A username such as
+`"} /><script>` must become an escaped string literal, never JSX or code. This is the codemod engine's
+injection-vulnerability boundary; test it explicitly.
+
+**Formatting.** Prettier runs on the output. Because the template and every co-pilot edit are also
+formatted, diffs stay minimal and reviewable.
+
+**Idempotency.** Inserting an integration already present in a slot is a no-op that reports as such.
+
+**Integration with the safety net.** A codemod operation reads files from the staging worktree, transforms
+them in the worker, writes them back, and continues at step 4 of Phase 5.
+
+### Tests
+- **Golden fixtures** from `plinth-template` at a tagged version
+- **Adversarial fixtures:** slots wrapped in extra `div`s, sections reordered, conditional rendering near
+  slots, comments and blank lines everywhere, Tailwind rewritten throughout
+- **Round trip:** insert then remove returns byte-identical, formatted source
+- **Escaping:** hostile prop values become inert string literals
+- Every output passes `plinth check` and `tsc` on the fixture project
+
+### Definition of done
+- [ ] All operations pass golden and adversarial fixtures
+- [ ] Insert → remove is byte-identical after formatting
+- [ ] Hostile prop values cannot produce executable code
+- [ ] Two integrations in one slot keep a stable, deterministic order
+- [ ] Every codemod output passes `plinth check`
+
+**Duration: 5–7 days**
+
+---
+
+## PHASE 10 — Integration packages and catalogue
+
+**Goal.** `@plinth-pages/leetcode-stats` and `@plinth-pages/github-stats` are published to npm; the catalogue lists
+them; the marketplace renders a configuration form from each manifest.
+
+**Depends on.** Phase 1.
+
+### What you build
+- **`@plinth-pages/integration-types`** — the manifest's Zod schema: `id`, `name`, `category`, `version`,
+  `defaultSlot`, `allowedSlots`, `props`, `secrets`, `files`
+- **Package conventions:** React and Next as peer dependencies; ESM; explicit client/server boundaries;
+  data fetched server-side with caching; each package ships `plinth.manifest.json`
+- **First packages:** LeetCode Stats and GitHub Stats (public identifiers; server-side fetching with
+  revalidation, so rate limits apply per deployment rather than per visitor)
+- **Catalogue:** `integrations` table, populated by reading the manifest from the published package
+  version; super-admin activation
+- **Marketplace UI:** browse, category filters, role-based recommendations first, detail view showing
+  the **exact npm package and version** it installs, a form generated from `props`
+- **Live validation** of props (for example, the LeetCode username exists) through the backend
+
+### Definition of done
+- [ ] Both packages install and render in a scratch Next.js project
+- [ ] Each manifest passes schema validation in CI
+- [ ] The catalogue lists both, with a working form and live validation
+- [ ] A manifest referencing a slot outside the vocabulary is rejected at ingestion
+
+**Duration: 4–5 days**
+
+---
+
+## PHASE 11 — Install, uninstall and move pipeline
+
+**Goal.** Clicking Install produces a real dependency and a real, type-checked diff in the user's repository,
+visible in the preview within about a minute — and uninstalling removes every trace.
+
+**Depends on.** Phases 5, 9, 10.
+
+### What you build
+
+**Install** (`type: install`)
+```
+pnpm add <package>@<exact version>          in staging
+codemod: addImport + insertIntoSlot         (Phase 9)
+write manifest `files`, if any
+update plinth.json
+→ safety net steps 4–9
+```
+
+**Uninstall** (`type: uninstall`) — codemod removal, delete the files recorded in `plinth.json`,
+`pnpm remove`, update `plinth.json` → safety net.
+
+**Move** (`type: move`) — `moveIntegration`, checked against the manifest's `allowedSlots` → safety net.
+
+**Slots panel:** every slot and its contents; move an integration with a slot picker.
+
+**Plan limit** on installed integrations, enforced inside the operation.
+
+### Failure modes — test each
+| Case | Expected |
+|---|---|
+| Package version not published | Rejected at `pnpm add`; nothing changed |
+| Network failure during `pnpm add` | Failed; staging discarded; retryable |
+| Package with broken type definitions | Rejected by `tsc`; flagged as a **package bug** |
+| Codemod cannot find the slot | Rejected; flagged as a **codemod or template bug** |
+| Install an already-installed integration | No-op |
+| Uninstall something not installed | No-op |
+
+### Definition of done
+- [ ] Install appears in the preview, with a diff in the Code tab and a commit on `draft`
+- [ ] The live site is unchanged until Publish
+- [ ] Uninstall leaves the repository byte-identical to before the install
+- [ ] Move relocates the component and respects `allowedSlots`
+- [ ] Every failure mode behaves as listed
+- [ ] Codemod-caused rejections are recorded separately from other rejections
+
+**Duration: 5–6 days**
+
+---
+
+## PHASE 12 — Credentials and secret-backed integrations
+
+**Goal.** A Contact Form integration that sends email using the user's own provider key — which never
+enters the repository, the bundle, the admin UI or the co-pilot.
+
+**Depends on.** Phases 6 and 11.
+
+### What you build
+- **Vault:** AES-256-GCM, a unique IV per secret, a key identifier to allow rotation
+- **Smoke test before saving:** a real, harmless call to the provider; an invalid key is rejected at entry
+- **Sync**
+  - sandbox: rewrite `.env.local`; restart `next dev` if required
+  - production: upsert the Vercel project's environment variables as sensitive values
+- **`@plinth-pages/contact-form`:** a client form component, plus a manifest `files` entry that writes
+  `app/api/plinth/contact/route.ts` — a server route reading the key from the environment, with spam
+  protection
+- **`@plinth-pages/visitor-counter`:** zero-config. Note: it stores counts through a Plinth endpoint, making it a
+  **documented exception** to the "portfolio does not depend on us" principle; it must render gracefully
+  with no count if the endpoint is unavailable
+- **Disconnect:** delete the secret; remove it from both environments
+- **Verification:** grep the built client bundle for the secret value in CI
+
+### Definition of done
+- [ ] A contact form submitted on a published portfolio delivers email
+- [ ] The secret is absent from the repository, client bundle, admin responses and model context
+- [ ] An invalid key is rejected before it is saved
+- [ ] Disconnecting removes the secret everywhere
+- [ ] Visitor Counter renders correctly when its endpoint is down
+
+**Duration: 3–4 days**
+
+---
+
+## PHASE 13 — Co-pilot integration tools and requests
+
+**Goal.** "Put my LeetCode stats under my projects" works end to end from chat — rule 5 complete.
+
+**Depends on.** Phases 7 and 11.
+
+### What you build
+- **Tools:** `search_catalogue`, `install_integration(id, props, slot)`, `move_integration(id, slot)`,
+  `uninstall_integration(id)` — each creates the same operation the UI does
+- **Secret-backed installs:** the co-pilot cannot receive secrets. It asks the user to complete the
+  credential form, which appears inline in the chat as an action
+- **Recommendations:** suggest integrations based on role and the portfolio's content
+- **Integration requests:** from an empty marketplace search; duplicates count as votes; requesters are
+  notified when an integration ships
+
+### Definition of done
+- [ ] Installing, moving and removing an integration all work from chat
+- [ ] A secret-backed install hands off to the credential form and never exposes the key to the model
+- [ ] A request for an existing request increments its vote count
+
+**Duration: 3–4 days**
+
+---
+
+# PART 6 — PRODUCTISATION
+
+## PHASE 14 — Plans, limits and super admin
+
+**Goal.** One free portfolio, metered co-pilot and sandbox usage, a paid tier, and an operator console
+that makes the platform runnable without SQL.
+
+**Depends on.** Phases 2, 3, 7, 11.
+
+### What you build
+- **Plans and subscriptions;** the payment webhook is the only writer of subscription state
+- **Enforcement in the backend:**
+  - portfolio count — inside the provisioning lock
+  - co-pilot messages per day — in the co-pilot service
+  - sandbox minutes per day — in the lifecycle manager
+  - installed integrations — inside the install operation
+- **Super admin console**
+  - catalogue management (deactivation never breaks installed copies)
+  - **operations explorer**, filterable by type and outcome; **rejected codemods flagged as bugs**
+  - **sandbox fleet:** running, paused, unhealthy, cost per day; force pause or destroy
+  - **fleet updates:** bump `@plinth-pages/core`, or run a migration codemod, on a canary group before everyone —
+    each as an ordinary operation through the safety net
+  - users, portfolios, take offline
+  - deployment failures across the fleet
+
+### Definition of done
+- [ ] Every limit holds against direct API calls
+- [ ] Upgrading lifts limits immediately
+- [ ] A fleet update runs on a canary group, and a repository where it fails is left untouched
+- [ ] An operator can find and diagnose a failed install without database access
+
+**Duration: 4–5 days**
+
+---
+
+## PHASE 15 — Landing page and production launch
+
+**Goal.** Live on production infrastructure, with cost alarms, a real smoke test and an honest landing page.
+
+**Depends on.** Phase 8 (Path B) or Phase 14 (Path A).
+
+### What you build
+- **Landing page:** a real published portfolio built with Plinth, the promise, the integration catalogue,
+  pricing, privacy policy and terms — which must describe repository hosting and credential handling accurately
+- **Production infrastructure**
+  - backend `api` and `worker` as separate container services
+  - production Postgres and Redis
+  - admin on Vercel
+  - production GitHub App, Vercel team token, E2B key; wildcard DNS for `*.plinth.dev`
+- **Observability:** error tracking, logs, uptime checks, and **cost alarms** on sandbox minutes and
+  tokens per day
+- **Security review**
+  - no installation tokens in git remotes or logs
+  - co-pilot deny lists hold against path tricks
+  - codemod prop escaping
+  - no secret in any `NEXT_PUBLIC_` variable or client bundle
+  - the development edit endpoint is removed
+- **Scripted smoke test:** sign up → provision → edit by chat → (Path A) install an integration → publish →
+  open the live URL signed out → check on a real phone
+
+### Definition of done
+- [ ] The smoke test passes on production
+- [ ] Cost alarms fire when their thresholds are crossed in a test
+- [ ] The security review checklist is complete
+- [ ] You have published your own portfolio with Plinth and would share the link
+
+**Duration: 4–5 days**
+
+---
+
+# APPENDIX A — Dependency graph
+
+```
+0 Platform scaffold
+│
+1 @plinth-pages/core + template ──────────────────────────────┐
+│                                                        │
+2 Repo provisioning                                      │
+│                                                        │
+3 E2B driver + lifecycle                                 │
+│                                                        │
+4 Web IDE shell                                          │
+│                                                        │
+5 SAFETY NET ◀───────────────────────────────────────────┤
+│                                                        │
+├── 6 Publish                                            │
+├── 7 Co-pilot core                                      │
+│     │                                                  │
+│     8 Onboarding ─────────▶ 15 Launch  (Path B)        │
+│                                                        │
+9 CODEMOD ENGINE ◀───────────────────────────────────────┘
+│
+10 Packages + catalogue
+│
+11 Install / uninstall / move
+│
+├── 12 Credentials
+└── 13 Co-pilot integration tools
+      │
+      14 Plans + super admin ──▶ 15 Launch  (Path A)
+```
+
+---
+
+# APPENDIX B — Where the time goes if you need to cut
+
+In order of least damage:
+
+| Cut | Saves | Cost to the product |
+|---|---|---|
+| Ship two integrations instead of four | ~2 days | Smaller catalogue at launch |
+| Operator console → database access | ~3 days | Slower incident handling |
+| Plans and billing → everything free during the demo | ~2 days | No revenue yet |
+| Render health check (Phase 5 step 9) | ~1 day | A change that compiles but crashes can reach the preview until undone |
+| Code tab → diff links on GitHub | ~2 days | Weaker "real code" moment in the IDE |
+
+**Never cut:** the staging worktree, `plinth check`, the type-check gate, the operation lock, flushing
+pushes before sandbox teardown, codemod prop escaping, or credential encryption. Each protects either the
+user's work or the user's secrets.
+
+---
+
+# APPENDIX C — Cost model
+
+| Item | What drives it | Main control |
+|---|---|---|
+| E2B | Sandbox minutes | Pause on idle, destroy on inactivity, pause after publish, daily limits |
+| LLM | Co-pilot turns and context size | Daily limits, targeted edits, bounded retries |
+| Vercel | Projects and production builds | Project created at first publish; no `draft` builds |
+| GitHub | Private repositories | Free at this scale |
+| Backend hosting | Two container services, Postgres, Redis | Small instances until load demands otherwise |
+
+The ₹5,000/month target from earlier planning is **unlikely to hold with E2B at any real usage**. Gates G1
+and G3 exist to put real numbers on this before the phases that commit to it. The driver interface in
+Phase 3 keeps a self-hosted sandbox driver available as a fallback without changing any phase above it.
+
+---
+
+*End of Development Phases*
