@@ -84,12 +84,26 @@ docs.e2b.dev/sandbox/persistence.
    not a nicety.
 4. **Cost alarm from day one** on sandbox-seconds per day, since the credit is one-time.
 
-**Still unverified — confirm with the API key before building on them:**
-- Whether pause/resume works on **Hobby** (the persistence docs do not name a plan). If it doesn't, suspend becomes
-  kill-and-rebuild-from-`draft`: nothing is lost, but resume costs a 60–90 s cold start instead of ~1 s.
-- Whether usage **past the $100 credit** can be paid on Hobby, or forces an upgrade.
-- Whether paused snapshots incur **storage** charges (E2B's docs don't mention any; a third-party write-up says they
-  consume storage).
+**Open questions — resolved 2026-09-13, live against the project's Hobby account:**
+
+| Question | Answer | Evidence |
+|---|---|---|
+| Does pause/resume work on Hobby? | **Yes.** Pause 1.2 s, resume 0.5 s (512 MiB sandbox). Files, a background loop and a running HTTP server (same pid) all survived. | live probe |
+| Does resume reset the runtime clock? | **Yes — and to `connect()`'s timeout, which defaults to 5 minutes.** The driver must always pass `timeoutMs` when resuming. | `endAt` before/after |
+| Is the 1-hour cap enforced? | **Yes.** A 2-hour timeout is rejected: `400: Timeout cannot be greater than 1 hours`. | live probe |
+| Can usage continue past the $100 credit on Hobby? | **Yes, by adding a payment method** — no forced upgrade. Without one the account is blocked. A **spending limit** can be set on the dashboard budget page. | docs.e2b.dev/billing |
+| Are paused snapshots charged for storage? | **Not per E2B's docs** — "billing stops immediately" on pause; no storage charge listed. Plinth still destroys long-paused sandboxes, since the repo is the source of truth. | docs.e2b.dev/billing |
+
+**Further findings that change Phase 3:**
+- **The default `base` template is unusable for a Next.js preview:** 2 vCPU, **512 MiB RAM**, Node **20.9**, no pnpm.
+  Phase 3 builds a custom template (Node 24, pnpm, 2 GiB, pnpm store pre-warmed from `plinth-template`).
+- **The default lifecycle is `onTimeout: kill`.** Plinth creates sandboxes with `onTimeout: pause`, so a missed
+  rotation pauses instead of discarding the running dev server.
+- **Port traffic is public:** `https://3000-<id>.e2b.app` answered 200 with no auth header. Relevant to gate G2.
+- **A paused sandbox returns 502 to traffic** and stays paused (`autoResume` defaults to false). Wake-on-request is
+  therefore Plinth's job: the IDE heartbeat resumes it.
+- **Idle pause is shortened to 5 minutes by default** (configurable), at the owner's request, to keep compute cost
+  down; resuming is sub-second, so an aggressive idle timeout costs the user almost nothing.
 
 ---
 

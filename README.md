@@ -5,7 +5,7 @@ Architecture, product blueprint and roadmap: [`docs/`](docs/).
 
 ## Run locally
 
-Requirements: Node 20, pnpm 9, Redis on `127.0.0.1:6379`.
+Requirements: Node 22 or newer (24 LTS recommended), pnpm 9, Redis on `127.0.0.1:6379`.
 
 ```bash
 pnpm install

@@ -8,5 +8,8 @@
     "dev:admin": "pnpm --filter @plinth-pages/admin dev",
     "test": "pnpm --filter @plinth-pages/backend test",
     "typecheck": "pnpm -r typecheck"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }
