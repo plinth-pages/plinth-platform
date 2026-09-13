@@ -54,6 +54,43 @@ starts, not during it.
 | **G2** | E2B: whether a sandbox's public preview URL can require a token | Phase 4 |
 | **G3** | Vercel: plan support for private repos owned by a GitHub organisation; disabling automatic deployments per branch | Phase 6 |
 
+### G1 result — checked 2026-09-13
+
+**Verdict: pass for the demo, on the Hobby plan only.** Sources: e2b.dev/pricing, docs.e2b.dev/billing,
+docs.e2b.dev/sandbox/persistence.
+
+| Fact | Hobby | Pro |
+|---|---|---|
+| Monthly fee | $0 | **$150** (≈ ₹13,000 — more than the whole budget on its own) |
+| Free credit | $100, **one-time** | none |
+| Compute | $0.000014 / vCPU-second · $0.0000045 / GiB-second | same |
+| Max continuous runtime | **1 hour** | 24 hours |
+| Concurrent sandboxes | 20 | 100+ |
+| Max per sandbox | 8 vCPU · 8 GiB RAM · 10 GiB disk | 8+ · 8+ · 20+ |
+| Billing when paused | none — "billing stops immediately" | same |
+| Pause / resume | ~4 s per GiB of RAM to pause · ~1 s to resume · runtime limit **resets** on resume | same |
+| Paused sandbox retention | kept **indefinitely**, no auto-kill | same |
+
+**Cost of one Plinth sandbox** (`next dev` plus type-checking): 2 vCPU + 2 GiB ≈ **$0.133/hour (≈ ₹12)**;
+2 vCPU + 4 GiB ≈ $0.166/hour (≈ ₹15). The $100 credit alone covers roughly **600–750 editing hours**; a demo with
+20 users editing 3 hours a month uses about 60.
+
+**What this changes in Phase 3:**
+1. **Stay on Hobby.** Pro's fee alone exceeds the budget. Revisit only with revenue.
+2. **The 1-hour runtime cap is designed around, not hit.** The lifecycle manager pauses and immediately resumes a
+   sandbox that nears 55 minutes of continuous runtime (resuming resets the clock). Keep sandbox RAM at 2 GiB if it
+   runs the template, because pause time grows ~4 s per GiB — that interruption is visible to an active user.
+3. **Destroying paused sandboxes is our job.** E2B never expires them, so the 48-hour destroy sweep is required,
+   not a nicety.
+4. **Cost alarm from day one** on sandbox-seconds per day, since the credit is one-time.
+
+**Still unverified — confirm with the API key before building on them:**
+- Whether pause/resume works on **Hobby** (the persistence docs do not name a plan). If it doesn't, suspend becomes
+  kill-and-rebuild-from-`draft`: nothing is lost, but resume costs a 60–90 s cold start instead of ~1 s.
+- Whether usage **past the $100 credit** can be paid on Hobby, or forces an upgrade.
+- Whether paused snapshots incur **storage** charges (E2B's docs don't mention any; a third-party write-up says they
+  consume storage).
+
 ---
 
 ## Phase overview
