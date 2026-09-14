@@ -89,7 +89,7 @@ export interface ContextFile {
 }
 
 /** The final user turn: the current files, the installable catalogue, then the request itself. */
-export function buildUserTurn(request: string, files: ContextFile[], catalogue: CatalogueIntegration[], installed: { id: string; slot: string }[]): string {
+export function buildUserTurn(request: string, files: ContextFile[], catalogue: CatalogueIntegration[], installed: { id: string; slot: string }[], omitted: string[] = []): string {
   const fileBlocks = files.map((file) => `<file path="${file.path}">\n${file.content}\n</file>`).join("\n");
   const integrations = catalogue
     .map((entry) => {
@@ -98,10 +98,18 @@ export function buildUserTurn(request: string, files: ContextFile[], catalogue: 
     })
     .join("\n");
   const placed = installed.length ? installed.map((entry) => `${entry.id} in ${entry.slot}`).join(", ") : "none";
+  const others = omitted.length
+    ? `
+<other_files>
+Also in the project, not shown and not editable in this request: ${omitted.join(", ")}.
+If the change needs one of these, make what you can and say in the reply which part to ask for next.
+</other_files>
+`
+    : "";
   return `<portfolio_files>
 ${fileBlocks}
 </portfolio_files>
-
+${others}
 <integration_catalogue>
 ${integrations || "(none)"}
 Installed now: ${placed}

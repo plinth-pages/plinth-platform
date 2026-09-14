@@ -1,8 +1,10 @@
 import { AiProviderError } from "../ai/ai-provider";
-import { AiService, MODELS } from "../ai/ai.service";
+import { AiService, buildModels } from "../ai/ai.service";
 import { BedrockProvider } from "../ai/bedrock.provider";
 import { GeminiProvider } from "../ai/gemini.provider";
+import { GroqProvider, type GroqChat } from "../ai/groq.provider";
 import { applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
+import { selectContext } from "./copilot-context";
 import { parseContext } from "./copilot-planner";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn } from "./copilot-prompt";
 
@@ -145,20 +147,76 @@ describe("providers", () => {
   });
 });
 
+describe("Groq", () => {
+  const request = { providerModel: "openai/gpt-oss-120b", system: "sys", messages: [{ role: "user" as const, text: "hi" }], tool: SUBMIT_CHANGES_TOOL, maxTokens: 100, temperature: 0 };
+
+  it("sends the system prompt first, forces the tool, and parses its arguments", async () => {
+    const calls: Record<string, unknown>[] = [];
+    const chat = {
+      create: async (body: Record<string, unknown>) => {
+        calls.push(body);
+        return { choices: [{ finish_reason: "tool_calls", message: { content: null, tool_calls: [{ id: "1", type: "function", function: { name: "submit_changes", arguments: "{\"refused\":true,\"reply\":\"No\"}" } }] } }], usage: { prompt_tokens: 12, completion_tokens: 4 } };
+      },
+    } as unknown as GroqChat;
+    const result = await new GroqProvider(undefined, chat).generate(request);
+    expect(result).toMatchObject({ output: { refused: true, reply: "No" }, usage: { inputTokens: 12, outputTokens: 4 }, stopReason: "tool_calls" });
+    expect(calls[0]).toMatchObject({ model: "openai/gpt-oss-120b", tool_choice: { type: "function", function: { name: "submit_changes" } } });
+    expect((calls[0].messages as { role: string }[])[0]).toEqual({ role: "system", content: "sys" });
+  });
+
+  it("treats unparseable arguments as no answer, and maps rate limits as retryable", async () => {
+    const garbled = { create: async () => ({ choices: [{ message: { tool_calls: [{ function: { name: "submit_changes", arguments: "{oops" } }] } }] }) } as unknown as GroqChat;
+    expect((await new GroqProvider(undefined, garbled).generate(request)).output).toBeNull();
+    const limited = { create: async () => Promise.reject(Object.assign(new Error("Rate limit"), { status: 429 })) } as unknown as GroqChat;
+    await expect(new GroqProvider(undefined, limited).generate(request)).rejects.toMatchObject({ provider: "groq", retryable: true, code: "429" });
+    expect(new GroqProvider(undefined).configured()).toBe(false);
+  });
+});
+
 describe("model catalogue", () => {
   const config = { get: () => undefined } as never;
 
-  it("offers Haiku by default, locks the Pro models, and hides unlisted ones", () => {
-    const service = new AiService(config, [{ id: "bedrock", configured: () => true, generate: async () => Promise.reject(new Error("unused")) }]);
+  it("offers the Groq model free by default, locks the Pro models, and keeps paused providers hidden", () => {
+    const service = new AiService(config, [{ id: "groq", configured: () => true, generate: async () => Promise.reject(new Error("unused")) }]);
     expect(service.catalogue()).toEqual([
-      { id: "claude-3-haiku", label: "Claude 3 Haiku", badge: "Fast", tier: "free", locked: false, available: true, default: true },
+      { id: "free", label: "GPT-OSS 120B", badge: "Free", tier: "free", locked: false, available: true, default: true },
       { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
       { id: "gpt-4o", label: "GPT-4o", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
     ]);
-    expect(MODELS.find((model) => model.id === "claude-3-haiku")?.providerModel).toBe("anthropic.claude-3-haiku-20240307-v1:0");
+    expect(buildModels().find((model) => model.id === "claude-3-haiku")).toMatchObject({ provider: "bedrock", providerModel: "anthropic.claude-3-haiku-20240307-v1:0", hidden: true });
+    expect(buildModels("llama3-70b-8192")[0]).toMatchObject({ label: "Llama 3 70B", provider: "groq", providerModel: "llama3-70b-8192" });
   });
 
   it("reports a model unavailable when its provider has no credentials", () => {
     expect(new AiService(config).catalogue()[0]).toMatchObject({ available: false });
+  });
+});
+
+describe("selectContext", () => {
+  const tree = [
+    { path: "app/globals.css", content: ":root { --accent: blue; }" },
+    { path: "app/page.tsx", content: "export default function Page() {}" },
+    { path: "components/sections/Hero.tsx", content: "<h1 className=\"text-4xl\">{profile.name}</h1>" },
+    { path: "components/sections/Projects.tsx", content: "x".repeat(3000) },
+    { path: "content/profile.ts", content: 'export const profile = { name: "Asha", role: "Engineer" };' },
+    { path: "content/projects.ts", content: "y".repeat(3000) },
+    { path: "content/theme.ts", content: "export const theme = { accent: '#4c62dc' };" },
+    { path: "content/types.ts", content: "export interface Profile {}" },
+  ];
+
+  it("sends the files a request is about and lists the rest by name", () => {
+    const name = selectContext(tree, "Change my name and role", 2_000);
+    expect(name.included.map((file) => file.path)).toEqual(expect.arrayContaining(["content/profile.ts", "components/sections/Hero.tsx", "content/types.ts"]));
+    expect(name.included.map((file) => file.path)).not.toContain("content/projects.ts");
+    expect(name.omitted).toContain("content/projects.ts");
+
+    const colour = selectContext(tree, "Change the accent colour to teal", 2_000);
+    expect(colour.included.map((file) => file.path)).toEqual(expect.arrayContaining(["app/globals.css", "content/theme.ts"]));
+  });
+
+  it("never exceeds the budget", () => {
+    const selected = selectContext(tree, "Update my projects", 3_500);
+    expect(selected.included.reduce((sum, file) => sum + file.content.length, 0)).toBeLessThanOrEqual(3_500);
+    expect(selected.included.map((file) => file.path)).toContain("content/projects.ts");
   });
 });

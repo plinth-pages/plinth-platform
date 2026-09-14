@@ -3,13 +3,13 @@ import { ConfigService } from "@nestjs/config";
 import type { CopilotMessage, Operation, User } from "@prisma/client";
 import type { CopilotChanges, CopilotMessageSummary, CopilotMessagesResponse, OperationFailure, SendCopilotMessageResponse } from "@plinth-pages/shared";
 import { z } from "zod";
-import { AiService, DEFAULT_MODEL_ID, findModel } from "../ai/ai.service";
+import { AiService, DEFAULT_MODEL_ID } from "../ai/ai.service";
 import type { Env } from "../config/env";
 import { OperationsService } from "../operations/operations.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { MAX_REQUEST_CHARS } from "./copilot-plan";
 
-export const PREMIUM_REQUIRED = "Premium Plan required. Upgrade coming soon!";
+export const PREMIUM_REQUIRED = "Pro Plan required. Upgrade coming soon!";
 const DAY_MS = 24 * 60 * 60_000;
 const ACTIVE = ["queued", "staging", "checking", "applying"] as const;
 
@@ -49,7 +49,7 @@ export class CopilotService {
     const parsed = sendBody.safeParse(body);
     if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? "Invalid message");
 
-    const model = findModel(parsed.data.model ?? DEFAULT_MODEL_ID);
+    const model = this.ai.findModel(parsed.data.model ?? DEFAULT_MODEL_ID);
     if (!model || model.hidden) throw new BadRequestException("Choose a model from the list.");
     if (model.tier !== "free") throw new ForbiddenException({ statusCode: 403, code: "PREMIUM_REQUIRED", message: PREMIUM_REQUIRED });
     if (!this.ai.catalogue().find((entry) => entry.id === model.id)?.available) {

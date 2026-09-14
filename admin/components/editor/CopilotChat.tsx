@@ -6,7 +6,7 @@ import { LockIcon, useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
 
 const ACTIVE: OperationStatus[] = ["queued", "staging", "checking", "applying"];
-const PREMIUM = "Premium Plan required. Upgrade coming soon!";
+const PREMIUM = "Pro Plan required. Upgrade coming soon!";
 
 const SUGGESTIONS = ["Make my hero heading bigger and bolder", "Change the accent colour to teal", "Add my GitHub stats under my projects", "Rewrite my bio to sound more confident"];
 
@@ -34,7 +34,7 @@ export function CopilotChat({ portfolioId, operations, live }: { portfolioId: st
   const [messages, setMessages] = useState<CopilotMessageSummary[] | null>(null);
   const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
   const [models, setModels] = useState<CopilotModelSummary[]>([]);
-  const [model, setModel] = useState<string>("claude-3-haiku");
+  const [model, setModel] = useState<string>("free");
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const list = useRef<HTMLDivElement>(null);

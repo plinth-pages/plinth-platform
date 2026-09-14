@@ -266,7 +266,7 @@ let modelAnswer: unknown;
 let modelRequests: AiRequest[];
 
 const scriptedProvider: AiProvider = {
-  id: "bedrock",
+  id: "groq",
   configured: () => true,
   async generate(request: AiRequest): Promise<AiResult> {
     modelRequests.push(request);
@@ -530,9 +530,9 @@ describe("integrations", () => {
 describe("co-pilot", () => {
   async function ask(portfolioId: string, text: string) {
     const { userId } = await prisma.portfolio.findUniqueOrThrow({ where: { id: portfolioId }, select: { userId: true } });
-    const message = await prisma.copilotMessage.create({ data: { portfolioId, userId, role: "user", content: text, model: "claude-3-haiku" } });
+    const message = await prisma.copilotMessage.create({ data: { portfolioId, userId, role: "user", content: text, model: "free" } });
     return prisma.operation.create({
-      data: { portfolioId, type: "copilot", actor: "copilot", summary: text, input: { messageId: message.id, model: "claude-3-haiku" } },
+      data: { portfolioId, type: "copilot", actor: "copilot", summary: text, input: { messageId: message.id, model: "free" } },
     });
   }
   const replyTo = (operationId: string) => prisma.copilotMessage.findFirstOrThrow({ where: { operationId, role: "assistant" } });

@@ -2,7 +2,7 @@
  * The seam every AI vendor plugs into. The co-pilot never talks to a vendor SDK directly: it asks for one structured
  * result (a tool call validated against a JSON schema) and gets back plain data plus token usage.
  */
-export type AiProviderId = "bedrock" | "gemini" | "openai";
+export type AiProviderId = "groq" | "bedrock" | "gemini" | "openai";
 
 export interface AiMessage {
   role: "user" | "assistant";

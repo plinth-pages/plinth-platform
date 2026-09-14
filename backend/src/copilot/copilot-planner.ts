@@ -9,13 +9,20 @@ import type { FollowUp, Plan } from "../operations/integration-planner";
 import { OperationAborted } from "../operations/operation-errors";
 import { PrismaService } from "../prisma/prisma.service";
 import { CopilotEditError, applyEdits, copilotOutputSchema, type CopilotOutput } from "./copilot-plan";
+import { selectContext } from "./copilot-context";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn, type ContextFile } from "./copilot-prompt";
 
 export const copilotInputSchema = z.object({ messageId: z.string().min(1), model: z.string().min(1) });
 
 /** How many earlier messages are sent as conversation history. */
-const HISTORY_MESSAGES = 6;
-const MAX_OUTPUT_TOKENS = 4_096;
+const HISTORY_MESSAGES = 4;
+/** Earlier messages are context, not content to re-edit; long ones are cut short to save tokens. */
+const HISTORY_CHARS = 600;
+
+/** The vendor said the request was over its size or rate limit for a single call. */
+function tooLarge(error: unknown) {
+  return error instanceof AiProviderError && (error.code === "413" || /too large|context length|maximum context|reduce your message/i.test(error.message));
+}
 const AI_TIMEOUT_MS = 90_000;
 
 /** Runs one context read (the `context` script in the staging tree). Supplied by the runner. */
@@ -65,20 +72,26 @@ export class CopilotPlanner {
       this.prisma.installedIntegration.findMany({ where: { portfolioId: operation.portfolioId }, select: { integrationId: true, slot: true } }),
     ]);
 
-    const started = Date.now();
-    let result: Awaited<ReturnType<AiService["generate"]>>;
-    try {
-      result = await this.ai.generate(input.model, {
+    const model = this.ai.findModel(input.model);
+    const placed = installed.map((row) => ({ id: row.integrationId, slot: row.slot }));
+    const previous = history.reverse().map((entry) => ({ role: entry.role, text: entry.content.length > HISTORY_CHARS ? `${entry.content.slice(0, HISTORY_CHARS)}…` : entry.content }));
+    const attempt = (budget: number) => {
+      const selected = selectContext(context.files, message.content, budget);
+      return this.ai.generate(input.model, {
         system: SYSTEM_PROMPT,
-        messages: [
-          ...history.reverse().map((entry) => ({ role: entry.role, text: entry.content })),
-          { role: "user" as const, text: buildUserTurn(message.content, context.files, available, installed.map((row) => ({ id: row.integrationId, slot: row.slot }))) },
-        ],
+        messages: [...previous, { role: "user" as const, text: buildUserTurn(message.content, selected.included, available, placed, selected.omitted) }],
         tool: SUBMIT_CHANGES_TOOL,
-        maxTokens: MAX_OUTPUT_TOKENS,
+        maxTokens: model?.maxOutputTokens ?? 1_500,
         temperature: 0.2,
         signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       });
+    };
+
+    const started = Date.now();
+    let result: Awaited<ReturnType<AiService["generate"]>>;
+    try {
+      const budget = model?.contextChars ?? 11_000;
+      result = await attempt(budget).catch((error) => (tooLarge(error) ? attempt(Math.floor(budget / 2)) : Promise.reject(error)));
     } catch (error) {
       const text =
         error instanceof AiProviderError && error.retryable
