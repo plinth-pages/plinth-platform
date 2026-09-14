@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from "@nestjs/bullmq";
 import { Logger } from "@nestjs/common";
 import { DelayedError, UnrecoverableError, type Job } from "bullmq";
 import { GitHubApiError, GitHubRateLimitError, isRetryableGitHubError } from "../github/github.errors";
+import { Personaliser } from "../onboarding/personaliser";
 import { ForeignRepositoryError, ProvisioningError, Provisioner } from "./provisioner";
 import { ProvisioningRecovery } from "./provisioning-recovery";
 import { PROVISIONING_QUEUE, type ProvisionJobData } from "./provisioning.constants";
@@ -15,6 +16,7 @@ export class ProvisioningProcessor extends WorkerHost {
   constructor(
     private readonly provisioner: Provisioner,
     private readonly recovery: ProvisioningRecovery,
+    private readonly personaliser: Personaliser,
   ) {
     super();
   }
@@ -24,7 +26,12 @@ export class ProvisioningProcessor extends WorkerHost {
 
     const { portfolioId } = job.data;
     try {
-      return await this.provisioner.provision(portfolioId);
+      const outcome = await this.provisioner.provision(portfolioId);
+      if (outcome === "ready") {
+        // The site works without it, so a failure here never fails provisioning.
+        await this.personaliser.queueFor(portfolioId).catch((error) => this.logger.warn(`Personalisation for ${portfolioId} wasn't queued: ${describe(error)}`));
+      }
+      return outcome;
     } catch (error) {
       if (error instanceof GitHubRateLimitError) {
         // Waiting out a rate limit is not a failed attempt.

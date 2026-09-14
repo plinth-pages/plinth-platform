@@ -55,7 +55,7 @@ export class AuthController {
     try {
       const user = await this.auth.signInWithCode(code);
       res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
-      res.redirect(`${adminUrl}/dashboard`);
+      res.redirect(`${adminUrl}/start`);
     } catch (error) {
       fail(`GitHub sign-in failed: ${error instanceof Error ? error.message : "unknown error"}`);
     }

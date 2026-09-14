@@ -914,11 +914,14 @@ already populated from the GitHub profile.
   error and a retry
 
 ### Definition of done
-- [ ] A new user reaches a populated, running portfolio with visible progress throughout
-- [ ] The personalisation commit appears on `draft` as an ordinary operation
-- [ ] A failure during provisioning is recoverable from the UI
-- [ ] Different roles produce visibly different starting content
+- [x] A new user reaches a populated, running portfolio with visible progress throughout
+- [x] The personalisation commit appears on `draft` as an ordinary operation
+- [x] A failure during provisioning is recoverable from the UI
+- [x] Different roles produce visibly different starting content
 - [ ] **End-to-end:** sign up → edit by conversation → publish → live URL, with no manual intervention
+
+> **As built:** onboarding is role → look (light/dark, accent) → setup. Progress is polled from real state
+> (`GET /portfolios/:id/setup`). The repository link is not shown: customer-facing UI hides GitHub.
 
 **Path B: continue to Phase 15.**
 

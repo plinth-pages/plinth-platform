@@ -1,3 +1,4 @@
+import { RedirectIfSignedIn } from "@/components/RedirectIfSignedIn";
 import { BrandMark } from "@/components/ui/Brand";
 import { api } from "@/lib/api";
 
@@ -6,6 +7,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {auth_error ? null : <RedirectIfSignedIn />}
       <section className="flex flex-col justify-between px-8 py-10 sm:px-14">
         <div className="flex items-center gap-2">
           <BrandMark className="h-6 w-6" />

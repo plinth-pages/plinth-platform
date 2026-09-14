@@ -8,7 +8,7 @@ import { ApiError, api } from "@/lib/api";
 const ACTIVE: OperationStatus[] = ["queued", "staging", "checking", "applying"];
 const PREMIUM = "Pro Plan required. Upgrade coming soon!";
 
-const SUGGESTIONS = ["Make my hero heading bigger and bolder", "Change the accent colour to teal", "Add my GitHub stats under my projects", "Rewrite my bio to sound more confident"];
+const SUGGESTIONS = ["Make it dark", "Show my best repos", "Add my work experience: ", "Rewrite my headline to sound more confident"];
 
 const THINKING: Partial<Record<OperationStatus, string>> = {
   queued: "Getting ready…",

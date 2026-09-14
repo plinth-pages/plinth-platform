@@ -2,8 +2,9 @@
 
 import type { PortfolioRole, PortfolioSummary, PublishStatusResponse } from "@plinth-pages/shared";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 
 const ROLES: { role: PortfolioRole; label: string; hint: string }[] = [
   { role: "developer", label: "Developer", hint: "Projects, open source, coding stats" },
@@ -21,8 +22,8 @@ const POLL_MS = 2000;
 const roleLabel = (role: PortfolioRole) => ROLES.find((r) => r.role === role)?.label ?? "Portfolio";
 
 export function PortfolioPanel() {
+  const router = useRouter();
   const [portfolios, setPortfolios] = useState<PortfolioSummary[] | null>(null);
-  const [creating, setCreating] = useState<PortfolioRole | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -35,26 +36,17 @@ export function PortfolioPanel() {
     load().catch((e) => setError(e instanceof Error ? e.message : "Could not load your portfolios"));
   }, [load]);
 
+  // A new user builds their first portfolio in onboarding.
+  useEffect(() => {
+    if (portfolios?.length === 0) router.replace("/onboarding");
+  }, [portfolios, router]);
+
   const provisioning = portfolios?.some((p) => p.status === "provisioning");
   useEffect(() => {
     if (!provisioning) return;
     const timer = setInterval(() => load().catch(() => undefined), POLL_MS);
     return () => clearInterval(timer);
   }, [provisioning, load]);
-
-  async function choose(role: PortfolioRole) {
-    setCreating(role);
-    setError(null);
-    try {
-      await api.createPortfolio(role);
-      await load();
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409) await load();
-      else setError(e instanceof Error ? e.message : "Could not create your portfolio");
-    } finally {
-      setCreating(null);
-    }
-  }
 
   async function retry(id: string) {
     setError(null);
@@ -70,28 +62,7 @@ export function PortfolioPanel() {
     return error ? <ErrorNote message={error} /> : <div className="h-40 animate-pulse rounded-2xl bg-stone-200/60 motion-reduce:animate-none dark:bg-stone-900" />;
   }
 
-  if (portfolios.length === 0) {
-    return (
-      <section className="rounded-2xl bg-white p-8 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
-        <h2 className="text-xl font-semibold tracking-tight">Create your portfolio</h2>
-        <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">What describes you best? This only sets your starting content.</p>
-        <div className="mt-6 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-          {ROLES.map(({ role, label, hint }) => (
-            <button
-              key={role}
-              onClick={() => choose(role)}
-              disabled={creating !== null}
-              className="flex flex-col items-start gap-0.5 rounded-xl bg-stone-50 px-4 py-3.5 text-left ring-1 ring-stone-200 transition hover:bg-white hover:shadow-card hover:ring-stone-300 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none disabled:opacity-60 dark:bg-stone-950 dark:ring-stone-800 dark:hover:ring-stone-600"
-            >
-              <span className="text-sm font-medium">{creating === role ? "Creating…" : label}</span>
-              <span className="text-xs text-stone-500">{hint}</span>
-            </button>
-          ))}
-        </div>
-        {error ? <ErrorNote message={error} /> : null}
-      </section>
-    );
-  }
+  if (portfolios.length === 0) return <div className="h-40 animate-pulse rounded-2xl bg-stone-200/60 motion-reduce:animate-none dark:bg-stone-900" />;
 
   return (
     <section className="flex flex-col gap-4">

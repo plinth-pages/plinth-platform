@@ -1,4 +1,7 @@
 import { InjectQueue } from "@nestjs/bullmq";
+import type { SetupStatusResponse } from "@plinth-pages/shared";
+import type { OnboardingTheme } from "../onboarding/personalisation";
+import { setupProgress } from "../onboarding/setup-progress";
 import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Portfolio, PortfolioRole, User } from "@prisma/client";
@@ -34,7 +37,7 @@ export class PortfoliosService {
    * advisory lock — the only place it can be enforced correctly. A UI check is bypassed by a direct API
    * call, and a check outside the lock lets two simultaneous requests both pass.
    */
-  async create(user: User, role: PortfolioRole): Promise<Portfolio> {
+  async create(user: User, role: PortfolioRole, theme: OnboardingTheme | null = null): Promise<Portfolio> {
     const candidates = repoNameCandidates(user.githubLogin);
 
     const portfolio = await this.prisma.$transaction(
@@ -56,7 +59,7 @@ export class PortfoliosService {
         const repoName = candidates.find((name) => !taken.has(name));
         if (!repoName) throw new ConflictException("No repository name is available for this account.");
 
-        return tx.portfolio.create({ data: { userId: user.id, role, repoName } });
+        return tx.portfolio.create({ data: { userId: user.id, role, repoName, ...(theme ? { theme } : {}) } });
       },
       { timeout: 15_000 },
     );
@@ -89,6 +92,15 @@ export class PortfoliosService {
     return this.get(user, id);
   }
 
+  async setup(user: User, id: string): Promise<SetupStatusResponse> {
+    const portfolio = await this.get(user, id);
+    const [sandbox, personalise] = await Promise.all([
+      this.prisma.sandbox.findUnique({ where: { portfolioId: id } }),
+      portfolio.personaliseOperationId ? this.prisma.operation.findUnique({ where: { id: portfolio.personaliseOperationId } }) : null,
+    ]);
+    return setupProgress(portfolio, sandbox, personalise);
+  }
+
   toSummary(portfolio: Portfolio): PortfolioSummary {
     const org = this.config.get("GITHUB_ORG", { infer: true });
     return {
@@ -98,6 +110,7 @@ export class PortfoliosService {
       repoName: portfolio.repoName,
       repoUrl: portfolio.repoId ? `https://github.com/${org}/${portfolio.repoName}` : null,
       failureReason: portfolio.failureReason,
+      theme: (portfolio.theme as PortfolioSummary["theme"]) ?? null,
       createdAt: portfolio.createdAt.toISOString(),
     };
   }

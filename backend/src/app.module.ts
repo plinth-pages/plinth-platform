@@ -23,6 +23,7 @@ import { PingProcessor } from "./jobs/ping.processor";
 import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "./events/portfolio-events";
 import { PortfolioEventsHub } from "./events/portfolio-events.hub";
 import { DeploymentTracker, HOSTING, VERCEL_CLIENT, VercelHosting, createVercelClient } from "./hosting/hosting";
+import { Personaliser } from "./onboarding/personaliser";
 import { GitSync } from "./operations/git-sync";
 import { IntegrationPlanner } from "./operations/integration-planner";
 import { IntegrationsController } from "./operations/integrations.controller";
@@ -112,6 +113,7 @@ export class ApiModule {}
     Provisioner,
     ProvisioningRecovery,
     ProvisioningScheduler,
+    Personaliser,
     {
       provide: PROVISIONER_OPTIONS,
       inject: [ConfigService],

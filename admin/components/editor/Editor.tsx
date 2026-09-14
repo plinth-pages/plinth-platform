@@ -10,6 +10,7 @@ import { usePublish } from "@/lib/usePublish";
 import { usePreview, type PreviewPhase } from "@/lib/usePreview";
 import { Brand } from "@/components/ui/Brand";
 import { CodeView, type CodeTarget } from "./CodeView";
+import { useToast } from "@/components/ui/Toast";
 import { CopilotChat } from "./CopilotChat";
 import { DeploymentToast } from "./DeploymentToast";
 import { OutcomeToast } from "./OutcomeToast";
@@ -82,13 +83,21 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   const [panel, setPanel] = useState<SidePanel>("integrations");
   const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
 
+  const toast = useToast();
+
   // Deep links: ?tab=code&file=app/page.tsx. The file is still subject to the backend's refusal rules.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get("welcome")) {
+      toast("Your portfolio is ready. Ask the co-pilot for anything you'd like to change.", "success");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("welcome");
+      window.history.replaceState(null, "", url);
+    }
     const file = params.get("file");
     if (file) setCodeTarget({ path: file });
     if (params.get("tab") === "code" || file) setTab("code");
-  }, []);
+  }, [toast]);
 
   const openCode = useCallback((target: CodeTarget) => {
     setCodeTarget(target);

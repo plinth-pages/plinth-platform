@@ -21,7 +21,9 @@ import type {
   JobStatusResponse,
   MeResponse,
   PortfolioResponse,
+  OnboardingTheme,
   PortfolioRole,
+  SetupStatusResponse,
   PortfoliosResponse,
   PreviewResponse,
   SlotsResponse,
@@ -66,8 +68,9 @@ export const api = {
   jobStatus: (id: string) => request<JobStatusResponse>(`/dev/jobs/${id}`),
   portfolios: () => request<PortfoliosResponse>("/portfolios"),
   portfolio: (id: string) => request<PortfolioResponse>(`/portfolios/${id}`),
-  createPortfolio: (role: PortfolioRole) =>
-    request<PortfolioResponse>("/portfolios", { method: "POST", body: JSON.stringify({ role }) }),
+  createPortfolio: (role: PortfolioRole, theme?: OnboardingTheme) =>
+    request<PortfolioResponse>("/portfolios", { method: "POST", body: JSON.stringify({ role, theme }) }),
+  portfolioSetup: (id: string) => request<SetupStatusResponse>(`/portfolios/${id}/setup`),
   retryPortfolio: (id: string) => request<PortfolioResponse>(`/portfolios/${id}/retry`, { method: "POST" }),
   preview: (id: string) => request<PreviewResponse>(`/portfolios/${id}/preview`),
   /** Opens the preview, waking or building it if needed. Also the heartbeat that keeps it from pausing. */

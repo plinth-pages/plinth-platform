@@ -119,7 +119,7 @@ beforeEach(() => {
   portfolios = new PortfoliosService(prisma, config, queue as unknown as Queue<ProvisionJobData>);
   provisioner = new Provisioner(prisma, github, { branchPollAttempts: 5, branchPollDelayMs: 5, visibility: "public" });
   recovery = new ProvisioningRecovery(prisma, queue as unknown as Queue<ProvisionJobData>);
-  processor = new ProvisioningProcessor(provisioner, recovery);
+  processor = new ProvisioningProcessor(provisioner, recovery, { queueFor: async () => "skipped" } as never);
 });
 
 afterAll(async () => {

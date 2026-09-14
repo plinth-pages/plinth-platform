@@ -1,13 +1,14 @@
 import { Body, ConflictException, Controller, Get, HttpCode, Param, Post, UseGuards } from "@nestjs/common";
 import { BadRequestException } from "@nestjs/common";
 import { PortfolioRole, type User } from "@prisma/client";
-import type { PortfolioResponse, PortfoliosResponse } from "@plinth-pages/shared";
+import type { PortfolioResponse, PortfoliosResponse, SetupStatusResponse } from "@plinth-pages/shared";
+import { onboardingThemeSchema } from "../onboarding/personalisation";
 import { z } from "zod";
 import { CurrentUser } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
 import { PortfolioLimitReached, PortfoliosService } from "./portfolios.service";
 
-const createPortfolioBody = z.object({ role: z.nativeEnum(PortfolioRole) });
+const createPortfolioBody = z.object({ role: z.nativeEnum(PortfolioRole), theme: onboardingThemeSchema.optional() });
 
 @Controller("portfolios")
 @UseGuards(SessionGuard)
@@ -21,7 +22,7 @@ export class PortfoliosController {
       throw new BadRequestException(`role must be one of: ${Object.values(PortfolioRole).join(", ")}`);
     }
     try {
-      return { portfolio: this.portfolios.toSummary(await this.portfolios.create(user, parsed.data.role)) };
+      return { portfolio: this.portfolios.toSummary(await this.portfolios.create(user, parsed.data.role, parsed.data.theme ?? null)) };
     } catch (error) {
       if (error instanceof PortfolioLimitReached) {
         throw new ConflictException({
@@ -44,6 +45,12 @@ export class PortfoliosController {
   @Get(":id")
   async get(@CurrentUser() user: User, @Param("id") id: string): Promise<PortfolioResponse> {
     return { portfolio: this.portfolios.toSummary(await this.portfolios.get(user, id)) };
+  }
+
+  /** Onboarding progress: each step is read from real state, so the page can poll it until the editor is ready. */
+  @Get(":id/setup")
+  setup(@CurrentUser() user: User, @Param("id") id: string): Promise<SetupStatusResponse> {
+    return this.portfolios.setup(user, id);
   }
 
   @Post(":id/retry")

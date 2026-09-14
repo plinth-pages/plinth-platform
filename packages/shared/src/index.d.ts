@@ -65,6 +65,29 @@ export type PortfolioRole =
 
 export type PortfolioStatus = "provisioning" | "ready" | "failed";
 
+export interface SetupStep {
+  id: "account" | "site" | "editor" | "personalise";
+  label: string;
+  state: "pending" | "active" | "done" | "failed" | "skipped";
+}
+
+export interface SetupStatusResponse {
+  portfolioId: string;
+  steps: SetupStep[];
+  /** The editor can open. */
+  ready: boolean;
+  failure: string | null;
+  /** What "Try again" should do. */
+  retry: "provisioning" | "preview" | null;
+  note: string | null;
+}
+
+export interface OnboardingTheme {
+  mode: "light" | "dark";
+  /** Six-digit hex. */
+  accent: string;
+}
+
 export interface PortfolioSummary {
   id: string;
   role: PortfolioRole;
@@ -73,6 +96,8 @@ export interface PortfolioSummary {
   /** Present once the repository exists on GitHub. */
   repoUrl: string | null;
   failureReason: string | null;
+  /** The look chosen during onboarding. */
+  theme: OnboardingTheme | null;
   createdAt: string;
 }
 

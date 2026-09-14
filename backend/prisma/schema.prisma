@@ -53,19 +53,23 @@ enum PortfolioRole {
 }
 
 model Portfolio {
-  id                String          @id @default(cuid())
-  userId            String          @map("user_id")
-  role              PortfolioRole
-  slug              String?         @unique
-  status            PortfolioStatus @default(provisioning)
+  id                     String          @id @default(cuid())
+  userId                 String          @map("user_id")
+  role                   PortfolioRole
+  slug                   String?         @unique
+  status                 PortfolioStatus @default(provisioning)
   // Chosen at creation, before the repository exists, so a retry always targets the same name.
-  repoName          String          @unique @map("repo_name")
-  repoId            String?         @map("repo_id")
-  vercelProjectId   String?         @map("vercel_project_id")
-  failureReason     String?         @map("failure_reason")
-  provisionAttempts Int             @default(0) @map("provision_attempts")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
+  repoName               String          @unique @map("repo_name")
+  repoId                 String?         @map("repo_id")
+  vercelProjectId        String?         @map("vercel_project_id")
+  failureReason          String?         @map("failure_reason")
+  /// Look chosen during onboarding ({ mode, accent }); written into content/theme.ts by personalisation.
+  theme                  Json?
+  /// The first change: GitHub profile, role content and theme. Set once, so it is queued at most once.
+  personaliseOperationId String?         @map("personalise_operation_id")
+  provisionAttempts      Int             @default(0) @map("provision_attempts")
+  createdAt              DateTime        @default(now()) @map("created_at")
+  updatedAt              DateTime        @updatedAt @map("updated_at")
 
   user                  User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sandbox               Sandbox?
