@@ -196,7 +196,7 @@ export function HeroDemo() {
               ))}
             </div>
 
-            <div className="flex-1 p-4 md:p-6">
+            <div className="flex-1 p-3 md:p-5">
               {shownTab === "diff" ? (
                 stage >= 2 ? (
                   <ChangeList title="Homepage" changes={CHANGES} stagger code />
@@ -214,46 +214,132 @@ export function HeroDemo() {
   );
 }
 
+const PROJECTS = [
+  { name: "ledger-kit", about: "Double-entry ledger for payment teams", tags: ["Go", "Postgres"], stars: "1.2k", tint: "from-indigo-500 to-violet-500" },
+  { name: "tracequery", about: "SQL over distributed traces", tags: ["Rust", "ClickHouse"], stars: "684", tint: "from-emerald-500 to-teal-500" },
+  { name: "envseal", about: "Encrypted env files for small teams", tags: ["TypeScript"], stars: "231", tint: "from-amber-500 to-orange-500" },
+];
+
+/**
+ * The site the co-pilot is editing: a believable portfolio with real copy. The right-hand card swaps from "Now" to the
+ * new contact form, so the preview keeps its height and nothing below it jumps.
+ */
 function SitePreview({ updated }: { updated: boolean }) {
   return (
-    <div className="rounded-xl bg-[#f7f7f5] p-5 text-stone-900 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.6)] md:p-6">
-      <div className="flex items-center gap-3">
-        <span className="h-10 w-10 rounded-full bg-gradient-to-br from-brand-400 to-fuchsia-400" />
-        <div>
-          <p className="text-[10px] font-medium tracking-wide text-stone-500 uppercase">Backend engineer</p>
-          <p className="text-xl leading-tight font-extrabold tracking-tight">Asha Menon</p>
-        </div>
+    <div className="overflow-hidden rounded-xl bg-[#fbfaf7] text-stone-900 shadow-[0_20px_60px_-20px_rgb(0_0_0/0.6)]">
+      {/* Site nav */}
+      <div className="flex items-center gap-3 border-b border-stone-200/80 px-4 py-2.5 text-[10px]">
+        <span className="flex h-5 w-5 items-center justify-center rounded-md bg-stone-900 text-[9px] font-bold text-white">AM</span>
+        <span className="hidden gap-3 text-stone-500 sm:flex">
+          <span className="text-stone-900">Work</span>
+          <span>Writing</span>
+          <span>About</span>
+        </span>
+        <span className="ml-auto flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700 ring-1 ring-emerald-600/15">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Open to consulting
+        </span>
       </div>
-      <div className="mt-4 grid grid-cols-3 gap-2">
-        {["ledger-kit", "tracequery", "envseal"].map((name) => (
-          <div key={name} className="rounded-lg bg-white p-2.5 ring-1 ring-stone-200">
-            <p className="truncate text-[11px] font-semibold">{name}</p>
-            <div className="mt-1.5 h-1.5 w-full rounded bg-stone-100" />
-            <div className="mt-1 h-1.5 w-2/3 rounded bg-stone-100" />
-          </div>
-        ))}
-      </div>
-      {updated ? (
-        <div className="animate-demo-in mt-3 rounded-lg bg-white p-3 ring-2 ring-brand-400/60">
-          <p className="flex items-center justify-between text-[11px] font-semibold">
-            Get in touch <span className="rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-medium text-brand-700">New</span>
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-1.5">
-            <div className="h-6 rounded bg-stone-100" />
-            <div className="h-6 rounded bg-stone-100" />
-            <div className="col-span-2 h-10 rounded bg-stone-100" />
-          </div>
-          <div className="mt-2 h-6 w-20 rounded bg-stone-900" />
-        </div>
-      ) : null}
-      <div className="mt-4 flex items-center justify-between border-t border-stone-200 pt-3 text-[11px] text-stone-500">
-        <span>© Asha Menon</span>
-        {updated ? (
-          <span className="animate-demo-in flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 ring-2 ring-brand-400/60">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> <span className="tabular-nums">1,284</span> visitors
+
+      <div className="bg-[radial-gradient(90%_70%_at_100%_0%,rgb(99_102_241/0.10),transparent_60%)] px-4 pt-4 pb-3 sm:px-5">
+        {/* Intro */}
+        <div className="flex items-start gap-3">
+          <span className="relative h-11 w-11 shrink-0 rounded-full bg-gradient-to-br from-indigo-400 via-violet-400 to-fuchsia-400 ring-2 ring-white">
+            <span className="absolute inset-0 flex items-center justify-center text-[13px] font-semibold text-white">A</span>
           </span>
-        ) : null}
+          <div className="min-w-0">
+            <p className="text-[9px] font-medium tracking-[0.08em] text-stone-500 uppercase">Asha Menon · Backend engineer · Bengaluru</p>
+            <p className="mt-0.5 text-[17px] leading-[1.15] font-bold tracking-[-0.02em] text-balance">I build payment systems that stay calm under load.</p>
+          </div>
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 divide-x divide-stone-200 rounded-lg bg-white/80 py-2 text-center ring-1 ring-stone-200/80">
+          {[
+            ["8 yrs", "building backends"],
+            ["2.1k", "GitHub stars"],
+            ["40M", "requests a day"],
+          ].map(([value, label]) => (
+            <div key={label}>
+              <p className="text-[13px] font-bold tabular-nums">{value}</p>
+              <p className="text-[9px] text-stone-500">{label}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 grid gap-2.5 sm:grid-cols-5">
+          {/* Selected work */}
+          <div className="flex flex-col gap-1.5 sm:col-span-3">
+            <p className="text-[9px] font-semibold tracking-[0.08em] text-stone-500 uppercase">Selected work</p>
+            {PROJECTS.map((project) => (
+              <div key={project.name} className="flex items-center gap-2.5 rounded-lg bg-white p-2 ring-1 ring-stone-200/80">
+                <span className={`h-7 w-7 shrink-0 rounded-md bg-gradient-to-br ${project.tint}`} />
+                <div className="min-w-0 flex-1">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold">
+                    {project.name}
+                    <span className="font-normal text-stone-400">★ {project.stars}</span>
+                  </p>
+                  <p className="truncate text-[9.5px] text-stone-500">{project.about}</p>
+                </div>
+                <span className="hidden gap-1 md:flex">
+                  {project.tags.map((tag) => (
+                    <span key={tag} className="rounded bg-stone-100 px-1.5 py-0.5 text-[8.5px] font-medium text-stone-600">
+                      {tag}
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* Now → contact form */}
+          <div className="flex flex-col sm:col-span-2">
+            <p className="flex items-center justify-between text-[9px] font-semibold tracking-[0.08em] text-stone-500 uppercase">
+              {updated ? "Get in touch" : "Now"}
+              {updated ? <span className="rounded-full bg-indigo-50 px-1.5 py-px text-[8.5px] font-medium tracking-normal text-indigo-700 normal-case">New</span> : null}
+            </p>
+            {updated ? (
+              <div className="animate-demo-in mt-1.5 flex flex-1 flex-col gap-1.5 rounded-lg bg-white p-2 ring-2 ring-indigo-400/60">
+                <Input label="Name" value="Priya Shah" />
+                <Input label="Email" value="priya@studio.co" />
+                <div className="flex-1 rounded-md bg-stone-50 px-2 py-1.5 ring-1 ring-stone-200">
+                  <p className="text-[8px] text-stone-400">Message</p>
+                  <p className="text-[9.5px] leading-snug text-stone-700">Loved ledger-kit. Could we chat about our payouts?</p>
+                </div>
+                <span className="flex h-6 items-center justify-center rounded-md bg-stone-900 text-[9.5px] font-medium text-white">Send message →</span>
+              </div>
+            ) : (
+              <div className="mt-1.5 flex flex-1 flex-col gap-2 rounded-lg bg-white p-2.5 ring-1 ring-stone-200/80">
+                <p className="text-[10.5px] leading-snug text-stone-700">Staff engineer on a payments platform, moving money for 3M merchants.</p>
+                <p className="text-[10.5px] leading-snug text-stone-700">Writing about idempotency and the art of safe retries.</p>
+                <p className="mt-auto text-[9.5px] text-stone-400">Updated this week</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Footer */}
+      <div className="flex items-center justify-between border-t border-stone-200/80 px-4 py-2 text-[9.5px] text-stone-500 sm:px-5">
+        <span>© 2026 Asha Menon</span>
+        {updated ? (
+          <span className="animate-demo-in flex items-center gap-1.5 rounded-full bg-white px-2 py-0.5 text-stone-700 ring-2 ring-indigo-400/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> <span className="font-semibold tabular-nums">1,284</span> visitors this month
+          </span>
+        ) : (
+          <span className="flex gap-3">
+            <span>GitHub</span>
+            <span>LinkedIn</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Input({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md bg-stone-50 px-2 py-1 ring-1 ring-stone-200">
+      <p className="text-[8px] text-stone-400">{label}</p>
+      <p className="truncate text-[9.5px] text-stone-700">{value}</p>
     </div>
   );
 }
