@@ -1,4 +1,4 @@
-import { Controller, Get, Headers, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, Headers, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
 import type { RawBodyRequest } from "@nestjs/common";
 import type { User } from "@prisma/client";
 import type { BillingStatusResponse } from "@plinth-pages/shared";
@@ -23,6 +23,14 @@ export class BillingController {
   @UseGuards(SessionGuard)
   checkout(@CurrentUser() user: User) {
     return this.billing.checkout(user);
+  }
+
+  /** Called when the user returns from Checkout: verifies the session with Stripe and applies the plan. */
+  @Post("confirm")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  confirm(@CurrentUser() user: User, @Body() body: { sessionId?: unknown } | undefined) {
+    return this.billing.confirm(user, body?.sessionId);
   }
 
   @Post("portal")

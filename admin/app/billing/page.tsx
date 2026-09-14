@@ -36,21 +36,23 @@ function Billing() {
     load().catch((e) => e instanceof ApiError && e.status === 401 && router.replace("/"));
     const params = new URLSearchParams(window.location.search);
     const checkout = params.get("checkout");
+    const sessionId = params.get("session_id");
     if (!checkout) return;
     window.history.replaceState(null, "", "/billing");
     if (checkout === "cancelled") {
       toast("Checkout cancelled. You haven't been charged.", "info");
       return;
     }
-    // The plan changes when Stripe's webhook arrives, usually within seconds of returning here.
+    // Confirm with Stripe straight away; the webhook (if configured) may also arrive — both apply the same state.
     setConfirming(true);
     let tries = 0;
     const timer = setInterval(async () => {
       tries += 1;
-      const status = await load().catch(() => null);
+      const status = sessionId ? await api.confirmCheckout(sessionId).then((result) => (setBilling(result), result)).catch(() => null) : await load().catch(() => null);
       if (status?.plan === "pro") {
         clearInterval(timer);
         setConfirming(false);
+        void load();
         toast("Welcome to Pro! Premium models and higher limits are unlocked.", "success");
       } else if (tries >= 30) {
         clearInterval(timer);

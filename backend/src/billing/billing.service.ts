@@ -30,8 +30,9 @@ export class BillingService {
     @Optional() @Inject(STRIPE) private readonly stripe: Stripe | null = null,
   ) {}
 
+  /** Checkout needs only the secret key: returning from Stripe confirms the session directly. Webhooks keep renewals and cancellations current. */
   get configured() {
-    return this.stripe !== null && Boolean(this.config.get("STRIPE_WEBHOOK_SECRET", { infer: true }));
+    return this.stripe !== null;
   }
 
   status(user: User): BillingStatusResponse {
@@ -68,11 +69,26 @@ export class BillingService {
             },
       ],
       allow_promotion_codes: true,
-      success_url: `${adminUrl}/billing?checkout=success`,
+      success_url: `${adminUrl}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${adminUrl}/billing?checkout=cancelled`,
     });
     if (!session.url) throw new ServiceUnavailableException("Stripe didn't return a checkout page.");
     return { url: session.url };
+  }
+
+  /**
+   * Confirms a checkout the user just returned from by asking Stripe for the session — never trusting the redirect
+   * itself. The session must belong to this user and be paid; the subscription is then applied like a webhook would.
+   */
+  async confirm(user: User, sessionId: unknown): Promise<BillingStatusResponse> {
+    const stripe = this.requireStripe();
+    if (typeof sessionId !== "string" || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId)) throw new BadRequestException("That checkout session isn't valid.");
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    if (session.client_reference_id !== user.id) throw new BadRequestException("That checkout session belongs to a different account.");
+    if (session.status === "complete" && typeof session.subscription === "string") {
+      await this.applySubscription(await stripe.subscriptions.retrieve(session.subscription), user.id);
+    }
+    return this.status(await this.prisma.user.findUniqueOrThrow({ where: { id: user.id } }));
   }
 
   /** Stripe's hosted page for changing payment details, invoices and cancelling. */
@@ -87,6 +103,7 @@ export class BillingService {
   async handleWebhook(rawBody: Buffer | undefined, signature: string | undefined): Promise<boolean> {
     const stripe = this.requireStripe();
     const secret = this.config.get("STRIPE_WEBHOOK_SECRET", { infer: true });
+    if (!secret) throw new ServiceUnavailableException("Webhooks aren't configured (STRIPE_WEBHOOK_SECRET).");
     if (!rawBody || !signature || !secret) throw new BadRequestException("Missing webhook signature.");
     let event: Stripe.Event;
     try {

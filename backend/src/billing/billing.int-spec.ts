@@ -100,6 +100,7 @@ describe("webhooks", () => {
   it("reports billing as unavailable without Stripe", async () => {
     const bare = new BillingService(prisma, config, null);
     expect(bare.status(await user())).toMatchObject({ plan: "free", checkoutAvailable: false, priceUsd: 15 });
+    expect(billing().status(await user()).checkoutAvailable).toBe(true);
     await expect(bare.checkout(await user())).rejects.toThrow(/isn't set up/);
   });
 });

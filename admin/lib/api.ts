@@ -118,6 +118,7 @@ export const api = {
   billingStatus: () => request<BillingStatusResponse>("/billing"),
   /** A Stripe Checkout URL for Pro. The plan changes when Stripe's webhook confirms payment. */
   checkout: () => request<{ url: string }>("/billing/checkout", { method: "POST" }),
+  confirmCheckout: (sessionId: string) => request<BillingStatusResponse>("/billing/confirm", { method: "POST", body: JSON.stringify({ sessionId }) }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
   adminMetrics: () => request<AdminMetricsResponse>("/admin/metrics"),
   copilotModels: () => request<CopilotModelsResponse>("/copilot/models"),
