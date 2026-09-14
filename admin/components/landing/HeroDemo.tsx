@@ -1,28 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, DiffView, type DiffLine } from "./Diff";
+import { ChangeList, Check, type Change } from "./Diff";
 
 const PROMPT = "Add a contact form that emails me through Resend, and a visitor counter in the footer";
 
-const FILES: { mark: "+" | "~"; path: string }[] = [
-  { mark: "+", path: "app/api/contact/route.ts" },
-  { mark: "~", path: "app/page.tsx" },
-  { mark: "~", path: "components/Footer.tsx" },
+const CHANGES: Change[] = [
+  [" ", "Intro and projects"],
+  ["+", "Contact form, sends messages to your inbox"],
+  ["-", "Plain footer"],
+  ["+", "Footer with a live visitor counter"],
 ];
 
-const DIFF: DiffLine[] = [
-  [" ", "<Hero profile={site.profile} />"],
-  [" ", "<Projects items={site.projects} />"],
-  ["+", '<ContactForm action="/api/contact" />'],
-  [" ", "</main>"],
-  ["-", "<Footer />"],
-  ["+", "<Footer>"],
-  ["+", "  <VisitorCounter />"],
-  ["+", "</Footer>"],
-];
-
-const CHECKS = ["Types compile", "Slots intact", "Page renders"];
+const CHECKS = ["Everything still works", "Layout intact", "Page loads correctly"];
 
 /*
  * Stages: 0 typing · 1 sent, thinking · 2 reply and diff · 3–5 checks running one by one · 6 all passed · 7 preview updated.
@@ -102,7 +92,7 @@ export function HeroDemo() {
             <span className="h-3 w-3 rounded-full bg-white/10" />
           </div>
           <div className="mx-auto hidden h-6 items-center gap-2 rounded-md bg-white/[0.04] px-3 font-mono text-[11px] text-stone-400 ring-1 ring-white/[0.06] sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> github.com/asha/site · main
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" /> asha.dev · Preview
           </div>
           <span className="ml-auto rounded-md bg-gradient-to-b from-brand-500 to-brand-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] sm:ml-0">Publish</span>
         </div>
@@ -127,19 +117,18 @@ export function HeroDemo() {
             {stage >= 2 ? (
               <div className="animate-demo-in flex flex-col gap-2.5">
                 <p className="mr-4 rounded-2xl rounded-bl-md bg-white/[0.05] px-3 py-2.5 text-[13px] leading-relaxed text-stone-200 ring-1 ring-white/[0.06]">
-                  Added a contact form and a visitor counter. Your Resend key is stored encrypted — it never touches your code.
+                  Done — visitors can now message you from your site, and your footer shows a live visitor count.
                 </p>
-                <ul className="flex flex-col gap-1 font-mono text-[11px]">
-                  {FILES.map((file) => (
-                    <li key={file.path} className="flex items-center gap-2 text-stone-400">
-                      <span className={file.mark === "+" ? "text-emerald-400" : "text-amber-300"}>{file.mark === "+" ? "A" : "M"}</span>
-                      {file.path}
-                    </li>
+                <p className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                  {["Contact form", "Visitor counter"].map((chip) => (
+                    <span key={chip} className="rounded-full bg-white/[0.05] px-2 py-0.5 text-stone-300 ring-1 ring-white/[0.08]">
+                      {chip}
+                    </span>
                   ))}
-                  <li className="mt-1 flex items-center gap-2 text-stone-400">
-                    <Lock /> RESEND_API_KEY <span className="text-stone-600">· encrypted</span>
-                  </li>
-                </ul>
+                  <span className="flex items-center gap-1 text-stone-500">
+                    <Lock /> Key kept private
+                  </span>
+                </p>
               </div>
             ) : null}
 
@@ -147,7 +136,7 @@ export function HeroDemo() {
               <div className="rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.06]">
                 <p className="flex items-center justify-between text-[11px] font-medium tracking-wide text-stone-400 uppercase">
                   Safety net
-                  {stage >= 6 ? <span className="animate-demo-in font-mono text-[10px] tracking-normal text-emerald-400 normal-case">commit 3f9c2a1</span> : null}
+                  {stage >= 6 ? <span className="animate-demo-in text-[10px] tracking-normal text-emerald-400 normal-case">All clear</span> : null}
                 </p>
                 <ul className="mt-2 flex flex-col gap-1.5 text-[12px]">
                   {CHECKS.map((item, index) => {
@@ -199,7 +188,7 @@ export function HeroDemo() {
                   className={`-mb-px border-b-2 px-3 pb-2 text-xs font-medium transition-colors ${shownTab === id ? "border-brand-400 text-white" : "border-transparent text-stone-500 hover:text-stone-300"}`}
                 >
                   {id === "preview" ? "Preview" : "Changes"}
-                  {id === "diff" && stage >= 2 ? <span className="ml-1.5 font-mono text-[10px] text-emerald-400">+5 −1</span> : null}
+                  {id === "diff" && stage >= 2 ? <span className="ml-1.5 text-[10px] text-emerald-400">2 new</span> : null}
                 </button>
               ))}
             </div>
@@ -207,7 +196,7 @@ export function HeroDemo() {
             <div className="flex-1 p-4 md:p-6">
               {shownTab === "diff" ? (
                 stage >= 2 ? (
-                  <DiffView file="app/page.tsx" lines={DIFF} stagger />
+                  <ChangeList title="Homepage" changes={CHANGES} stagger />
                 ) : (
                   <p className="p-6 text-center text-sm text-stone-500">No changes yet.</p>
                 )

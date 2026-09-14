@@ -47,7 +47,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
             <div className="ml-10 rounded-2xl rounded-br-md bg-white px-3.5 py-2.5 text-sm text-stone-900">Make my hero bolder and add my LeetCode stats</div>
             <div className="mt-3 mr-10 rounded-2xl rounded-bl-md bg-white/[0.06] px-3.5 py-2.5 text-sm text-stone-200 ring-1 ring-white/10">Done. Your headline is heavier and LeetCode Stats sits under your projects.</div>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              {["Types compile", "Slots intact", "Page renders"].map((check) => (
+              {["Everything still works", "Layout intact", "Page loads"].map((check) => (
                 <span key={check} className="flex items-center gap-1.5 rounded-full bg-emerald-400/10 px-2.5 py-1 text-emerald-300 ring-1 ring-emerald-400/20">✓ {check}</span>
               ))}
             </div>
