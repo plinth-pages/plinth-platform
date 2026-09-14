@@ -50,3 +50,25 @@ body {
     animation: none;
   }
 }
+
+/* Landing demo: one short entrance used for everything that appears, so the page stays cheap to animate. */
+@keyframes demo-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-demo-in {
+  animation: demo-in 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-demo-in {
+    animation: none;
+  }
+}
