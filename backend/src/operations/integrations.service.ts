@@ -3,6 +3,7 @@ import type { User } from "@prisma/client";
 import type { InstalledIntegrationsResponse, OperationStatus, OperationSummary, PendingIntegrationChange } from "@plinth-pages/shared";
 import { z } from "zod";
 import { CatalogueService } from "../catalogue/catalogue.service";
+import { CredentialsService } from "../credentials/credentials.service";
 import { PrismaService } from "../prisma/prisma.service";
 import { MAX_INSTALLED_INTEGRATIONS } from "./integration-planner";
 import { OperationsService } from "./operations.service";
@@ -22,6 +23,7 @@ export class IntegrationsService {
     private readonly prisma: PrismaService,
     private readonly catalogue: CatalogueService,
     private readonly operations: OperationsService,
+    private readonly credentials: CredentialsService,
   ) {}
 
   async list(user: User, portfolioId: string): Promise<InstalledIntegrationsResponse> {
@@ -74,6 +76,8 @@ export class IntegrationsService {
       this.prisma.operation.count({ where: { portfolioId, type: "install", status: { in: IN_FLIGHT } } }),
     ]);
     if (installed) throw new ConflictException(`${manifest.name} is already installed. Move or remove it instead.`);
+    const missing = await this.credentials.missingFor(portfolioId, manifest.id);
+    if (missing.length) throw new ConflictException({ statusCode: 409, code: "CREDENTIALS_REQUIRED", message: `Connect your ${missing.join(" and ")} first.` });
     if (count + pending >= MAX_INSTALLED_INTEGRATIONS) {
       throw new ConflictException(`Your plan includes up to ${MAX_INSTALLED_INTEGRATIONS} integrations. Remove one to add another.`);
     }

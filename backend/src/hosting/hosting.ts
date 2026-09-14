@@ -1,10 +1,16 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { Deployment, DeploymentStatus, Portfolio } from "@prisma/client";
 import type { Env } from "../config/env";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { PrismaService } from "../prisma/prisma.service";
 import { VercelClient, explainVercelError, liveUrl, vercelProjectName, type VercelDeployment } from "./vercel.client";
+
+/** Pushes a portfolio's secrets to its hosting project. Implemented by CredentialSync. */
+export const PRODUCTION_SECRETS = Symbol("PRODUCTION_SECRETS");
+export interface ProductionSecrets {
+  syncProduction(portfolioId: string, env?: Record<string, string>, projectId?: string): Promise<unknown>;
+}
 
 export const HOSTING = Symbol("HOSTING");
 export const VERCEL_CLIENT = Symbol("VERCEL_CLIENT");
@@ -32,6 +38,7 @@ export class VercelHosting implements Hosting {
     @Inject(VERCEL_CLIENT) private readonly vercel: VercelClient | null,
     private readonly prisma: PrismaService,
     config: ConfigService<Env, true>,
+    @Optional() @Inject(PRODUCTION_SECRETS) private readonly secrets: ProductionSecrets | null = null,
   ) {
     this.org = config.get("GITHUB_ORG", { infer: true });
   }
@@ -47,6 +54,7 @@ export class VercelHosting implements Hosting {
       if (portfolio.vercelProjectId !== project.id) {
         await this.prisma.portfolio.update({ where: { id: portfolio.id }, data: { vercelProjectId: project.id } });
       }
+      await this.secrets?.syncProduction(portfolio.id, undefined, project.id);
     } catch (error) {
       throw new HostingError(explainVercelError(error, `${this.org}/${portfolio.repoName}`));
     }
@@ -101,7 +109,10 @@ export class DeploymentTracker {
     current = await this.vercel.getDeployment(deployment.vercelDeploymentId ?? current!.id);
     switch (current.readyState) {
       case "READY":
-        return this.finish(deployment, "ready", { url: liveUrl(current), error: null });
+        return this.finish(deployment, "ready", {
+          url: (portfolio.vercelProjectId ? await this.vercel.productionDomain(portfolio.vercelProjectId).catch(() => null) : null) ?? liveUrl(current),
+          error: null,
+        });
       case "ERROR":
       case "CANCELED":
       case "BLOCKED":

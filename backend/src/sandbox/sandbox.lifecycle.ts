@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import { SECRET_ENVIRONMENT, type SecretEnvironment } from "../credentials/credential-sync";
 import type { Portfolio, Sandbox, SandboxStatus } from "@prisma/client";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { PENDING_PUSHES, type PendingPushes } from "../operations/pending-pushes";
@@ -58,6 +59,7 @@ export class SandboxLifecycle {
     @Inject(SANDBOX_LIFECYCLE_OPTIONS) private readonly options: SandboxLifecycleOptions,
     @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
     @Inject(PENDING_PUSHES) private readonly pushes: PendingPushes,
+    @Optional() @Inject(SECRET_ENVIRONMENT) private readonly secrets: SecretEnvironment | null = null,
   ) {}
 
   /** Makes the preview reachable: keeps a running sandbox, resumes a paused one, or builds a new one from `draft`. */
@@ -183,7 +185,7 @@ export class SandboxLifecycle {
         cloneUrl: `https://github.com/${this.options.org}/${portfolio.repoName}.git`,
         branch: DRAFT_BRANCH,
         gitToken,
-        env: {},
+        env: (await this.secrets?.forPortfolio(portfolio.id)) ?? {},
       });
     } catch (error) {
       await this.stop(starting, "bootstrap_failed", "unhealthy", errorMessage(error));

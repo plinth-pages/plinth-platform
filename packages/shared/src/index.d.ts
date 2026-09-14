@@ -334,6 +334,49 @@ export interface CatalogueIntegration {
   homepage: string | null;
   /** `vendored`: shipped with Plinth as a tarball in the repository until it is published to npm. */
   source: "vendored" | "npm";
+  /** Keys the integration needs, stored encrypted by Plinth. Never includes values. */
+  secrets: IntegrationSecretSpec[];
+  /** Adds a server route to the site. */
+  addsServerRoute: boolean;
+}
+
+export interface IntegrationSecretSpec {
+  env: string;
+  label: string;
+  description?: string;
+  kind: "api_key" | "email" | "text";
+  provider: "resend" | "none";
+  required: boolean;
+  placeholder?: string;
+  helpUrl?: string;
+}
+
+export interface CredentialStatus {
+  env: string;
+  label: string;
+  kind: "api_key" | "email" | "text";
+  required: boolean;
+  connected: boolean;
+  /** Masked, e.g. "•••• 4f2a". Never the value. */
+  hint: string | null;
+  verifiedAt: string | null;
+  /** The current value has reached the published site. */
+  syncedToProduction: boolean;
+}
+
+export interface IntegrationCredentials {
+  integrationId: string;
+  secrets: CredentialStatus[];
+}
+
+export interface PortfolioCredentialsResponse {
+  vaultConfigured: boolean;
+  integrations: IntegrationCredentials[];
+}
+
+export interface ConnectCredentialsRequest {
+  /** Env name → value. Blank keeps a stored value. */
+  values: Record<string, string>;
 }
 
 /** Not built yet: can be requested, not installed. */

@@ -1,5 +1,6 @@
 import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import { CredentialSync } from "../credentials/credential-sync";
 import { DelayedError, type Job, type Queue } from "bullmq";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { DeploymentTracker, TRACK_POLL_MS } from "../hosting/hosting";
@@ -35,6 +36,7 @@ export class OperationsProcessor extends WorkerHost {
     @Inject(SANDBOX_LOCKS) private readonly locks: SandboxLocks,
     @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
     private readonly tracker: DeploymentTracker,
+    @Optional() @Inject(CredentialSync) private readonly credentials: CredentialSync | null = null,
   ) {
     super();
   }
@@ -43,6 +45,7 @@ export class OperationsProcessor extends WorkerHost {
     const { portfolioId } = job.data;
     if (job.name === "push") return this.push(job, token);
     if (job.name === "track-deployment") return this.trackDeployment(job, token);
+    if (job.name === "sync-credentials") return this.syncCredentials(job, token);
 
     const result = await this.locks.run(portfolioId, () => this.runner.drain(portfolioId));
     if (!result.acquired) return this.later(job, token);
@@ -67,6 +70,14 @@ export class OperationsProcessor extends WorkerHost {
     });
     if (!result.acquired) return this.later(job, token);
     return "pushed";
+  }
+
+  /** Holds the portfolio lock so `.env.local` is never rewritten while a sandbox is being created or destroyed. */
+  private async syncCredentials(job: Job<OperationJobData>, token?: string) {
+    if (!this.credentials) return "skipped";
+    const result = await this.locks.run(job.data.portfolioId, () => this.credentials!.sync(job.data.portfolioId));
+    if (!result.acquired) return this.later(job, token);
+    return result.value;
   }
 
   /** Needs no lock: it only reads the host and writes the deployment row. */

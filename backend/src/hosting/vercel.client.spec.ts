@@ -76,6 +76,24 @@ describe("VercelClient", () => {
   });
 });
 
+describe("productionDomain", () => {
+  const client = (domains: object[]) =>
+    new VercelClient("token", undefined, (async () => new Response(JSON.stringify({ domains }), { status: 200 })) as unknown as typeof fetch);
+
+  it("prefers a verified custom domain, then <project>.vercel.app, never branch or redirect domains", async () => {
+    expect(await client([{ name: "portfolio-asha.vercel.app", verified: true }, { name: "asha.dev", verified: true }]).productionDomain("p")).toBe("https://asha.dev");
+    expect(
+      await client([
+        { name: "asha.dev", verified: false },
+        { name: "preview.asha.dev", verified: true, gitBranch: "draft" },
+        { name: "www.asha.dev", verified: true, redirect: "asha.dev" },
+        { name: "portfolio-asha.vercel.app", verified: true },
+      ]).productionDomain("p"),
+    ).toBe("https://portfolio-asha.vercel.app");
+    expect(await client([]).productionDomain("p")).toBeNull();
+  });
+});
+
 describe("liveUrl", () => {
   it("prefers the shortest production alias", () => {
     expect(

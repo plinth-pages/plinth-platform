@@ -82,6 +82,12 @@ const envSchema = z
     /** The Groq model behind the free tier. */
     GROQ_MODEL: z.string().optional(),
     COPILOT_DAILY_MESSAGES: z.coerce.number().int().positive().default(40),
+    // Credential vault (Phase 12): "id:base64-32-byte-key[,id:key…]". The active key seals new secrets; older keys
+    // stay listed until every secret sealed with them has been re-saved.
+    CREDENTIALS_KEYS: z.string().optional(),
+    CREDENTIALS_ACTIVE_KEY: z.string().optional(),
+    /** Public address of this API, for integrations that call it from a visitor's browser (Visitor Counter). */
+    PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
   })
   .superRefine((env, ctx) => {
     const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;

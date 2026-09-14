@@ -1,5 +1,7 @@
 import type {
   AdminIntegrationRequestsResponse,
+  ConnectCredentialsRequest,
+  PortfolioCredentialsResponse,
   AdminMetricsResponse,
   CopilotMessagesResponse,
   CopilotModelsResponse,
@@ -93,6 +95,12 @@ export const api = {
     request<IntegrationRequestResponse>("/integrations/requests", { method: "POST", body: JSON.stringify(body) }),
   withdrawIntegrationRequest: (key: string) =>
     request<IntegrationRequestResponse>(`/integrations/requests/${encodeURIComponent(key)}`, { method: "DELETE" }),
+  credentials: (id: string) => request<PortfolioCredentialsResponse>(`/portfolios/${id}/credentials`),
+  /** Verifies the keys with their provider, then stores them encrypted. Values are never sent back. */
+  connectCredentials: (id: string, integrationId: string, body: ConnectCredentialsRequest) =>
+    request<PortfolioCredentialsResponse>(`/portfolios/${id}/credentials/${encodeURIComponent(integrationId)}`, { method: "PUT", body: JSON.stringify(body) }),
+  disconnectCredentials: (id: string, integrationId: string) =>
+    request<PortfolioCredentialsResponse>(`/portfolios/${id}/credentials/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
   installedIntegrations: (id: string) => request<InstalledIntegrationsResponse>(`/portfolios/${id}/integrations`),
   /** Queues an install through the safety net; returns immediately. */
   installIntegration: (id: string, body: InstallIntegrationRequest) =>

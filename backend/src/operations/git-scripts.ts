@@ -215,8 +215,22 @@ set -o pipefail
 started=$(date +%s%3N)
 pnpm exec plinth check --json > ${STATE}/op-plinth.json 2> ${STATE}/op-plinth.err
 echo "PLINTH_PLINTH_CODE=$?"
+# The build sees the real secrets, as production will. .env* is git-ignored and removed right after.
+if [ -n "$PLINTH_ENV_B64" ]; then (umask 077; printf '%s' "$PLINTH_ENV_B64" | base64 -d > .env.production.local); fi
 NEXT_TELEMETRY_DISABLED=1 NODE_OPTIONS=--max-old-space-size=1536 pnpm exec next build > ${STATE}/op-build.log 2>&1
 echo "PLINTH_BUILD_CODE=$?"
+rm -f .env.production.local
+# Anything a visitor can download (the browser bundle and pre-rendered pages) must not contain a secret value.
+leaked=""
+if [ -n "$PLINTH_PROBES_B64" ] && [ -d .next ]; then
+  while IFS= read -r -d '' probe; do
+    name="\${probe%%=*}"; value="\${probe#*=}"
+    if grep -rqF --include='*.js' --include='*.html' --include='*.rsc' --include='*.body' --include='*.json' --include='*.txt' -- "$value" .next/static .next/server/app 2>/dev/null; then
+      leaked="$leaked $name"
+    fi
+  done < <(printf '%s' "$PLINTH_PROBES_B64" | base64 -d)
+fi
+echo "PLINTH_SECRET_LEAK=\${leaked# }"
 echo "PLINTH_CHECK_MS=$(( $(date +%s%3N) - started ))"
 echo "---PLINTH:plinth---"; head -c 60000 ${STATE}/op-plinth.json
 echo

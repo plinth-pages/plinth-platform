@@ -58,6 +58,10 @@ class SimulatedSandbox implements SandboxDriver {
   /** Returns build log lines when the production build should fail for this tree. */
   buildErrors = (tree: Tree): string[] => ([...tree.values()].some((c) => c.includes("BUILD_BREAKS")) ? ["./app/page.tsx", "20:14  Error: Unescaped entity.  react/no-unescaped-entities"] : []);
   mainPushFails = false;
+  /** Environment the last production build ran with. */
+  buildEnv: Record<string, string> = {};
+  /** Secret names the build step reports as found in public output. */
+  buildLeak = "";
   /** The live tree cannot link the change's dependencies, so apply exits before merging. */
   liveInstallFails = false;
   /** Every distinct live tree, in order. */
@@ -166,6 +170,7 @@ class SimulatedSandbox implements SandboxDriver {
         );
       }
       case "build": {
+        this.buildEnv = env;
         const errors = this.buildErrors(this.staging!);
         const plinth = this.plinth(this.staging!);
         return ok(
@@ -173,6 +178,7 @@ class SimulatedSandbox implements SandboxDriver {
             `PLINTH_PLINTH_CODE=${plinth.ok ? 0 : 1}`,
             `PLINTH_BUILD_CODE=${errors.length ? 1 : 0}`,
             "PLINTH_CHECK_MS=41000",
+            `PLINTH_SECRET_LEAK=${this.buildLeak}`,
             "---PLINTH:plinth---",
             JSON.stringify(plinth),
             "---PLINTH:plinth-err---",
@@ -261,6 +267,7 @@ let hosting: { configured: boolean; prepared: string[]; failWith: Error | null; 
 let tracked: string[];
 let woken: string[];
 let followUps: FollowUp[];
+let secretsByPortfolio: Record<string, Record<string, string>>;
 /** What the scripted model answers next: tool input, or an error to throw. */
 let modelAnswer: unknown;
 let modelRequests: AiRequest[];
@@ -294,7 +301,7 @@ async function queueOperation(portfolioId: string, type: OperationType, input: o
   return prisma.operation.create({ data: { portfolioId, type, actor: "user", summary, input } });
 }
 
-const config = { get: () => undefined } as unknown as ConfigService<Env, true>;
+const config = { get: (key: string) => (key === "PUBLIC_API_URL" ? "http://localhost:4000" : undefined) } as unknown as ConfigService<Env, true>;
 const fixture = (name: string) => readFileSync(join(__dirname, "../../../packages/codemod/test/fixtures/template", name), "utf8");
 /** The template's real layout, page and plinth.json, which the codemod engine edits. */
 const templateTree = (): Tree =>
@@ -332,6 +339,7 @@ beforeEach(() => {
   };
   woken = [];
   followUps = [];
+  secretsByPortfolio = {};
   modelAnswer = null;
   modelRequests = [];
   const publisher = { publish: async (_: string, event: { type: string; operationId?: string; status: string }) => void events.push({ operationId: event.operationId!, status: event.status }) };
@@ -348,6 +356,7 @@ beforeEach(() => {
     new IntegrationPlanner(prisma, sandbox, config),
     new CopilotPlanner(prisma, new AiService(config, [scriptedProvider]), new CatalogueService(prisma, (async () => new Response("{}", { status: 503 })) as unknown as typeof fetch)),
     { enqueue: async (_portfolioId, queued) => void followUps.push(...queued) },
+    { forPortfolio: async (portfolioId: string) => secretsByPortfolio[portfolioId] ?? {} },
   );
 });
 
@@ -524,6 +533,99 @@ describe("integrations", () => {
     expect(done.status).toBe("failed");
     expect(done.error).toMatch(/^The change is invalid/);
     expect(sandbox.steps).toEqual(["discard"]);
+  });
+});
+
+describe("secret-backed integrations", () => {
+  const connect = (portfolioId: string, keys: string[]) =>
+    prisma.credential.createMany({
+      data: keys.map((key) => ({ portfolioId, key, integrationId: "contact-form", ciphertext: "sealed", iv: "iv", keyId: "test", hint: "••••", verifiedAt: new Date() })),
+    });
+  const installContactForm = (portfolioId: string) =>
+    queueOperation(portfolioId, "install", { integrationId: "contact-form", slot: "contact", props: { heading: "Say hello", buttonLabel: "Send" } }, "Install Contact Form");
+
+  it("won't install the Contact Form until its keys are connected", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    await connect(portfolio.id, ["RESEND_API_KEY"]);
+
+    const op = await installContactForm(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(failuresOf(await reload(op.id))).toEqual([{ source: "install", message: "Connect your Send messages to before adding Contact Form." }]);
+    expect(sandbox.commits).toEqual([]);
+  });
+
+  it("adds its server route from the package, which reads keys from the environment; removing it restores every file", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+    const before = snapshot(sandbox.live);
+    await connect(portfolio.id, ["RESEND_API_KEY", "PLINTH_CONTACT_TO"]);
+
+    const op = await installContactForm(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(await reload(op.id)).toMatchObject({ status: "applied" });
+    const route = sandbox.live.get("app/api/plinth/contact-form/route.ts")!;
+    expect(route).toContain("process.env.RESEND_API_KEY");
+    expect(route).toContain("export async function POST");
+    expect(sandbox.live.get("app/page.tsx")).toMatch(/<ContactForm buttonLabel=\{"Send"\} heading=\{"Say hello"\} \/>/);
+    expect(sandbox.live.get("vendor/plinth-pages-contact-form-0.1.0.tgz")).toBeDefined();
+
+    const removed = await queueOperation(portfolio.id, "uninstall", { integrationId: "contact-form" }, "Remove Contact Form");
+    await runner.drain(portfolio.id);
+    expect(await reload(removed.id)).toMatchObject({ status: "applied" });
+    expect(snapshot(sandbox.live)).toBe(before);
+    // Keys are the user's to disconnect; removing the component doesn't delete them.
+    expect(await prisma.credential.count({ where: { portfolioId: portfolio.id } })).toBe(2);
+  });
+
+  it("never overwrites a route file the user already has", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(new Map([...templateTree(), ["app/api/plinth/contact-form/route.ts", "// mine\n"]]));
+    await connect(portfolio.id, ["RESEND_API_KEY", "PLINTH_CONTACT_TO"]);
+
+    const op = await installContactForm(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    expect(failuresOf(await reload(op.id))[0]).toMatchObject({ source: "install", message: expect.stringContaining("already exists") });
+    expect(sandbox.live.get("app/api/plinth/contact-form/route.ts")).toBe("// mine\n");
+  });
+
+  it("fills in the Visitor Counter's site id and API address, and keeps them out of the user's settings", async () => {
+    const portfolio = await portfolioWithSandbox();
+    sandbox.seed(templateTree());
+
+    const op = await queueOperation(portfolio.id, "install", { integrationId: "visitor-counter", slot: "footer", props: { label: "visits" } }, "Install Visitor Counter");
+    await runner.drain(portfolio.id);
+
+    expect(await reload(op.id)).toMatchObject({ status: "applied" });
+    const page = sandbox.live.get("app/page.tsx")!;
+    expect(page).toContain(`siteId={"${portfolio.id}"}`);
+    expect(page).toContain('endpoint={"http://localhost:4000"}');
+    const row = await prisma.installedIntegration.findFirstOrThrow({ where: { portfolioId: portfolio.id, integrationId: "visitor-counter" } });
+    expect(row.props).toEqual({ label: "visits" });
+  });
+
+  it("publishes with the secrets in the build, and refuses when a secret reaches the public output", async () => {
+    const portfolio = await portfolioWithSandbox();
+    secretsByPortfolio[portfolio.id] = { RESEND_API_KEY: "re_live_value_abcdef123", PLINTH_CONTACT_TO: "owner@example.com" };
+    await queueEdit(portfolio.id, [{ path: "content/profile.ts", content: 'export const profile = { name: "Leaky" };\n' }]);
+    await runner.drain(portfolio.id);
+
+    sandbox.buildLeak = "RESEND_API_KEY";
+    const publish = await queuePublish(portfolio.id);
+    await runner.drain(portfolio.id);
+
+    const env = Buffer.from(sandbox.buildEnv.PLINTH_ENV_B64, "base64").toString();
+    expect(env).toContain('RESEND_API_KEY="re_live_value_abcdef123"');
+    const probes = Buffer.from(sandbox.buildEnv.PLINTH_PROBES_B64, "base64").toString().split("\0").filter(Boolean);
+    expect(probes).toEqual(["RESEND_API_KEY=re_live_value_abcdef123"]); // an email address isn't probed
+    const done = await reload(publish.id);
+    expect(done.status).toBe("rejected");
+    expect(failuresOf(done)).toEqual([expect.objectContaining({ source: "build", message: expect.stringContaining("RESEND_API_KEY") })]);
+    expect(JSON.stringify(done)).not.toContain("re_live_value_abcdef123");
+    expect(sandbox.main).toBe("base");
   });
 });
 

@@ -19,6 +19,10 @@ export const OPERATION_JOB_OPTIONS = { attempts: 5, backoff: { type: "exponentia
 export const TRACK_DEPLOYMENT_JOB_OPTIONS = { attempts: 8, backoff: { type: "exponential", delay: 5_000 }, removeOnComplete: true, removeOnFail: true } as const;
 export const PUSH_JOB_OPTIONS = { attempts: 8, backoff: { type: "exponential", delay: 10_000 }, removeOnComplete: true, removeOnFail: true } as const;
 
+/** Unique per request: a sync already running may have read the previous set, so a newer change always gets its own run. */
+export const credentialSyncJobId = (portfolioId: string) => `sync-credentials-${portfolioId}-${Date.now()}`;
+export const SYNC_CREDENTIALS_JOB_OPTIONS = { attempts: 6, backoff: { type: "exponential", delay: 5_000 }, removeOnComplete: true, removeOnFail: true } as const;
+
 export const IN_PROGRESS: OperationStatus[] = ["staging", "checking", "applying"];
 export const FINISHED: OperationStatus[] = ["applied", "rejected", "reverted", "failed"];
 

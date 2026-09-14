@@ -16,6 +16,7 @@ import { readFileSync } from "fs";
 import { basename, join } from "path";
 import { z } from "zod";
 import { integrationsDir } from "../catalogue/catalogue-ingest";
+import { readTarballFiles } from "../catalogue/tarball";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
 import { SANDBOX_DRIVER, type SandboxDriver } from "../sandbox/sandbox-driver";
@@ -84,7 +85,7 @@ export class IntegrationPlanner {
     try {
       switch (operation.type) {
         case "install":
-          return await this.install(operation, files, packageJson);
+          return await this.install(operation, files, packageJson, externalId);
         case "uninstall":
           return await this.uninstall(operation, files, packageJson);
         case "move":
@@ -101,7 +102,7 @@ export class IntegrationPlanner {
     }
   }
 
-  private async install(operation: Operation, files: PortfolioFiles, packageJson: string): Promise<Plan> {
+  private async install(operation: Operation, files: PortfolioFiles, packageJson: string, externalId: string): Promise<Plan> {
     const input = installInputSchema.parse(operation.input);
     const { manifest, tarball } = await this.catalogue(input.integrationId);
     const installed = (JSON.parse(files["plinth.json"]) as { integrations: unknown[] }).integrations.length;
@@ -112,6 +113,11 @@ export class IntegrationPlanner {
       return { kind: "reject", failures: [{ source: "install", message: `${manifest.name} can't be placed in "${input.slot}".` }] };
     }
 
+    const missing = await this.missingSecrets(operation.portfolioId, manifest);
+    if (missing.length) {
+      return { kind: "reject", failures: [{ source: "install", message: `Connect your ${missing.join(" and ")} before adding ${manifest.name}.` }] };
+    }
+
     const result = installIntegration(files, {
       id: manifest.id,
       package: manifest.package,
@@ -119,15 +125,17 @@ export class IntegrationPlanner {
       slot: input.slot as never,
       component: manifest.component.import,
       kind: manifest.component.kind,
-      props: input.props,
+      // Values Plinth fills in (site id, API address) join the user's props in the code, never in the database row.
+      props: { ...input.props, ...this.injectedProps(manifest, operation.portfolioId) },
     });
     if (result.outcome === "already_installed") return { kind: "noop", message: `${manifest.name} is already installed.` };
+    const routeFiles = await this.serverFiles(manifest, tarball, externalId);
 
     const spec = tarball ? `file:vendor/${basename(tarball.path)}` : manifest.version;
     const nextPackageJson = setDependency(packageJson, manifest.package, spec);
     return {
       kind: "change",
-      files: [...changes(result), { path: "package.json", content: nextPackageJson }],
+      files: [...changes(result), { path: "package.json", content: nextPackageJson }, ...routeFiles],
       tarball: tarball ? { path: `vendor/${basename(tarball.path)}`, base64: tarball.bytes.toString("base64") } : null,
       onApplied: (tx) =>
         tx.installedIntegration.upsert({
@@ -147,9 +155,14 @@ export class IntegrationPlanner {
 
     const { next, removedSpec } = removeDependency(packageJson, result.removed.package);
     const vendored = removedSpec?.startsWith("file:vendor/") ? removedSpec.slice("file:".length) : null;
+    // Server routes the integration added go with it. Keys stay until the user disconnects them.
+    const routeFiles = await this.catalogue(input.integrationId).then(
+      ({ manifest }) => manifest.files.map((file) => ({ path: file.path, content: null })),
+      () => [] as FileChange[],
+    );
     return {
       kind: "change",
-      files: [...changes(result), { path: "package.json", content: next }, ...(vendored ? [{ path: vendored, content: null }] : [])],
+      files: [...changes(result), { path: "package.json", content: next }, ...(vendored ? [{ path: vendored, content: null }] : []), ...routeFiles],
       tarball: null,
       onApplied: forget,
     };
@@ -171,6 +184,39 @@ export class IntegrationPlanner {
       onApplied: (tx) =>
         tx.installedIntegration.updateMany({ where: { portfolioId: operation.portfolioId, integrationId: manifest.id }, data: { slot: input.slot } }),
     };
+  }
+
+  private injectedProps(manifest: IntegrationManifest, portfolioId: string): Record<string, string> {
+    const values = { portfolioId, publicApiUrl: this.config.get("PUBLIC_API_URL", { infer: true }) };
+    return Object.fromEntries(Object.entries(manifest.injected).map(([prop, source]) => [prop, values[source]]));
+  }
+
+  private async missingSecrets(portfolioId: string, manifest: IntegrationManifest): Promise<string[]> {
+    const required = manifest.secrets.filter((spec) => spec.required);
+    if (required.length === 0) return [];
+    const stored = new Set(
+      (await this.prisma.credential.findMany({ where: { portfolioId, key: { in: required.map((spec) => spec.env) } }, select: { key: true } })).map((row) => row.key),
+    );
+    return required.filter((spec) => !stored.has(spec.env)).map((spec) => spec.label);
+  }
+
+  /** Route files copied out of the package tarball. A path that already exists belongs to the user and is never overwritten. */
+  private async serverFiles(manifest: IntegrationManifest, tarball: { bytes: Buffer } | null, externalId: string): Promise<FileChange[]> {
+    if (manifest.files.length === 0) return [];
+    if (!tarball) throw new Unavailable(`${manifest.name} can only be installed from its bundled package.`);
+    const contents = readTarballFiles(tarball.bytes, manifest.files.map((file) => `package/${file.source}`));
+    const out: FileChange[] = [];
+    for (const file of manifest.files) {
+      const content = contents[`package/${file.source}`];
+      if (content === undefined) throw new Unavailable(`${manifest.name}'s package is missing ${file.source}.`);
+      const exists = await this.driver.readFile(externalId, { root: "staging", path: file.path }).then(
+        () => true,
+        () => false,
+      );
+      if (exists) throw new Unavailable(`${file.path} already exists, so ${manifest.name} wasn't added. Remove or rename it first.`);
+      out.push({ path: file.path, content });
+    }
+    return out;
   }
 
   private alreadyInstalled(files: PortfolioFiles, id: string) {

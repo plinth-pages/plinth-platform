@@ -1143,10 +1143,17 @@ enters the repository, the bundle, the admin UI or the co-pilot.
 
 ### Definition of done
 - [ ] A contact form submitted on a published portfolio delivers email
-- [ ] The secret is absent from the repository, client bundle, admin responses and model context
-- [ ] An invalid key is rejected before it is saved
-- [ ] Disconnecting removes the secret everywhere
-- [ ] Visitor Counter renders correctly when its endpoint is down
+- [x] The secret is absent from the repository, client bundle, admin responses and model context
+- [x] An invalid key is rejected before it is saved
+- [x] Disconnecting removes the secret everywhere
+- [x] Visitor Counter renders correctly when its endpoint is down
+
+> **As built:** vault keys come from `CREDENTIALS_KEYS` (`id:base64key`, first or `CREDENTIALS_ACTIVE_KEY` seals).
+> Secrets reach the preview as a git-ignored, mode-600 `.env.local` (the dev server restarts when it changes) and
+> production as Vercel **sensitive** variables, synced before main moves on publish. The publish build runs with the
+> secrets and fails if an API-key value appears in `.next/static` or pre-rendered output. Verified live with a
+> stand-in Resend key (Resend refuses it, proving the key reached server code); **delivering a real email still needs
+> a real Resend key**.
 
 **Duration: 3–4 days**
 

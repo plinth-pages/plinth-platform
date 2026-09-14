@@ -5,6 +5,11 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
 import { AiService } from "./ai/ai.service";
 import { AuthModule } from "./auth/auth.module";
+import { CredentialSync, SECRET_ENVIRONMENT } from "./credentials/credential-sync";
+import { CredentialsController } from "./credentials/credentials.controller";
+import { CredentialsService } from "./credentials/credentials.service";
+import { vaultProvider } from "./credentials/vault.provider";
+import { VisitorCounterController } from "./credentials/visitor-counter.controller";
 import { CopilotController } from "./copilot/copilot.controller";
 import { CopilotPlanner } from "./copilot/copilot-planner";
 import { CopilotService } from "./copilot/copilot.service";
@@ -22,7 +27,7 @@ import { JobsController } from "./jobs/jobs.controller";
 import { PingProcessor } from "./jobs/ping.processor";
 import { PORTFOLIO_EVENTS, RedisPortfolioEventPublisher } from "./events/portfolio-events";
 import { PortfolioEventsHub } from "./events/portfolio-events.hub";
-import { DeploymentTracker, HOSTING, VERCEL_CLIENT, VercelHosting, createVercelClient } from "./hosting/hosting";
+import { DeploymentTracker, HOSTING, PRODUCTION_SECRETS, VERCEL_CLIENT, VercelHosting, createVercelClient } from "./hosting/hosting";
 import { Personaliser } from "./onboarding/personaliser";
 import { GitSync } from "./operations/git-sync";
 import { IntegrationPlanner } from "./operations/integration-planner";
@@ -79,6 +84,8 @@ class RoleModule {
     CatalogueController,
     IntegrationsController,
     CopilotController,
+    CredentialsController,
+    VisitorCounterController,
     DevEditController,
     GitHubAppSetupController,
   ],
@@ -93,6 +100,8 @@ class RoleModule {
     IntegrationsService,
     AiService,
     CopilotService,
+    vaultProvider,
+    CredentialsService,
     PortfolioEventsHub,
     ...previewApiProviders,
     {
@@ -133,6 +142,10 @@ export class ApiModule {}
     AiService,
     CopilotPlanner,
     { provide: FOLLOW_UPS, useClass: QueuedFollowUps },
+    vaultProvider,
+    CredentialSync,
+    { provide: SECRET_ENVIRONMENT, useExisting: CredentialSync },
+    { provide: PRODUCTION_SECRETS, useExisting: CredentialSync },
     GitSync,
     { provide: PENDING_PUSHES, useExisting: GitSync },
     { provide: PUSH_RETRIES, useClass: QueuedPushRetries },

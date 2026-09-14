@@ -84,8 +84,8 @@ importers:
         specifier: workspace:^
         version: link:../packages/codemod
       '@plinth-pages/integration-types':
-        specifier: file:../vendor/plinth-pages-integration-types-0.1.0.tgz
-        version: file:vendor/plinth-pages-integration-types-0.1.0.tgz
+        specifier: file:../vendor/plinth-pages-integration-types-0.2.0.tgz
+        version: file:vendor/plinth-pages-integration-types-0.2.0.tgz
       '@prisma/client':
         specifier: ^6
         version: 6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)
@@ -1498,9 +1498,9 @@ packages:
     peerDependencies:
       react: '>=18'
 
-  '@plinth-pages/integration-types@file:vendor/plinth-pages-integration-types-0.1.0.tgz':
-    resolution: {integrity: sha512-+D3ixPPyyADDNkv8/SGZNRWFhXArYErOigGR2Ra81q7aJ1Hh85ZEK5MZo1vjyfWSba2esRKFPT6Bswf38UCKdA==, tarball: file:vendor/plinth-pages-integration-types-0.1.0.tgz}
-    version: 0.1.0
+  '@plinth-pages/integration-types@file:vendor/plinth-pages-integration-types-0.2.0.tgz':
+    resolution: {integrity: sha512-v9J1sYZjfasoTpuaM2DHgHYpzWCveIWOkjpsWzNP/KZg6vJW6MoHI1mJp5glCSGQGsPUqWUPccQZNKz2fHDSSA==, tarball: file:vendor/plinth-pages-integration-types-0.2.0.tgz}
+    version: 0.2.0
 
   '@prisma/client@6.19.3':
     resolution: {integrity: sha512-mKq3jQFhjvko5LTJFHGilsuQs+W+T3Gm451NzuTDGQxwCzwXHYnIu2zGkRoW+Exq3Rob7yp2MfzSrdIiZVhrBg==}
@@ -6548,7 +6548,7 @@ snapshots:
       react: 19.1.0
       zod: 3.25.76
 
-  '@plinth-pages/integration-types@file:vendor/plinth-pages-integration-types-0.1.0.tgz':
+  '@plinth-pages/integration-types@file:vendor/plinth-pages-integration-types-0.2.0.tgz':
     dependencies:
       zod: 3.25.76
 

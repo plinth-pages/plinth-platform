@@ -278,7 +278,8 @@ function gitAuthHeader(token: string) {
 export function renderEnvFile(env: Record<string, string>): string {
   const lines = Object.entries(env).map(([key, value]) => {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) throw new Error(`Invalid environment variable name: ${key}`);
-    return `${key}=${JSON.stringify(value)}`;
+    // Next expands $VAR inside .env values; escape it so a secret containing "$" arrives unchanged.
+    return `${key}=${JSON.stringify(value).replace(/\$/g, "\\$")}`;
   });
   return ["# Managed by Plinth. Changes here are overwritten.", ...lines, ""].join("\n");
 }

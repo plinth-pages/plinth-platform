@@ -2,6 +2,8 @@
 
 import type {
   CatalogueIntegration,
+  CredentialStatus,
+  IntegrationSecretSpec,
   InstalledIntegrationSummary,
   InstalledIntegrationsResponse,
   IntegrationCategory,
@@ -14,6 +16,7 @@ import type {
   PortfolioRole,
 } from "@plinth-pages/shared";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LockIcon } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
 
 type Category = IntegrationCategory | "all";
@@ -75,6 +78,7 @@ export function IntegrationsPanel({
 }) {
   const [catalogue, setCatalogue] = useState<IntegrationsResponse | null>(null);
   const [installed, setInstalled] = useState<InstalledIntegrationsResponse | null>(null);
+  const [keys, setKeys] = useState<Record<string, CredentialStatus[]>>({});
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category>("all");
@@ -88,6 +92,19 @@ export function IntegrationsPanel({
       setError(e instanceof Error ? e.message : "Could not load integrations");
     }
   }, []);
+
+  const loadKeys = useCallback(async () => {
+    try {
+      const response = await api.credentials(portfolioId);
+      setKeys(Object.fromEntries(response.integrations.map((entry) => [entry.integrationId, entry.secrets])));
+    } catch {
+      // Keys are shown as not connected until the next refresh.
+    }
+  }, [portfolioId]);
+
+  useEffect(() => {
+    void loadKeys();
+  }, [loadKeys]);
 
   const loadInstalled = useCallback(async () => {
     try {
@@ -163,7 +180,17 @@ export function IntegrationsPanel({
         ) : null}
         <ul className="flex flex-col gap-1">
           {installed?.installed.map((entry) => (
-            <InstalledRow key={entry.id} portfolioId={portfolioId} entry={entry} pending={pendingById.get(entry.id) ?? null} category={byId.get(entry.id)?.category ?? "other"} onQueued={loadInstalled} />
+            <InstalledRow
+              key={entry.id}
+              portfolioId={portfolioId}
+              entry={entry}
+              pending={pendingById.get(entry.id) ?? null}
+              category={byId.get(entry.id)?.category ?? "other"}
+              secrets={byId.get(entry.id)?.secrets ?? []}
+              keys={keys[entry.id]}
+              onKeysChanged={setKeys}
+              onQueued={loadInstalled}
+            />
           ))}
           {installed?.pending
             .filter((change) => change.type === "install" && !installedIds.has(change.integrationId))
@@ -191,6 +218,8 @@ export function IntegrationsPanel({
               pending={pendingById.get(entry.id) ?? null}
               atLimit={atLimit}
               open={configuring === entry.id}
+              keys={keys[entry.id]}
+              onKeysChanged={setKeys}
               onToggle={() => setConfiguring((current) => (current === entry.id ? null : entry.id))}
               onQueued={() => (setConfiguring(null), void loadInstalled())}
             />
@@ -252,15 +281,22 @@ function InstalledRow({
   entry,
   pending,
   category,
+  secrets,
+  keys,
+  onKeysChanged,
   onQueued,
 }: {
   portfolioId: string;
   entry: InstalledIntegrationSummary;
   pending: PendingIntegrationChange | null;
   category: string;
+  secrets: IntegrationSecretSpec[];
+  keys: CredentialStatus[] | undefined;
+  onKeysChanged: KeysChanged;
   onQueued: () => void;
 }) {
-  const [mode, setMode] = useState<"idle" | "move" | "remove">("idle");
+  const [mode, setMode] = useState<"idle" | "move" | "remove" | "keys">("idle");
+  const keysMissing = secrets.some((spec) => spec.required && !keys?.find((status) => status.env === spec.env)?.connected);
   const [slot, setSlot] = useState(entry.slot);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -287,12 +323,18 @@ function InstalledRow({
           <span className="block truncate text-xs font-medium">{entry.name}</span>
           <span className="block truncate text-[11px] text-stone-500">
             {slotLabel(entry.slot)} · <span className="font-mono">{entry.version}</span>
+            {keysMissing ? <span className="text-amber-700 dark:text-amber-400"> · keys needed</span> : null}
           </span>
         </span>
         {pending ? (
           <PendingBadge change={pending} />
         ) : mode === "idle" ? (
           <span className="flex shrink-0 gap-1">
+            {secrets.length ? (
+              <button onClick={() => setMode("keys")} className={button}>
+                Keys
+              </button>
+            ) : null}
             {entry.allowedSlots.length > 1 ? (
               <button onClick={() => setMode("move")} className={button}>
                 Move
@@ -323,9 +365,20 @@ function InstalledRow({
         </div>
       ) : null}
 
+      {!pending && mode === "keys" ? (
+        <div className="flex flex-col gap-2 pl-[42px]">
+          <KeysSection portfolioId={portfolioId} integrationId={entry.id} name={entry.name} secrets={secrets} keys={keys} onChanged={onKeysChanged} allowDisconnect />
+          <button onClick={() => setMode("idle")} className="w-fit px-0.5 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
+            Done
+          </button>
+        </div>
+      ) : null}
+
       {!pending && mode === "remove" ? (
         <div className="flex flex-col gap-1.5 pl-[42px]">
-          <p className="text-[11px] text-stone-600 dark:text-stone-400">Removes the component, its import and the package from your draft.</p>
+          <p className="text-[11px] text-stone-600 dark:text-stone-400">
+            Removes {entry.name} from your site.{secrets.length ? " Your keys stay saved until you disconnect them." : ""}
+          </p>
           <span className="flex gap-1.5">
             <button disabled={busy} onClick={() => void run(() => api.uninstallIntegration(portfolioId, entry.id))} className="rounded-md bg-red-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-800 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none disabled:opacity-50">
               Remove {entry.name}
@@ -350,6 +403,8 @@ function AvailableRow({
   pending,
   atLimit,
   open,
+  keys,
+  onKeysChanged,
   onToggle,
   onQueued,
 }: {
@@ -361,6 +416,8 @@ function AvailableRow({
   pending: PendingIntegrationChange | null;
   atLimit: boolean;
   open: boolean;
+  keys: CredentialStatus[] | undefined;
+  onKeysChanged: KeysChanged;
   onToggle: () => void;
   onQueued: () => void;
 }) {
@@ -372,6 +429,7 @@ function AvailableRow({
           <span className="flex flex-wrap items-center gap-x-1.5 text-xs font-medium">
             {entry.name}
             {recommended ? <span className="rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">For {roleLabel(role)}s</span> : null}
+            {entry.secrets.length ? <span className="rounded bg-stone-100 px-1 text-[10px] font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-300">Uses your own key</span> : null}
           </span>
           <span className="block text-[11px] text-stone-500">{entry.description}</span>
         </span>
@@ -385,7 +443,7 @@ function AvailableRow({
           </button>
         )}
       </div>
-      {open && !installed && !pending ? <InstallForm portfolioId={portfolioId} entry={entry} onQueued={onQueued} /> : null}
+      {open && !installed && !pending ? <InstallForm portfolioId={portfolioId} entry={entry} keys={keys} onKeysChanged={onKeysChanged} onQueued={onQueued} /> : null}
     </li>
   );
 }
@@ -394,7 +452,20 @@ function initialProps(specs: IntegrationPropSpec[]): Record<string, PropValue> {
   return Object.fromEntries(specs.map((spec) => [spec.name, spec.default ?? (spec.type === "boolean" ? false : "")]));
 }
 
-function InstallForm({ portfolioId, entry, onQueued }: { portfolioId: string; entry: CatalogueIntegration; onQueued: () => void }) {
+function InstallForm({
+  portfolioId,
+  entry,
+  keys,
+  onKeysChanged,
+  onQueued,
+}: {
+  portfolioId: string;
+  entry: CatalogueIntegration;
+  keys: CredentialStatus[] | undefined;
+  onKeysChanged: KeysChanged;
+  onQueued: () => void;
+}) {
+  const keysReady = entry.secrets.every((spec) => !spec.required || keys?.find((status) => status.env === spec.env)?.connected);
   const [slot, setSlot] = useState(entry.defaultSlot);
   const [props, setProps] = useState<Record<string, PropValue>>(() => initialProps(entry.props));
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -459,6 +530,9 @@ function InstallForm({ portfolioId, entry, onQueued }: { portfolioId: string; en
       }}
       className="flex flex-col gap-3 pb-1 pl-[42px]"
     >
+      {entry.secrets.length ? (
+        <KeysSection portfolioId={portfolioId} integrationId={entry.id} name={entry.name} secrets={entry.secrets} keys={keys} onChanged={onKeysChanged} allowDisconnect={false} />
+      ) : null}
       <label className="flex flex-col gap-1">
         <span className="text-[11px] font-medium text-stone-700 dark:text-stone-300">Place it</span>
         <select value={slot} onChange={(e) => setSlot(e.target.value)} className={field}>
@@ -481,12 +555,185 @@ function InstallForm({ portfolioId, entry, onQueued }: { portfolioId: string; en
       </p>
       {error ? <p className="text-[11px] text-red-800 dark:text-red-300">{error}</p> : null}
       <span className="flex items-center gap-2">
-        <button type="submit" disabled={missing || validating || !valid || submitting} className={primary}>
+        <button type="submit" disabled={missing || validating || !valid || submitting || !keysReady} title={keysReady ? undefined : "Connect the keys above first"} className={primary}>
           {submitting ? "Queuing…" : `Install ${entry.name}`}
         </button>
         {validating && !missing ? <span className="text-[11px] text-stone-500">Checking…</span> : null}
       </span>
     </form>
+  );
+}
+
+type KeysChanged = (update: (current: Record<string, CredentialStatus[]>) => Record<string, CredentialStatus[]>) => void;
+
+/**
+ * Connect, replace or disconnect an integration's keys. Values are typed here once, verified with the provider by the
+ * server, stored encrypted, and never shown again — only a masked hint comes back.
+ */
+function KeysSection({
+  portfolioId,
+  integrationId,
+  name,
+  secrets,
+  keys,
+  onChanged,
+  allowDisconnect,
+}: {
+  portfolioId: string;
+  integrationId: string;
+  name: string;
+  secrets: IntegrationSecretSpec[];
+  keys: CredentialStatus[] | undefined;
+  onChanged: KeysChanged;
+  allowDisconnect: boolean;
+}) {
+  const connected = secrets.every((spec) => !spec.required || keys?.find((status) => status.env === spec.env)?.connected);
+  const [editing, setEditing] = useState(!connected);
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [fields, setFields] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState<"save" | "disconnect" | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const apply = (response: { integrations: { integrationId: string; secrets: CredentialStatus[] }[] }) =>
+    onChanged((current) => ({ ...current, ...Object.fromEntries(response.integrations.map((entry) => [entry.integrationId, entry.secrets])) }));
+
+  async function save() {
+    setBusy("save");
+    setError(null);
+    setFields({});
+    try {
+      apply(await api.connectCredentials(portfolioId, integrationId, { values }));
+      setValues({});
+      setEditing(false);
+    } catch (e) {
+      if (e instanceof ApiError && e.body?.fields) setFields(e.body.fields as Record<string, string>);
+      setError(e instanceof Error ? e.message : "The keys couldn't be saved");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function disconnect() {
+    setBusy("disconnect");
+    setError(null);
+    try {
+      apply(await api.disconnectCredentials(portfolioId, integrationId));
+      setConfirming(false);
+      setEditing(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "The keys couldn't be disconnected");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const pendingProduction = keys?.some((status) => status.connected && !status.syncedToProduction);
+
+  return (
+    <div className="flex flex-col gap-2.5 rounded-lg bg-white p-2.5 ring-1 ring-stone-200 dark:bg-stone-950 dark:ring-stone-800">
+      <div className="flex items-center gap-1.5">
+        <LockIcon className="h-3.5 w-3.5 text-stone-500" />
+        <span className="text-[11px] font-medium text-stone-700 dark:text-stone-300">Your keys</span>
+        {connected && !editing ? <span className="ml-auto text-[11px] text-emerald-700 dark:text-emerald-400">✓ Connected</span> : null}
+      </div>
+
+      {!editing ? (
+        <>
+          <ul className="flex flex-col gap-1">
+            {secrets.map((spec) => {
+              const status = keys?.find((entry) => entry.env === spec.env);
+              return (
+                <li key={spec.env} className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="text-stone-600 dark:text-stone-400">{spec.label}</span>
+                  <span className="font-mono text-stone-700 dark:text-stone-300">{status?.hint ?? "not set"}</span>
+                </li>
+              );
+            })}
+          </ul>
+          {pendingProduction ? <p className="text-[11px] text-stone-500">Active in your preview now, and on your live site after you next publish.</p> : null}
+          <span className="flex flex-wrap items-center gap-1.5">
+            <button type="button" onClick={() => setEditing(true)} className={button}>
+              Replace
+            </button>
+            {allowDisconnect ? (
+              confirming ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void disconnect()}
+                    className="rounded-md bg-red-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50"
+                  >
+                    {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                  <button type="button" onClick={() => setConfirming(false)} className="px-1.5 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button type="button" onClick={() => setConfirming(true)} className="px-1.5 text-xs text-red-700 hover:underline dark:text-red-400">
+                  Disconnect…
+                </button>
+              )
+            ) : null}
+          </span>
+          {confirming ? <p className="text-[11px] text-stone-600 dark:text-stone-400">Deletes the keys from Plinth, your preview and your live site. {name} stops working until you connect again.</p> : null}
+        </>
+      ) : (
+        <>
+          {secrets.map((spec) => {
+            const status = keys?.find((entry) => entry.env === spec.env);
+            const id = `secret-${integrationId}-${spec.env}`;
+            return (
+              <label key={spec.env} htmlFor={id} className="flex flex-col gap-1">
+                <span className="flex items-center justify-between text-[11px] font-medium text-stone-700 dark:text-stone-300">
+                  {spec.label}
+                  {spec.helpUrl ? (
+                    <a href={spec.helpUrl} target="_blank" rel="noopener noreferrer" className="font-normal text-stone-500 underline decoration-stone-300 underline-offset-2 hover:text-stone-900">
+                      Get one ↗
+                    </a>
+                  ) : null}
+                </span>
+                <input
+                  id={id}
+                  type={spec.kind === "api_key" ? "password" : spec.kind === "email" ? "email" : "text"}
+                  value={values[spec.env] ?? ""}
+                  onChange={(e) => setValues((current) => ({ ...current, [spec.env]: e.target.value }))}
+                  placeholder={status?.connected ? `Saved (${status.hint}) — leave blank to keep` : spec.placeholder}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={Boolean(fields[spec.env])}
+                  className={`${field} font-mono ${fields[spec.env] ? "border-red-400 dark:border-red-700" : ""}`}
+                />
+                {fields[spec.env] ? (
+                  <span className="text-[11px] text-red-800 dark:text-red-300">{fields[spec.env]}</span>
+                ) : spec.description ? (
+                  <span className="text-[11px] text-stone-500">{spec.description}</span>
+                ) : null}
+              </label>
+            );
+          })}
+          <p className="text-[11px] leading-relaxed text-stone-500">Encrypted and used only by your site&apos;s server. Never added to your code or shown again.</p>
+          {error && !Object.keys(fields).length ? <p className="text-[11px] text-red-800 dark:text-red-300">{error}</p> : null}
+          <span className="flex items-center gap-1.5">
+            <button
+              type="button"
+              disabled={busy !== null || !secrets.some((spec) => values[spec.env]?.trim())}
+              onClick={() => void save()}
+              className={primary}
+            >
+              {busy === "save" ? "Checking…" : "Verify & save"}
+            </button>
+            {connected ? (
+              <button type="button" onClick={() => (setEditing(false), setValues({}), setFields({}))} className="px-1.5 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
+                Cancel
+              </button>
+            ) : null}
+          </span>
+        </>
+      )}
+    </div>
   );
 }
 

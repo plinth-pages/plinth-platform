@@ -77,6 +77,7 @@ model Portfolio {
   deployments           Deployment[]
   installedIntegrations InstalledIntegration[]
   copilotMessages       CopilotMessage[]
+  visitorCount          VisitorCount?
   credentials           Credential[]
   conversations         Conversation[]
 
@@ -329,19 +330,40 @@ model CopilotMessage {
   @@map("copilot_messages")
 }
 
+/// A user secret, sealed with AES-256-GCM (credentials/vault.ts). Plaintext exists only in memory, in the sandbox
+/// .env.local, and as a sensitive Vercel environment variable.
 model Credential {
-  id          String   @id @default(cuid())
-  portfolioId String   @map("portfolio_id")
-  key         String // environment variable name, e.g. RESEND_API_KEY
-  ciphertext  String
-  iv          String
-  keyId       String   @map("key_id")
-  createdAt   DateTime @default(now()) @map("created_at")
+  id            String    @id @default(cuid())
+  portfolioId   String    @map("portfolio_id")
+  key           String // environment variable name, e.g. RESEND_API_KEY
+  /// The integration that declared it.
+  integrationId String    @map("integration_id")
+  ciphertext    String
+  iv            String
+  keyId         String    @map("key_id")
+  /// Safe to display, e.g. "•••• 4f2a".
+  hint          String
+  verifiedAt    DateTime  @map("verified_at")
+  /// When production (Vercel) last received the current value; null until the next publish.
+  syncedAt      DateTime? @map("synced_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@unique([portfolioId, key])
   @@map("credentials")
+}
+
+/// Visitor Counter integration: one row per portfolio. The documented exception to "the portfolio doesn't depend on us".
+model VisitorCount {
+  portfolioId String   @id @map("portfolio_id")
+  count       Int      @default(0)
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@map("visitor_counts")
 }
 
 model Conversation {

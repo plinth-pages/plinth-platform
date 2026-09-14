@@ -38,7 +38,7 @@
     "@nestjs/jwt": "^11",
     "@nestjs/platform-express": "^11",
     "@plinth-pages/codemod": "workspace:^",
-    "@plinth-pages/integration-types": "file:../vendor/plinth-pages-integration-types-0.1.0.tgz",
+    "@plinth-pages/integration-types": "file:../vendor/plinth-pages-integration-types-0.2.0.tgz",
     "@prisma/client": "^6",
     "bullmq": "^5",
     "cookie-parser": "^1",

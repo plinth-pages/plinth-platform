@@ -83,12 +83,42 @@ export class VercelClient {
     return toDeployment(json!);
   }
 
+  /**
+   * The address production is served on: a verified custom domain if the owner added one, else `<project>.vercel.app`.
+   * Deployment aliases also include team-scoped URLs that Vercel protects behind a login, so they aren't used.
+   */
+  async productionDomain(projectId: string): Promise<string | null> {
+    const json = await this.request<{ domains?: { name: string; verified?: boolean; gitBranch?: string | null; redirect?: string | null }[] }>(
+      "GET",
+      `/v9/projects/${encodeURIComponent(projectId)}/domains`,
+    );
+    const domains = (json?.domains ?? []).filter((domain) => domain.verified !== false && !domain.gitBranch && !domain.redirect);
+    const chosen = domains.find((domain) => !domain.name.endsWith(".vercel.app")) ?? domains.find((domain) => domain.name.endsWith(".vercel.app"));
+    return chosen ? `https://${chosen.name}` : null;
+  }
+
+  /** The project's environment variables: names and ids only (sensitive values can't be read back). */
+  async listEnv(projectId: string): Promise<{ id: string; key: string }[]> {
+    const json = await this.request<{ envs?: { id: string; key: string }[] }>("GET", `/v9/projects/${encodeURIComponent(projectId)}/env`);
+    return (json?.envs ?? []).map((env) => ({ id: env.id, key: env.key }));
+  }
+
+  /** Creates or replaces a production variable as sensitive: Vercel encrypts it and never shows it again. */
+  async upsertSensitiveEnv(projectId: string, key: string, value: string): Promise<void> {
+    await this.request("POST", `/v10/projects/${encodeURIComponent(projectId)}/env?upsert=true`, { key, value, type: "sensitive", target: ["production", "preview"] });
+  }
+
+  async deleteEnv(projectId: string, envId: string): Promise<void> {
+    await this.request("DELETE", `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(envId)}`, undefined, [404]);
+  }
+
   async getDeployment(id: string): Promise<VercelDeployment> {
     return toDeployment((await this.request<DeploymentJson>("GET", `/v13/deployments/${encodeURIComponent(id)}`))!);
   }
 
   private async request<T>(method: string, path: string, body?: unknown, tolerated: number[] = []): Promise<T | null> {
-    const url = new URL(`${VERCEL_API}${path}`);
+    const url = new URL(`${VERCEL_API}${path.split("?")[0]}`);
+    new URLSearchParams(path.split("?")[1] ?? "").forEach((value, key) => url.searchParams.set(key, value));
     if (this.teamId) url.searchParams.set("teamId", this.teamId);
     const response = await this.fetchImpl(url, {
       method,

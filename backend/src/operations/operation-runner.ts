@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { Operation, OperationStatus, Prisma, Sandbox } from "@prisma/client";
 import type { OperationFailure } from "@plinth-pages/shared";
 import { posix } from "path";
@@ -14,6 +14,8 @@ import { CopilotPlanner, copilotInputSchema, parseContext } from "../copilot/cop
 import { CONTEXT_DIRECTORIES, MAX_CONTEXT_BYTES } from "../copilot/copilot-plan";
 import { commitSubject, editInputSchema } from "./edit-input";
 import { OperationAborted } from "./operation-errors";
+import { SECRET_ENVIRONMENT, type SecretEnvironment } from "../credentials/credential-sync";
+import { renderEnvFile } from "../sandbox/e2b.driver";
 import { IntegrationPlanner, installInputSchema, moveInputSchema, uninstallInputSchema, type FileChange, type FollowUp, type Plan } from "./integration-planner";
 import {
   EXIT,
@@ -88,6 +90,7 @@ export class OperationRunner {
     private readonly integrations: IntegrationPlanner,
     private readonly copilot: CopilotPlanner,
     @Inject(FOLLOW_UPS) private readonly followUps: FollowUpQueue,
+    @Optional() @Inject(SECRET_ENVIRONMENT) private readonly secrets: SecretEnvironment | null = null,
   ) {}
 
   async drain(portfolioId: string): Promise<DrainOutcome> {
@@ -289,13 +292,16 @@ export class OperationRunner {
 
       // Pre-flight: the slot contract and a production build of exactly this commit.
       await this.transition(operation, "checking", { diff: `${aheadBy} change${aheadBy === 1 ? "" : "s"} to publish` });
-      const built = await this.exec(externalId, "staging", buildScript(), {}, STEP_TIMEOUT.build);
+      const built = await this.exec(externalId, "staging", buildScript(), await this.buildSecrets(operation.portfolioId), STEP_TIMEOUT.build);
       const parts = sections(built.stdout);
       const checkMs = Number(reported(built.stdout, "CHECK_MS")) || null;
       const buildCode = Number(reported(built.stdout, "BUILD_CODE") ?? 1);
       const failures = [
         ...parsePlinthCheck(parts.plinth ?? "", parts["plinth-err"] ?? "", Number(reported(built.stdout, "PLINTH_CODE") ?? 1)),
         ...(buildCode === 0 ? [] : parseBuildOutput(parts.build ?? built.stderr)),
+        ...(reported(built.stdout, "SECRET_LEAK")
+          ? [{ source: "build" as const, message: `A secret (${reported(built.stdout, "SECRET_LEAK")}) appeared in the files visitors download, so nothing was published. Make sure it's only read in server code.` }]
+          : []),
       ];
       if (failures.length) return this.reject(operation, externalId, began, failures, checkMs, `${aheadBy} change${aheadBy === 1 ? "" : "s"} not published`);
 
@@ -333,6 +339,19 @@ export class OperationRunner {
     // The database may still say running; have the lifecycle rebuild or resume it straight away.
     if (error instanceof SandboxNotRunningError) await this.waker.wake(operation.portfolioId).catch(() => undefined);
     await this.finish(operation, "failed", began, { error: message });
+  }
+
+  /** The secrets for a production build, and the values to look for in its public output. Values never enter a log. */
+  private async buildSecrets(portfolioId: string): Promise<Record<string, string>> {
+    const env = (await this.secrets?.forPortfolio(portfolioId)) ?? {};
+    const entries = Object.entries(env);
+    if (entries.length === 0) return {};
+    // Short values and email addresses can legitimately appear on a page (an inbox shown on the contact section).
+    const probes = entries.filter(([, value]) => value.length >= 12 && !value.includes("@")).map(([key, value]) => `${key}=${value}`);
+    return {
+      PLINTH_ENV_B64: Buffer.from(renderEnvFile(env)).toString("base64"),
+      ...(probes.length ? { PLINTH_PROBES_B64: Buffer.from(probes.join("\0") + "\0").toString("base64") } : {}),
+    };
   }
 
   private async queueFollowUps(operation: Operation, followUps: FollowUp[] | undefined) {

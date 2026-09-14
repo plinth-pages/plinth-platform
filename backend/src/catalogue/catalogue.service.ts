@@ -131,6 +131,8 @@ export function toCatalogue(row: Integration, manifest: IntegrationManifest): Ca
     recommendedFor: manifest.recommendedFor,
     homepage: manifest.homepage ?? null,
     source: row.tarball ? "vendored" : "npm",
+    secrets: manifest.secrets,
+    addsServerRoute: manifest.files.length > 0,
   };
 }
 

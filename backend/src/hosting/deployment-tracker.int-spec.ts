@@ -25,6 +25,11 @@ class FakeVercel {
     this.created.push({ project, org, repo, sha });
     return this.deployment("dpl_created", "QUEUED");
   }
+  /** null: fall back to the deployment's aliases, as when Vercel doesn't list a domain yet. */
+  productionDomainName: string | null = null;
+  async productionDomain() {
+    return this.productionDomainName;
+  }
   async getDeployment(id: string) {
     const state = this.states.length > 1 ? this.states.shift()! : (this.states[0] ?? "QUEUED");
     return this.deployment(id, state);
