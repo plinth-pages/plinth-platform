@@ -67,7 +67,7 @@ export class AuthController {
   ) {
     const adminUrl = this.config.get("ADMIN_URL", { infer: true });
     const fail = (message: string) =>
-      res.redirect(`${adminUrl}/?auth_error=${encodeURIComponent(message)}`);
+      res.redirect(`${adminUrl}/login?auth_error=${encodeURIComponent(message)}`);
 
     const expected: string | undefined = req.cookies?.[OAUTH_STATE_COOKIE];
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });

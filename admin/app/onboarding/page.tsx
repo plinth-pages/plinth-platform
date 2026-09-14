@@ -50,7 +50,7 @@ function Onboarding() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.me().then(({ user }) => setUser(user), (e) => e instanceof ApiError && e.status === 401 && router.replace("/"));
+    api.me().then(({ user }) => setUser(user), (e) => e instanceof ApiError && e.status === 401 && router.replace("/login"));
     const existing = params.get("portfolio");
     if (existing) {
       api.portfolio(existing).then(({ portfolio }) => portfolio.theme && setTheme(portfolio.theme), () => undefined);

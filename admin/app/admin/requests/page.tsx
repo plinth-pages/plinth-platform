@@ -29,7 +29,7 @@ export default function IntegrationRequestsPage() {
       .adminIntegrationRequests()
       .then(setData)
       .catch((e) => {
-        if (e instanceof ApiError && e.status === 401) router.replace("/");
+        if (e instanceof ApiError && e.status === 401) router.replace("/login");
         else setError(e instanceof ApiError && e.status === 403 ? "Only admins can see integration requests." : e instanceof Error ? e.message : "Could not load requests");
       });
   }, [router]);

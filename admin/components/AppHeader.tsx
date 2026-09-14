@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { Brand } from "./ui/Brand";
+import { buttonClass } from "./ui/Button";
 
 export function Avatar({ user, size = "h-8 w-8" }: { user: SessionUser; size?: string }) {
   return user.avatarUrl ? (
@@ -52,7 +53,7 @@ export function AppHeader({ user }: { user: SessionUser }) {
               Pro
             </Link>
           ) : (
-            <Link href="/billing" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white shadow-card hover:bg-brand-700">
+            <Link href="/billing" className={buttonClass({ variant: "brand", size: "sm" })}>
               Upgrade
             </Link>
           )}

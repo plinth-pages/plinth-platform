@@ -30,7 +30,7 @@ export function Editor({ portfolioId }: { portfolioId: string }) {
       .portfolio(portfolioId)
       .then(({ portfolio }) => setPortfolio(portfolio))
       .catch((e) => {
-        if (e instanceof ApiError && e.status === 401) router.replace("/");
+        if (e instanceof ApiError && e.status === 401) router.replace("/login");
         else setError(e instanceof Error ? e.message : "Could not open this portfolio");
       });
   }, [portfolioId, router]);

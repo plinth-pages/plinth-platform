@@ -16,7 +16,7 @@ export default function DashboardPage() {
       .me()
       .then(({ user }) => setUser(user))
       .catch((error) => {
-        if (error instanceof ApiError && error.status === 401) router.replace("/");
+        if (error instanceof ApiError && error.status === 401) router.replace("/login");
       });
   }, [router]);
 

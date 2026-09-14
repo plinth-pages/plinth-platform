@@ -28,7 +28,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       .me()
       .then(({ user }) => (user.role === "admin" ? setUser(user) : router.replace("/dashboard")))
       .catch((error) => {
-        if (error instanceof ApiError && error.status === 401) router.replace("/");
+        if (error instanceof ApiError && error.status === 401) router.replace("/login");
       });
   }, [router]);
 
