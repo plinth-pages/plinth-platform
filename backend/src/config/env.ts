@@ -79,6 +79,10 @@ const envSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
+    // Email sign-in (Supabase Auth). SUPABASE_URL defaults to the project the database belongs to.
+    SUPABASE_URL: z.string().url().optional(),
+    SUPABASE_ANON_KEY: z.string().optional(),
+    SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     /** The Groq model behind the free tier. */
     GROQ_MODEL: z.string().optional(),
     COPILOT_DAILY_MESSAGES: z.coerce.number().int().positive().default(40),

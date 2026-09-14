@@ -7,7 +7,7 @@ import { ApiError, api } from "@/lib/api";
 
 /**
  * Where sign-in lands. A new user goes to onboarding, someone whose portfolio is still being set up goes back to its
- * progress, and a returning user goes straight into their editor.
+ * progress, and a returning user goes to their dashboard — never straight into the editor, which starts a sandbox.
  */
 export default function StartPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function StartPage() {
         if (setup && !setup.ready && setup.steps.some((step) => step.id === "personalise" && step.state === "active")) {
           return router.replace(`/onboarding?portfolio=${first.id}`);
         }
-        router.replace(portfolios.length === 1 ? `/portfolios/${first.id}` : "/dashboard");
+        router.replace("/dashboard");
       } catch (error) {
         router.replace(error instanceof ApiError && error.status === 401 ? "/" : "/dashboard");
       }

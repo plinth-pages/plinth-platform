@@ -1,4 +1,4 @@
-import { Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "@prisma/client";
 import type { MeResponse } from "@plinth-pages/shared";
@@ -6,6 +6,7 @@ import { randomBytes, timingSafeEqual } from "crypto";
 import type { CookieOptions, Request, Response } from "express";
 import type { Env } from "../config/env";
 import { AuthService } from "./auth.service";
+import { SupabaseAuth } from "./supabase-auth";
 import { CurrentUser } from "./roles";
 import { OAUTH_STATE_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS } from "./session";
 import { SessionGuard } from "./session.guard";
@@ -15,7 +16,30 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly config: ConfigService<Env, true>,
+    private readonly supabase: SupabaseAuth,
   ) {}
+
+  /** Creates a confirmed account and signs it in immediately: no confirmation email. */
+  @Post("register")
+  async register(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const user = await this.supabase.register(body);
+    res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
+    return { user: this.auth.toSessionUser(user), next: "/onboarding" };
+  }
+
+  @Post("login")
+  @HttpCode(200)
+  async login(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const user = await this.supabase.login(body);
+    res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
+    return { user: this.auth.toSessionUser(user), next: "/start" };
+  }
+
+  /** Which sign-in methods this server offers. */
+  @Get("methods")
+  methods() {
+    return { email: this.supabase.configured, github: true };
+  }
 
   private cookieOptions(maxAgeSeconds: number): CookieOptions {
     return {

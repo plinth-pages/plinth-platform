@@ -143,7 +143,8 @@ const literal = (value: unknown) => JSON.stringify(value, null, 2);
 
 export interface PersonalisationInput {
   role: PortfolioRole;
-  githubLogin: string;
+  /** null for accounts that didn't sign in with GitHub. */
+  githubLogin: string | null;
   displayName: string | null;
   github: GitHubProfile | null;
   theme: OnboardingTheme | null;
@@ -157,8 +158,8 @@ export interface PersonalisationInput {
 export function renderPersonalisation(input: PersonalisationInput): { path: string; content: string }[] {
   const role = ROLE_CONTENT[input.role];
   const github = input.github;
-  const name = (github?.name || input.displayName || input.githubLogin).trim();
-  const githubUrl = `https://github.com/${input.githubLogin}`;
+  const name = (github?.name || input.displayName || input.githubLogin || "Your name").trim();
+  const githubUrl = input.githubLogin ? `https://github.com/${input.githubLogin}` : null;
   const website = github?.blog ? (/^https?:\/\//.test(github.blog) ? github.blog : `https://${github.blog}`) : null;
 
   const profile = {
@@ -168,10 +169,10 @@ export function renderPersonalisation(input: PersonalisationInput): { path: stri
     ...(github?.avatarUrl ? { avatarUrl: github.avatarUrl } : {}),
     email: github?.email ?? "",
     ...(github?.location ? { location: github.location } : {}),
-    cta: { label: role.cta, href: github?.email ? `mailto:${github.email}` : website ?? githubUrl },
+    cta: { label: role.cta, href: github?.email ? `mailto:${github.email}` : (website ?? githubUrl ?? "#contact") },
     about: role.about(name),
     stats: role.stats(github),
-    socials: [{ platform: "github", url: githubUrl }, ...(website ? [{ platform: "website", url: website }] : [])],
+    socials: [...(githubUrl ? [{ platform: "github", url: githubUrl }] : []), ...(website ? [{ platform: "website", url: website }] : [])],
     contactNote: role.contactNote,
   };
 

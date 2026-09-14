@@ -58,7 +58,7 @@ function Onboarding() {
     }
     // Someone who already has a portfolio never starts over.
     api.portfolios().then(({ portfolios }) => {
-      if (portfolios[0]) router.replace(portfolios[0].status === "ready" ? `/portfolios/${portfolios[0].id}` : `/onboarding?portfolio=${portfolios[0].id}`);
+      if (portfolios[0]) router.replace(portfolios[0].status === "ready" ? "/dashboard" : `/onboarding?portfolio=${portfolios[0].id}`);
     }, () => undefined);
   }, [params, router]);
 

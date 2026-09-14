@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { SupabaseAuth } from "./supabase-auth";
 import { ConfigService } from "@nestjs/config";
 import { JwtModule } from "@nestjs/jwt";
 import type { Env } from "../config/env";
@@ -19,7 +20,7 @@ import { SessionGuard } from "./session.guard";
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, SessionGuard, RolesGuard],
+  providers: [SupabaseAuth, AuthService, SessionGuard, RolesGuard],
   exports: [AuthService, SessionGuard, RolesGuard],
 })
 export class AuthModule {}

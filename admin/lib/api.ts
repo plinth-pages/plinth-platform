@@ -64,6 +64,11 @@ export const api = {
   signInUrl: `${API_URL}/auth/github`,
   githubAppSetupUrl: `${API_URL}/dev/github-app/new`,
   me: () => request<MeResponse>("/auth/me"),
+  authMethods: () => request<{ email: boolean; github: boolean }>("/auth/methods"),
+  /** Creates the account and signs in immediately. `next` is where to go. */
+  register: (body: { name: string; email: string; password: string }) =>
+    request<MeResponse & { next: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
+  login: (body: { email: string; password: string }) => request<MeResponse & { next: string }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminPing: () => request<AdminPingResponse>("/admin/ping"),
   enqueuePing: () => request<EnqueuePingResponse>("/dev/jobs/ping", { method: "POST" }),

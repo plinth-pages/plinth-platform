@@ -34,11 +34,11 @@ export class Personaliser {
     if (!portfolio || portfolio.status !== "ready") return "skipped";
     if (portfolio.personaliseOperationId) return "exists";
 
-    const github = await this.githubProfile(portfolio.user.githubLogin);
+    const github = portfolio.user.githubId ? await this.githubProfile(portfolio.user.githubLogin) : null;
     const theme = onboardingThemeSchema.safeParse(portfolio.theme);
     const files = renderPersonalisation({
       role: portfolio.role,
-      githubLogin: portfolio.user.githubLogin,
+      githubLogin: portfolio.user.githubId ? portfolio.user.githubLogin : null,
       displayName: portfolio.user.name,
       github,
       theme: theme.success ? theme.data : null,

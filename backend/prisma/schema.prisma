@@ -20,7 +20,11 @@ enum UserRole {
 
 model User {
   id          String   @id @default(cuid())
-  githubId    String   @unique @map("github_id")
+  /// Set for GitHub sign-in.
+  githubId    String?  @unique @map("github_id")
+  /// Set for email sign-in (Supabase Auth user id).
+  supabaseId  String?  @unique @map("supabase_id")
+  email       String?
   githubLogin String   @map("github_login")
   name        String?
   avatarUrl   String?  @map("avatar_url")
