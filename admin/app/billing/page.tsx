@@ -98,7 +98,11 @@ function Billing() {
               "Fast model (GPT-OSS 120B)",
               "Integrations, preview and publishing",
             ]}
-          />
+          >
+            <button disabled className="flex h-12 w-full items-center justify-center rounded-xl border border-stone-200 px-5 text-sm font-medium text-stone-500 dark:border-stone-800">
+              {pro ? "Included with Pro" : "Your current plan"}
+            </button>
+          </PlanCard>
           <PlanCard
             name="Pro"
             price={`$${billing.priceUsd}`}
@@ -119,7 +123,7 @@ function Billing() {
                     {billing.status === "past_due" ? " · payment is being retried" : ""}
                   </p>
                 ) : null}
-                <button onClick={() => void go(api.billingPortal)} disabled={busy} className="h-11 rounded-lg border border-stone-300 bg-white text-sm font-medium hover:bg-stone-50 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900">
+                <button onClick={() => void go(api.billingPortal)} disabled={busy} className="flex h-12 w-full items-center justify-center rounded-xl border border-stone-300 bg-white px-5 text-sm font-medium hover:bg-stone-50 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-900">
                   Manage subscription
                 </button>
               </div>
@@ -128,9 +132,9 @@ function Billing() {
                 onClick={() => void go(api.checkout)}
                 disabled={busy || confirming || !billing.checkoutAvailable}
                 title={billing.checkoutAvailable ? undefined : "Billing isn't set up on this server yet"}
-                className="h-11 rounded-lg bg-brand-600 text-sm font-semibold text-white shadow-card hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
+                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-600 px-5 text-[15px] font-semibold text-white shadow-card transition-colors hover:bg-brand-700 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:outline-none disabled:opacity-60"
               >
-                {busy ? "Opening checkout…" : confirming ? "Confirming…" : `Upgrade to Pro — $${billing.priceUsd}/month`}
+                {busy ? "Opening checkout…" : confirming ? "Confirming…" : "Upgrade to Pro"}
               </button>
             )}
           </PlanCard>
@@ -164,7 +168,7 @@ function PlanCard({ name, price, features, current, highlight, children }: { nam
           </li>
         ))}
       </ul>
-      {children ? <div className="mt-auto">{children}</div> : null}
+      {children ? <div className="mt-auto pt-2">{children}</div> : null}
     </section>
   );
 }
