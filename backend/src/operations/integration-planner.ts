@@ -34,8 +34,15 @@ export interface FileChange {
   content: string | null;
 }
 
+/** An operation to queue once this one has applied, e.g. an install the co-pilot asked for. */
+export interface FollowUp {
+  type: "install" | "uninstall" | "move";
+  input: Record<string, unknown>;
+  summary: string;
+}
+
 export type Plan =
-  | { kind: "noop"; message: string }
+  | { kind: "noop"; message: string; followUps?: FollowUp[] }
   | { kind: "reject"; failures: OperationFailure[] }
   | {
       kind: "change";
@@ -44,6 +51,7 @@ export type Plan =
       tarball: { path: string; base64: string } | null;
       /** Keeps the installed-integrations table in step once the change is applied. */
       onApplied: ((tx: Prisma.TransactionClient) => Promise<unknown>) | null;
+      followUps?: FollowUp[];
     };
 
 /** Tarballs travel to the sandbox base64-encoded in one environment variable, which Linux caps at 128 KiB. */

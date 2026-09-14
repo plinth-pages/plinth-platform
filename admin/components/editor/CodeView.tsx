@@ -74,16 +74,16 @@ export function CodeView({
 
   return (
     <div className="grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)]">
-      <nav aria-label="Files" className="flex min-h-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
+      <nav aria-label="Files" className="flex min-h-0 flex-col border-r border-stone-200 dark:border-stone-800">
         <div className="flex items-center justify-between px-3 py-2">
-          <span className="text-[11px] font-medium tracking-wider text-zinc-500 uppercase">Files</span>
-          <button onClick={() => void loadTree()} className="rounded px-1.5 text-xs text-zinc-500 hover:bg-zinc-200 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:hover:bg-zinc-800">
+          <span className="text-[11px] font-medium tracking-wider text-stone-500 uppercase">Files</span>
+          <button onClick={() => void loadTree()} className="rounded px-1.5 text-xs text-stone-500 hover:bg-stone-200 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none dark:hover:bg-stone-800">
             Refresh
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-auto pb-3 font-mono text-[12.5px]">
           {treeError ? <p className="px-3 text-xs text-red-700 dark:text-red-300">{treeError}</p> : null}
-          {files === null && !treeError ? <p className="px-3 text-xs text-zinc-500">Loading…</p> : null}
+          {files === null && !treeError ? <p className="px-3 text-xs text-stone-500">Loading…</p> : null}
           {tree.map((node) => (
             <TreeItem key={node.path} node={node} depth={0} selected={target?.path ?? null} onOpen={(path) => onOpen({ path })} />
           ))}
@@ -91,13 +91,13 @@ export function CodeView({
       </nav>
 
       <section className="flex min-h-0 flex-col">
-        <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 px-4 dark:border-zinc-800">
-          <span className="truncate font-mono text-xs text-zinc-600 dark:text-zinc-400">{target?.path ?? "No file open"}</span>
-          <span className="shrink-0 text-[11px] text-zinc-500">Read-only</span>
+        <header className="flex h-9 shrink-0 items-center justify-between gap-3 border-b border-stone-200 px-4 dark:border-stone-800">
+          <span className="truncate font-mono text-xs text-stone-600 dark:text-stone-400">{target?.path ?? "No file open"}</span>
+          <span className="shrink-0 text-[11px] text-stone-500">Read-only</span>
         </header>
         <div className="min-h-0 flex-1 overflow-auto">
           {!target ? <Centered title="Pick a file" detail="Start with app/page.tsx — it's where the page's slots live." /> : null}
-          {target && loadingFile && !file ? <p className="p-4 text-xs text-zinc-500">Opening…</p> : null}
+          {target && loadingFile && !file ? <p className="p-4 text-xs text-stone-500">Opening…</p> : null}
           {target && fileError ? <Centered title="Can't open this file" detail={fileError} tone="error" /> : null}
           {target && file && !fileError ? <FileBody file={file} find={target.find} /> : null}
         </div>
@@ -137,7 +137,7 @@ function FileBody({ file, find }: { file: WorkspaceFileResponse; find?: string }
                 {...props}
                 className={`${className} flex pr-6 ${isMarked ? "bg-amber-100 dark:bg-amber-500/15" : ""}`}
               >
-                <span className="w-12 shrink-0 pr-4 text-right text-zinc-400 select-none tabular-nums dark:text-zinc-600">{index + 1}</span>
+                <span className="w-12 shrink-0 pr-4 text-right text-stone-400 select-none tabular-nums dark:text-stone-600">{index + 1}</span>
                 <span className="whitespace-pre">
                   {line.map((token, key) => (
                     <span key={key} {...getTokenProps({ token })} />
@@ -163,9 +163,9 @@ function TreeItem({ node, depth, selected, onOpen }: { node: TreeNode; depth: nu
           onClick={() => setOpen(!open)}
           aria-expanded={open}
           style={indent}
-          className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-zinc-700 hover:bg-zinc-200/70 focus-visible:bg-zinc-200 focus-visible:outline-none dark:text-zinc-300 dark:hover:bg-zinc-800"
+          className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-stone-700 hover:bg-stone-200/70 focus-visible:bg-stone-200 focus-visible:outline-none dark:text-stone-300 dark:hover:bg-stone-800"
         >
-          <span className="w-2.5 text-[10px] text-zinc-400">{open ? "▾" : "▸"}</span>
+          <span className="w-2.5 text-[10px] text-stone-400">{open ? "▾" : "▸"}</span>
           {node.name}
         </button>
         {open ? node.children.map((child) => <TreeItem key={child.path} node={child} depth={depth + 1} selected={selected} onOpen={onOpen} />) : null}
@@ -180,8 +180,8 @@ function TreeItem({ node, depth, selected, onOpen }: { node: TreeNode; depth: nu
       aria-current={active ? "true" : undefined}
       className={`block w-full truncate py-0.5 pr-2 text-left focus-visible:outline-none ${
         active
-          ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-          : "text-zinc-600 hover:bg-zinc-200/70 focus-visible:bg-zinc-200 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900"
+          : "text-stone-600 hover:bg-stone-200/70 focus-visible:bg-stone-200 dark:text-stone-400 dark:hover:bg-stone-800"
       }`}
     >
       {node.name}
@@ -193,7 +193,7 @@ function Centered({ title, detail, tone }: { title: string; detail?: string; ton
   return (
     <div className="flex h-full min-h-40 flex-col items-center justify-center gap-1 px-8 text-center">
       <p className={`text-sm font-medium ${tone === "error" ? "text-red-800 dark:text-red-300" : ""}`}>{title}</p>
-      {detail ? <p className="max-w-md text-xs text-zinc-500">{detail}</p> : null}
+      {detail ? <p className="max-w-md text-xs text-stone-500">{detail}</p> : null}
     </div>
   );
 }

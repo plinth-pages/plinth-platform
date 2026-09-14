@@ -1,10 +1,9 @@
 "use client";
 
 import type { SessionUser } from "@plinth-pages/shared";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { PlatformChecks } from "@/components/PlatformChecks";
+import { AppHeader } from "@/components/AppHeader";
 import { PortfolioPanel } from "@/components/PortfolioPanel";
 import { ApiError, api } from "@/lib/api";
 
@@ -21,72 +20,20 @@ export default function DashboardPage() {
       });
   }, [router]);
 
-  async function signOut() {
-    await api.logout();
-    router.replace("/");
-  }
+  if (!user) return <main className="min-h-screen" aria-busy="true" />;
 
-  if (!user) {
-    return <main className="p-10 text-sm text-zinc-500">Loading…</main>;
-  }
+  const firstName = (user.name ?? user.githubLogin).split(" ")[0];
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-12 px-6 py-12">
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          {user.avatarUrl ? (
-            <img src={user.avatarUrl} alt="" className="h-10 w-10 rounded-full ring-1 ring-zinc-200 dark:ring-zinc-800" />
-          ) : (
-            <div className="h-10 w-10 rounded-full bg-zinc-200 dark:bg-zinc-800" />
-          )}
-          <div>
-            <p className="font-medium">{user.name ?? user.githubLogin}</p>
-            <p className="font-mono text-xs text-zinc-500">
-              @{user.githubLogin} · {user.role}
-            </p>
-          </div>
+    <div className="min-h-screen">
+      <AppHeader user={user} />
+      <main className="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-12">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Welcome back, {firstName}</h1>
+          <p className="mt-1.5 text-stone-600 dark:text-stone-400">Pick up where you left off.</p>
         </div>
-        <button
-          onClick={signOut}
-          className="rounded-md px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-200 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:text-zinc-400 dark:hover:bg-zinc-800"
-        >
-          Sign out
-        </button>
-      </header>
-
-      <section>
         <PortfolioPanel />
-      </section>
-
-      {user.role === "admin" ? (
-        <section className="flex flex-col gap-3">
-          <h2 className="font-mono text-xs tracking-widest text-zinc-500 uppercase">Platform setup</h2>
-          <Link
-            href="/admin/requests"
-            className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-4 text-sm hover:border-zinc-300 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
-          >
-            <span>
-              <span className="block font-medium">Integration requests</span>
-              <span className="block text-zinc-600 dark:text-zinc-400">What people want built next, ranked by requests.</span>
-            </span>
-            <span aria-hidden className="text-zinc-400">→</span>
-          </Link>
-          <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-900">
-            <p className="font-medium">Provisioning GitHub App</p>
-            <p className="mt-1 text-zinc-600 dark:text-zinc-400">
-              The worker creates repositories as a GitHub App. Create it once; its ID and private key are written to{" "}
-              <code className="font-mono text-xs">backend/.env</code> automatically.
-            </p>
-            <a
-              href={api.githubAppSetupUrl}
-              className="mt-3 inline-block rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
-            >
-              Set up GitHub App
-            </a>
-          </div>
-          <PlatformChecks />
-        </section>
-      ) : null}
-    </main>
+      </main>
+    </div>
   );
 }

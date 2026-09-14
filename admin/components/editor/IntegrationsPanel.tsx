@@ -35,18 +35,18 @@ const TILE: Record<string, string> = {
   writing: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
   analytics: "bg-violet-100 text-violet-900 dark:bg-violet-950 dark:text-violet-200",
   contact: "bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200",
-  other: "bg-zinc-200 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200",
+  other: "bg-stone-200 text-stone-800 dark:bg-stone-800 dark:text-stone-200",
 };
 
 const PENDING_LABEL: Record<PendingIntegrationChange["type"], string> = { install: "Installing", move: "Moving", uninstall: "Removing" };
 const STATUS_LABEL: Partial<Record<OperationStatus, string>> = { queued: "queued", staging: "preparing", checking: "checking", applying: "applying" };
 
 const button =
-  "rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900";
+  "rounded-md border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-900";
 const primary =
-  "rounded-md bg-zinc-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300";
+  "rounded-md bg-stone-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-stone-700 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300";
 const field =
-  "w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs placeholder:text-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:bg-zinc-900";
+  "w-full rounded-md border border-stone-300 bg-white px-2 py-1 text-xs placeholder:text-stone-400 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none dark:border-stone-700 dark:bg-stone-900";
 
 /** "afterProjects" → "After projects". */
 function slotLabel(slot: string) {
@@ -117,7 +117,7 @@ export function IntegrationsPanel({
   const pendingById = useMemo(() => new Map(installed?.pending.map((change) => [change.integrationId, change])), [installed]);
 
   if (error) return <p className="p-4 text-xs text-red-800 dark:text-red-300">{error}</p>;
-  if (!catalogue) return <p className="p-4 text-xs text-zinc-500">Loading integrations…</p>;
+  if (!catalogue) return <p className="p-4 text-xs text-stone-500">Loading integrations…</p>;
 
   const available = catalogue.integrations
     .filter(matches)
@@ -138,7 +138,7 @@ export function IntegrationsPanel({
 
   return (
     <div className="flex flex-col">
-      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-zinc-200 bg-white/95 p-3 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95">
+      <div className="sticky top-0 z-10 flex flex-col gap-2 border-b border-stone-200 bg-white/95 p-3 backdrop-blur dark:border-stone-800 dark:bg-stone-950/95">
         <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={`Search ${catalogue.integrations.length + catalogue.planned.length} integrations`} aria-label="Search integrations" className={field} />
         <div role="radiogroup" aria-label="Category" className="flex flex-wrap gap-1">
           {CATEGORIES.map(({ id, label }) => (
@@ -147,8 +147,8 @@ export function IntegrationsPanel({
               role="radio"
               aria-checked={category === id}
               onClick={() => setCategory(id)}
-              className={`rounded-full px-2 py-0.5 text-[11px] font-medium focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none ${
-                category === id ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "bg-zinc-100 text-zinc-600 hover:text-zinc-900 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              className={`rounded-full px-2 py-0.5 text-[11px] font-medium focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none ${
+                category === id ? "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900" : "bg-stone-100 text-stone-600 hover:text-stone-900 dark:bg-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
               }`}
             >
               {label}
@@ -159,7 +159,7 @@ export function IntegrationsPanel({
 
       <Section title="On your portfolio" aside={installed ? `${used} of ${installed.limit}` : "—"}>
         {installed && installed.installed.length === 0 && !installed.pending.some((p) => p.type === "install") ? (
-          <p className="px-1 text-xs text-zinc-500">Nothing installed yet. Pick one below — it&apos;s added to your draft, never straight to your live site.</p>
+          <p className="px-1 text-xs text-stone-500">Nothing installed yet. Pick one below — it shows up in your preview first, and goes live when you publish.</p>
         ) : null}
         <ul className="flex flex-col gap-1">
           {installed?.installed.map((entry) => (
@@ -178,7 +178,7 @@ export function IntegrationsPanel({
       </Section>
 
       <Section title="Ready to install" aside={`${available.length}`}>
-        {available.length === 0 ? <p className="px-1 text-xs text-zinc-500">No matches.</p> : null}
+        {available.length === 0 ? <p className="px-1 text-xs text-stone-500">No matches.</p> : null}
         <ul className="flex flex-col gap-1">
           {available.map((entry) => (
             <AvailableRow
@@ -199,7 +199,7 @@ export function IntegrationsPanel({
       </Section>
 
       <Section title="Coming soon" aside={`${planned.length}`}>
-        <p className="px-1 text-xs text-zinc-500">Not built yet. Request the ones you want — the most requested are built first.</p>
+        <p className="px-1 text-xs text-stone-500">Not built yet. Request the ones you want — the most requested are built first.</p>
         <ul className="flex flex-col">
           {planned.map((entry) => (
             <PlannedRow key={entry.id} entry={entry} portfolioId={portfolioId} onChange={(requested) => setRequested(entry.id, requested)} />
@@ -213,8 +213,8 @@ export function IntegrationsPanel({
 
 function Section({ title, aside, children }: { title: string; aside: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-2 border-b border-zinc-100 px-3 py-4 last:border-b-0 dark:border-zinc-900">
-      <h3 className="flex items-baseline justify-between px-1 text-[11px] font-medium tracking-wide text-zinc-500 uppercase">
+    <section className="flex flex-col gap-2 border-b border-stone-100 px-3 py-4 last:border-b-0 dark:border-stone-900">
+      <h3 className="flex items-baseline justify-between px-1 text-[11px] font-medium tracking-wide text-stone-500 uppercase">
         {title}
         <span className="font-mono tracking-normal tabular-nums normal-case">{aside}</span>
       </h3>
@@ -285,7 +285,7 @@ function InstalledRow({
         <Tile name={entry.name} category={category} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium">{entry.name}</span>
-          <span className="block truncate text-[11px] text-zinc-500">
+          <span className="block truncate text-[11px] text-stone-500">
             {slotLabel(entry.slot)} · <span className="font-mono">{entry.version}</span>
           </span>
         </span>
@@ -317,7 +317,7 @@ function InstalledRow({
           <button disabled={busy || slot === entry.slot} onClick={() => void run(() => api.moveIntegration(portfolioId, entry.id, slot))} className={primary}>
             Move
           </button>
-          <button onClick={() => (setMode("idle"), setSlot(entry.slot))} className="px-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
+          <button onClick={() => (setMode("idle"), setSlot(entry.slot))} className="px-1.5 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
             Cancel
           </button>
         </div>
@@ -325,12 +325,12 @@ function InstalledRow({
 
       {!pending && mode === "remove" ? (
         <div className="flex flex-col gap-1.5 pl-[42px]">
-          <p className="text-[11px] text-zinc-600 dark:text-zinc-400">Removes the component, its import and the package from your draft.</p>
+          <p className="text-[11px] text-stone-600 dark:text-stone-400">Removes the component, its import and the package from your draft.</p>
           <span className="flex gap-1.5">
             <button disabled={busy} onClick={() => void run(() => api.uninstallIntegration(portfolioId, entry.id))} className="rounded-md bg-red-700 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-800 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none disabled:opacity-50">
               Remove {entry.name}
             </button>
-            <button onClick={() => setMode("idle")} className="px-1.5 text-xs text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100">
+            <button onClick={() => setMode("idle")} className="px-1.5 text-xs text-stone-500 hover:text-stone-900 dark:hover:text-stone-100">
               Cancel
             </button>
           </span>
@@ -365,7 +365,7 @@ function AvailableRow({
   onQueued: () => void;
 }) {
   return (
-    <li className={`flex flex-col gap-2 rounded-md px-1 py-1.5 ${open ? "bg-zinc-50 ring-1 ring-zinc-200 dark:bg-zinc-900 dark:ring-zinc-800" : ""}`}>
+    <li className={`flex flex-col gap-2 rounded-md px-1 py-1.5 ${open ? "bg-stone-50 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800" : ""}`}>
       <div className="flex items-start gap-2.5">
         <Tile name={entry.name} category={entry.category} />
         <span className="min-w-0 flex-1">
@@ -373,7 +373,7 @@ function AvailableRow({
             {entry.name}
             {recommended ? <span className="rounded bg-emerald-50 px-1 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">For {roleLabel(role)}s</span> : null}
           </span>
-          <span className="block text-[11px] text-zinc-500">{entry.description}</span>
+          <span className="block text-[11px] text-stone-500">{entry.description}</span>
         </span>
         {pending ? (
           <PendingBadge change={pending} />
@@ -460,7 +460,7 @@ function InstallForm({ portfolioId, entry, onQueued }: { portfolioId: string; en
       className="flex flex-col gap-3 pb-1 pl-[42px]"
     >
       <label className="flex flex-col gap-1">
-        <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">Place it</span>
+        <span className="text-[11px] font-medium text-stone-700 dark:text-stone-300">Place it</span>
         <select value={slot} onChange={(e) => setSlot(e.target.value)} className={field}>
           {entry.allowedSlots.map((name) => (
             <option key={name} value={name}>
@@ -475,16 +475,16 @@ function InstallForm({ portfolioId, entry, onQueued }: { portfolioId: string; en
         <PropField key={spec.name} spec={spec} value={props[spec.name]} error={fields[spec.name]} live={live[spec.name]} onChange={(value) => setProp(spec.name, value)} />
       ))}
 
-      <p className="text-[11px] leading-relaxed text-zinc-500">
-        Adds <code className="font-mono text-zinc-700 dark:text-zinc-300">{entry.package}@{entry.version}</code>, imports it and places it in{" "}
-        <code className="font-mono text-zinc-700 dark:text-zinc-300">{slot}</code> on your draft. It&apos;s type-checked first and undone if the page breaks.
+      <p className="text-[11px] leading-relaxed text-stone-500">
+        Adds {entry.name} to <span className="font-medium text-stone-700 dark:text-stone-300">{slotLabel(slot).toLowerCase()}</span> in your preview. It&apos;s checked
+        first and undone automatically if anything breaks.
       </p>
       {error ? <p className="text-[11px] text-red-800 dark:text-red-300">{error}</p> : null}
       <span className="flex items-center gap-2">
         <button type="submit" disabled={missing || validating || !valid || submitting} className={primary}>
           {submitting ? "Queuing…" : `Install ${entry.name}`}
         </button>
-        {validating && !missing ? <span className="text-[11px] text-zinc-500">Checking…</span> : null}
+        {validating && !missing ? <span className="text-[11px] text-stone-500">Checking…</span> : null}
       </span>
     </form>
   );
@@ -509,17 +509,17 @@ function PropField({
       <label htmlFor={id} className="flex items-start gap-2">
         <input id={id} type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(e.target.checked)} className="mt-0.5" />
         <span className="flex flex-col">
-          <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">{spec.label}</span>
-          {spec.description ? <span className="text-[11px] text-zinc-500">{spec.description}</span> : null}
+          <span className="text-[11px] font-medium text-stone-700 dark:text-stone-300">{spec.label}</span>
+          {spec.description ? <span className="text-[11px] text-stone-500">{spec.description}</span> : null}
         </span>
       </label>
     );
   }
   return (
     <label htmlFor={id} className="flex flex-col gap-1">
-      <span className="text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
+      <span className="text-[11px] font-medium text-stone-700 dark:text-stone-300">
         {spec.label}
-        {spec.required ? null : <span className="font-normal text-zinc-500"> · optional</span>}
+        {spec.required ? null : <span className="font-normal text-stone-500"> · optional</span>}
       </span>
       <input
         id={id}
@@ -540,9 +540,9 @@ function PropField({
       ) : live?.status === "found" ? (
         <span className="text-[11px] text-emerald-800 dark:text-emerald-300">✓ {live.message}</span>
       ) : live?.status === "unknown" ? (
-        <span className="text-[11px] text-zinc-500">{live.message}</span>
+        <span className="text-[11px] text-stone-500">{live.message}</span>
       ) : spec.description ? (
-        <span className="text-[11px] text-zinc-500">{spec.description}</span>
+        <span className="text-[11px] text-stone-500">{spec.description}</span>
       ) : null}
     </label>
   );
@@ -572,7 +572,7 @@ function PlannedRow({ entry, portfolioId, onChange }: { entry: PlannedIntegratio
         <Tile name={entry.name} category={entry.category} />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium">{entry.name}</span>
-          <span className="block truncate text-[11px] text-zinc-500" title={entry.description}>
+          <span className="block truncate text-[11px] text-stone-500" title={entry.description}>
             {entry.description}
           </span>
         </span>
@@ -583,7 +583,7 @@ function PlannedRow({ entry, portfolioId, onChange }: { entry: PlannedIntegratio
           title={entry.requested ? "Withdraw your request" : undefined}
           className={
             entry.requested
-              ? "group shrink-0 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-zinc-100 hover:text-zinc-700 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:opacity-50 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-zinc-900 dark:hover:text-zinc-300"
+              ? "group shrink-0 rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800 hover:bg-stone-100 hover:text-stone-700 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none disabled:opacity-50 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-stone-900 dark:hover:text-stone-300"
               : `${button} shrink-0`
           }
         >
@@ -630,7 +630,7 @@ function SuggestForm({ portfolioId, onRequested }: { portfolioId: string; onRequ
         e.preventDefault();
         void submit();
       }}
-      className="mt-2 flex flex-col gap-1.5 rounded-md border border-dashed border-zinc-300 p-2.5 dark:border-zinc-700"
+      className="mt-2 flex flex-col gap-1.5 rounded-md border border-dashed border-stone-300 p-2.5 dark:border-stone-700"
     >
       <span className="text-xs font-medium">Don&apos;t see it?</span>
       <input value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="e.g. Notion pages" aria-label="Integration name" className={field} />

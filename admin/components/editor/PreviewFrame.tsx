@@ -15,11 +15,11 @@ const PHASE_MESSAGE: Record<Exclude<PreviewPhase, "live">, { title: string; deta
   loading: { title: "Opening your preview…", detail: "" },
   starting: {
     title: "Starting your preview…",
-    detail: "Cloning the draft branch, installing packages and starting Next.js. Usually under 30 seconds.",
+    detail: "Getting your site ready to edit. This usually takes under 30 seconds.",
   },
   waking: { title: "Waking your preview…", detail: "It paused while you were away. This takes a second or two." },
   paused: { title: "Paused", detail: "It resumes as soon as you're back on this tab." },
-  stopped: { title: "Starting your preview…", detail: "It was stopped after a long break and is being rebuilt from your draft." },
+  stopped: { title: "Starting your preview…", detail: "It was stopped after a long break and is being restarted with all your changes." },
   unhealthy: { title: "The preview couldn't start", detail: "See Settings for the error, then restart or rebuild." },
 };
 
@@ -63,7 +63,7 @@ export function PreviewFrame({
   const height = scale < 1 ? available / scale : available;
 
   return (
-    <div ref={container} className="relative h-full w-full overflow-hidden bg-zinc-100 dark:bg-zinc-900">
+    <div ref={container} className="relative h-full w-full overflow-hidden bg-stone-100 dark:bg-stone-900">
       {url && phase === "live" ? (
         <div
           className={`${deviceWidth ? "absolute top-4 left-1/2 origin-top" : "absolute inset-0"} transition-[filter] duration-300 motion-reduce:transition-none ${
@@ -76,7 +76,7 @@ export function PreviewFrame({
             key={generation}
             src={url}
             title="Portfolio preview"
-            className={`h-full w-full bg-white ${deviceWidth ? "rounded-lg shadow-sm ring-1 ring-zinc-300 dark:ring-zinc-700" : ""}`}
+            className={`h-full w-full bg-white ${deviceWidth ? "rounded-lg shadow-sm ring-1 ring-stone-300 dark:ring-stone-700" : ""}`}
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
           />
         </div>
@@ -88,24 +88,24 @@ export function PreviewFrame({
             className={`h-2 w-2 rounded-full ${phase === "unhealthy" ? "bg-red-500" : "animate-pulse bg-amber-500 motion-reduce:animate-none"}`}
           />
           <p className="text-sm font-medium">{PHASE_MESSAGE[phase].title}</p>
-          {PHASE_MESSAGE[phase].detail ? <p className="max-w-sm text-xs text-zinc-500">{PHASE_MESSAGE[phase].detail}</p> : null}
+          {PHASE_MESSAGE[phase].detail ? <p className="max-w-sm text-xs text-stone-500">{PHASE_MESSAGE[phase].detail}</p> : null}
         </div>
       ) : null}
 
       {working && phase === "live" ? (
-        <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-white/30 dark:bg-zinc-950/30">
-          <div className="flex items-center gap-3 rounded-full bg-white/95 py-2 pr-5 pl-3 shadow-lg ring-1 ring-zinc-200 dark:bg-zinc-900/95 dark:ring-zinc-700">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 motion-reduce:animate-none dark:border-zinc-600 dark:border-t-zinc-100" />
+        <div role="status" aria-live="polite" className="absolute inset-0 flex items-center justify-center bg-white/30 dark:bg-stone-950/30">
+          <div className="flex items-center gap-3 rounded-full bg-white/95 py-2 pr-5 pl-3 shadow-lg ring-1 ring-stone-200 dark:bg-stone-900/95 dark:ring-stone-700">
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-stone-300 border-t-stone-900 motion-reduce:animate-none dark:border-stone-600 dark:border-t-stone-100" />
             <span className="flex flex-col">
               <span className="text-sm font-medium">Working on it…</span>
-              <span className="text-xs text-zinc-500">{working}</span>
+              <span className="text-xs text-stone-500">{working}</span>
             </span>
           </div>
         </div>
       ) : null}
 
       {deviceWidth && scale < 1 && phase === "live" ? (
-        <p className="absolute right-3 bottom-2 font-mono text-[11px] text-zinc-500 tabular-nums">
+        <p className="absolute right-3 bottom-2 font-mono text-[11px] text-stone-500 tabular-nums">
           {deviceWidth}px shown at {Math.round(scale * 100)}%
         </p>
       ) : null}

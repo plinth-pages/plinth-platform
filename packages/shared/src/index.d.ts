@@ -193,12 +193,12 @@ export interface SandboxNotRunningApiError extends ApiError {
  */
 export type OperationStatus = "queued" | "staging" | "checking" | "applying" | "applied" | "rejected" | "reverted" | "failed";
 
-export type OperationType = "edit" | "install" | "uninstall" | "move" | "theme" | "fleet_update" | "publish";
+export type OperationType = "edit" | "install" | "uninstall" | "move" | "theme" | "fleet_update" | "publish" | "copilot";
 
 export interface OperationFailure {
   /** Which check refused the change. */
   /** `codemod`: the engine couldn't apply the change — a template or engine problem, recorded separately. */
-  source: "tsc" | "plinth" | "format" | "install" | "render" | "build" | "codemod";
+  source: "tsc" | "plinth" | "format" | "install" | "render" | "build" | "codemod" | "copilot";
   message: string;
   file?: string;
   line?: number;
@@ -409,4 +409,69 @@ export interface InstallIntegrationRequest {
 
 export interface MoveIntegrationRequest {
   slot: string;
+}
+
+// ---------------------------------------------------------------------------
+// Co-pilot
+// ---------------------------------------------------------------------------
+
+export interface CopilotModelSummary {
+  id: string;
+  label: string;
+  /** "Fast", "Pro". */
+  badge: string;
+  tier: "free" | "pro";
+  /** Needs a paid plan. */
+  locked: boolean;
+  /** Configured and usable right now. */
+  available: boolean;
+  default: boolean;
+}
+
+export interface CopilotModelsResponse {
+  models: CopilotModelSummary[];
+}
+
+export interface CopilotChanges {
+  /** Files the change touched. */
+  files: string[];
+  /** Integration changes queued after it, as summaries. */
+  integrations: string[];
+}
+
+export interface CopilotMessageSummary {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  model: string | null;
+  refused: boolean;
+  changes: CopilotChanges | null;
+  /** The change this message produced (user messages) or answered (assistant messages). */
+  operation: { id: string; status: OperationStatus; failures: OperationFailure[]; error: string | null } | null;
+  createdAt: string;
+}
+
+export interface CopilotMessagesResponse {
+  messages: CopilotMessageSummary[];
+  usage: { used: number; limit: number };
+}
+
+export interface SendCopilotMessageRequest {
+  message: string;
+  model?: string;
+}
+
+export interface SendCopilotMessageResponse {
+  message: CopilotMessageSummary;
+  operation: OperationSummary;
+}
+
+export interface AdminMetricsResponse {
+  users: number;
+  portfolios: { total: number; ready: number; provisioning: number; failed: number };
+  sandboxesRunning: number;
+  operations7d: Record<OperationStatus, number>;
+  deployments7d: { ready: number; failed: number };
+  copilot7d: { messages: number; inputTokens: number; outputTokens: number };
+  integrations: { installed: number; requests: number };
 }

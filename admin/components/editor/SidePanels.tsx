@@ -19,10 +19,10 @@ import { SafetyNetTester } from "./SafetyNetTester";
 
 export type SidePanel = "slots" | "integrations" | "settings";
 
-const PANELS: { id: SidePanel; label: string }[] = [
-  { id: "slots", label: "Slots" },
+const PANELS: { id: SidePanel; label: string; adminOnly?: boolean }[] = [
   { id: "integrations", label: "Integrations" },
   { id: "settings", label: "Settings" },
+  { id: "slots", label: "Slots", adminOnly: true },
 ];
 
 export function SidePanels(props: {
@@ -43,18 +43,18 @@ export function SidePanels(props: {
   activeOperationId: string | null;
 }) {
   return (
-    <aside className="flex min-h-0 flex-col border-l border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
-      <div role="tablist" aria-label="Panels" className="flex h-10 shrink-0 items-end gap-4 border-b border-zinc-200 px-4 dark:border-zinc-800">
-        {PANELS.map(({ id, label }) => (
+    <aside className="flex min-h-0 flex-col border-l border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-950">
+      <div role="tablist" aria-label="Panels" className="flex h-11 shrink-0 items-end gap-5 border-b border-stone-200 px-4 dark:border-stone-800">
+        {PANELS.filter((entry) => props.isAdmin || !entry.adminOnly).map(({ id, label }) => (
           <button
             key={id}
             role="tab"
             aria-selected={props.panel === id}
             onClick={() => props.onPanel(id)}
-            className={`-mb-px border-b-2 pb-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 ${
+            className={`-mb-px border-b-2 pb-2.5 text-[13px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 ${
               props.panel === id
-                ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100"
-                : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                ? "border-stone-900 text-stone-900 dark:border-stone-100 dark:text-stone-100"
+                : "border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-300"
             }`}
           >
             {label}
@@ -62,7 +62,7 @@ export function SidePanels(props: {
         ))}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {props.panel === "slots" ? (
+        {props.panel === "slots" && props.isAdmin ? (
           <SlotsPanel portfolioId={props.portfolio.id} live={props.phase === "live"} onOpenCode={props.onOpenCode} />
         ) : null}
         {props.panel === "integrations" ? (
@@ -130,28 +130,28 @@ function SlotsPanel({ portfolioId, live, onOpenCode }: { portfolioId: string; li
 
   return (
     <div className="flex flex-col gap-5 p-4">
-      <p className="text-xs text-zinc-600 dark:text-zinc-400">
+      <p className="text-xs text-stone-600 dark:text-stone-400">
         Integrations are injected into these slots. Everything else in your code stays yours to change.
-        <span className="mt-1 block font-mono text-[11px] text-zinc-500">
+        <span className="mt-1 block font-mono text-[11px] text-stone-500">
           @plinth-pages/core {slots.coreVersion ?? "?"} · slots v{slots.slotsVersion ?? "?"}
         </span>
       </p>
 
       {byFile.map(([file, fileSlots]) => (
         <section key={file} className="flex flex-col gap-1">
-          <h3 className="font-mono text-[11px] text-zinc-500">{file}</h3>
+          <h3 className="font-mono text-[11px] text-stone-500">{file}</h3>
           <ul className="flex flex-col">
             {fileSlots.map((slot) => (
               <li key={slot.name}>
                 <button
                   onClick={() => onOpenCode({ path: slot.file, find: `name="${slot.name}"` })}
-                  className="group flex w-full items-start justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:hover:bg-zinc-900"
+                  className="group flex w-full items-start justify-between gap-3 rounded-md px-2 py-1.5 text-left hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none dark:hover:bg-stone-900"
                 >
                   <span className="min-w-0">
-                    <span className="block font-mono text-[12.5px] text-zinc-900 dark:text-zinc-100">{slot.name}</span>
-                    <span className="block text-xs text-zinc-500">{slot.description}</span>
+                    <span className="block font-mono text-[12.5px] text-stone-900 dark:text-stone-100">{slot.name}</span>
+                    <span className="block text-xs text-stone-500">{slot.description}</span>
                   </span>
-                  <span className="shrink-0 pt-0.5 text-[11px] text-zinc-500">
+                  <span className="shrink-0 pt-0.5 text-[11px] text-stone-500">
                     {slot.integrations.length ? `${slot.integrations.length} placed` : "empty"}
                   </span>
                 </button>
@@ -161,13 +161,13 @@ function SlotsPanel({ portfolioId, live, onOpenCode }: { portfolioId: string; li
         </section>
       ))}
 
-      <section className="flex flex-col gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+      <section className="flex flex-col gap-2 border-t border-stone-200 pt-4 dark:border-stone-800">
         <div className="flex items-center justify-between gap-3">
           <h3 className="text-xs font-medium">Contract check</h3>
           <button
             onClick={() => void runCheck()}
             disabled={checking}
-            className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="rounded-md border border-stone-300 px-2.5 py-1 text-xs font-medium hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-900"
           >
             {checking ? "Checking…" : "Run plinth check"}
           </button>
@@ -191,7 +191,7 @@ function SlotsPanel({ portfolioId, live, onOpenCode }: { portfolioId: string; li
             </ul>
           )
         ) : (
-          <p className="text-xs text-zinc-500">Validates that every slot and codemod marker is where the engine expects it.</p>
+          <p className="text-xs text-stone-500">Validates that every slot and codemod marker is where the engine expects it.</p>
         )}
       </section>
     </div>
@@ -222,105 +222,102 @@ function SettingsPanel({
   const [confirming, setConfirming] = useState(false);
   const running = preview?.runStartedAt ? Math.max(0, (Date.now() - Date.parse(preview.runStartedAt)) / 1000) : 0;
   const minutes = preview ? Math.round((preview.secondsUsed + running) / 60) : 0;
+  const history = operations.filter((operation) => isAdmin || operation.type !== "publish");
 
   return (
-    <div className="flex flex-col gap-5 p-4 text-xs">
+    <div className="flex flex-col gap-6 p-4 text-sm">
       <section className="flex flex-col gap-2">
-        <h3 className="font-medium">Preview</h3>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-zinc-600 tabular-nums dark:text-zinc-400">
-          <dt>Branch</dt>
-          <dd className="font-mono">draft</dd>
-          <dt>Pauses after</dt>
-          <dd>{preview ? `${Math.round(preview.idlePauseSeconds / 60)} min away` : "—"}</dd>
-          <dt>Sandbox time</dt>
-          <dd>{minutes < 1 ? "under a minute" : `${minutes} min`}</dd>
-          <dt>Cold start</dt>
-          <dd>{preview?.coldStartMs ? `${(preview.coldStartMs / 1000).toFixed(1)} s` : "—"}</dd>
-          <dt>Last resume</dt>
-          <dd>{preview?.resumeMs ? `${(preview.resumeMs / 1000).toFixed(1)} s` : "—"}</dd>
-          <dt>Link expires</dt>
-          <dd>15 min after you leave</dd>
-        </dl>
-        {phase === "unhealthy" && preview?.lastError ? (
-          <pre className="max-h-48 overflow-auto rounded-md bg-red-50 p-2 font-mono text-[11px] whitespace-pre-wrap text-red-900 dark:bg-red-950 dark:text-red-200">
-            {preview.lastError}
-          </pre>
-        ) : null}
-      </section>
-
-      <section className="flex flex-col gap-2">
-        <h3 className="font-medium">Recent changes</h3>
-        {operations.length === 0 ? <p className="text-zinc-500">No changes yet.</p> : null}
-        <ul className="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-900">
-          {operations.slice(0, 8).map((operation) => (
-            <li key={operation.id} className="flex items-center justify-between gap-3 py-1.5">
-              <span className="min-w-0 truncate" title={operation.summary}>
-                {operation.summary}
+        <h3 className="text-xs font-medium tracking-wide text-stone-500 uppercase">Change history</h3>
+        {history.length === 0 ? <p className="text-stone-500">No changes yet. Ask the co-pilot or add an integration to get started.</p> : null}
+        <ul className="flex flex-col divide-y divide-stone-100 dark:divide-stone-900">
+          {history.slice(0, 10).map((operation) => (
+            <li key={operation.id} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block truncate" title={operation.summary}>
+                  {operation.summary}
+                </span>
+                <span className="text-xs text-stone-500">
+                  {operation.actor === "copilot" ? "Co-pilot" : "You"} · {new Date(operation.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                </span>
               </span>
-              <span className="flex shrink-0 items-center gap-2 tabular-nums">
-                {operation.checkMs ? <span className="text-[11px] text-zinc-500">{(operation.checkMs / 1000).toFixed(1)} s</span> : null}
-                <OperationBadge status={operation.status} />
-              </span>
+              <OperationBadge status={operation.status} />
             </li>
           ))}
         </ul>
-        {timings?.sampleSize ? (
-          <p className="text-[11px] text-zinc-500 tabular-nums">
-            Checks p50 {seconds(timings.checkP50Ms)} · p95 {seconds(timings.checkP95Ms)} · end to end p50 {seconds(timings.totalP50Ms)} (last{" "}
-            {timings.sampleSize})
-          </p>
-        ) : null}
       </section>
 
       <section className="flex flex-col gap-2">
-        <h3 className="font-medium">Repository</h3>
-        {portfolio.repoUrl ? (
-          <a href={portfolio.repoUrl} target="_blank" rel="noopener noreferrer" className="w-fit font-mono underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-600">
-            {portfolio.repoName} ↗
-          </a>
-        ) : null}
-      </section>
-
-      <section className="flex flex-col gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-        <h3 className="font-medium">Troubleshooting</h3>
-        <p className="text-zinc-500">Restart reloads Next.js in the same sandbox. Rebuild starts a fresh sandbox from your draft branch.</p>
+        <h3 className="text-xs font-medium tracking-wide text-stone-500 uppercase">Preview</h3>
+        <p className="text-stone-600 dark:text-stone-400">If the preview looks stuck, reload it. Resetting starts it fresh from your saved changes — nothing is lost.</p>
         <div className="flex flex-wrap gap-2">
-          <button onClick={onRestart} className="rounded-md border border-zinc-300 px-2.5 py-1 font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-900">
-            Restart
+          <button onClick={onRestart} disabled={working} className="rounded-lg px-3 py-1.5 text-[13px] font-medium ring-1 ring-stone-300 hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none disabled:opacity-50 dark:ring-stone-700 dark:hover:bg-stone-900">
+            Reload preview
           </button>
           {confirming ? (
             <>
-              <button
-                onClick={() => (setConfirming(false), onRebuild())}
-                className="rounded-md bg-red-700 px-2.5 py-1 font-medium text-white hover:bg-red-800 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none"
-              >
-                Rebuild from draft
+              <button onClick={() => (setConfirming(false), onRebuild())} className="rounded-lg bg-stone-900 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-stone-700 dark:bg-white dark:text-stone-900">
+                Reset preview
               </button>
-              <button onClick={() => setConfirming(false)} className="rounded-md px-2.5 py-1 text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-900">
+              <button onClick={() => setConfirming(false)} className="rounded-lg px-2.5 py-1.5 text-[13px] text-stone-600 hover:bg-stone-100 dark:text-stone-400 dark:hover:bg-stone-900">
                 Cancel
               </button>
             </>
           ) : (
-            <button onClick={() => setConfirming(true)} className="rounded-md border border-zinc-300 px-2.5 py-1 font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-900">
-              Rebuild…
+            <button onClick={() => setConfirming(true)} disabled={working} className="rounded-lg px-3 py-1.5 text-[13px] font-medium ring-1 ring-stone-300 hover:bg-stone-50 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none disabled:opacity-50 dark:ring-stone-700 dark:hover:bg-stone-900">
+              Reset…
             </button>
           )}
         </div>
+        {phase === "unhealthy" ? <p className="text-red-800 dark:text-red-300">The preview couldn&apos;t start. Try resetting it.</p> : null}
       </section>
 
-      {isAdmin ? <SafetyNetTester portfolioId={portfolio.id} disabled={phase !== "live" || working} /> : null}
+      {isAdmin ? (
+        <section className="flex flex-col gap-3 rounded-xl bg-stone-50 p-3 ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">
+          <h3 className="flex items-center gap-2 text-xs font-medium tracking-wide text-stone-500 uppercase">
+            Technical details <span className="rounded bg-brand-50 px-1.5 text-[10px] text-brand-700 dark:bg-brand-950 dark:text-brand-300">Admin</span>
+          </h3>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs text-stone-600 tabular-nums dark:text-stone-400">
+            <dt>Repository</dt>
+            <dd className="truncate font-mono">
+              {portfolio.repoUrl ? (
+                <a href={portfolio.repoUrl} target="_blank" rel="noopener noreferrer" className="underline decoration-stone-300 underline-offset-2">
+                  {portfolio.repoName}
+                </a>
+              ) : (
+                portfolio.repoName
+              )}
+            </dd>
+            <dt>Branch</dt>
+            <dd className="font-mono">draft</dd>
+            <dt>Idle pause</dt>
+            <dd>{preview ? `${Math.round(preview.idlePauseSeconds / 60)} min` : "—"}</dd>
+            <dt>Sandbox time</dt>
+            <dd>{minutes < 1 ? "under a minute" : `${minutes} min`}</dd>
+            <dt>Cold start</dt>
+            <dd>{preview?.coldStartMs ? `${(preview.coldStartMs / 1000).toFixed(1)} s` : "—"}</dd>
+            <dt>Last resume</dt>
+            <dd>{preview?.resumeMs ? `${(preview.resumeMs / 1000).toFixed(1)} s` : "—"}</dd>
+            <dt>Checks</dt>
+            <dd>{timings?.sampleSize ? `p50 ${seconds(timings.checkP50Ms)} · p95 ${seconds(timings.checkP95Ms)} (${timings.sampleSize})` : "—"}</dd>
+          </dl>
+          {phase === "unhealthy" && preview?.lastError ? (
+            <pre className="max-h-48 overflow-auto rounded-md bg-red-50 p-2 font-mono text-[11px] whitespace-pre-wrap text-red-900 dark:bg-red-950 dark:text-red-200">{preview.lastError}</pre>
+          ) : null}
+          <SafetyNetTester portfolioId={portfolio.id} disabled={phase !== "live" || working} />
+        </section>
+      ) : null}
     </div>
   );
 }
 
 const BADGE: Record<OperationStatus, { label: string; tone: string }> = {
-  queued: { label: "Queued", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
-  staging: { label: "Preparing", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
+  queued: { label: "Queued", tone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300" },
+  staging: { label: "Working", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
   checking: { label: "Checking", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
   applying: { label: "Applying", tone: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200" },
-  applied: { label: "Applied", tone: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
-  rejected: { label: "Not applied", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
-  reverted: { label: "Undone", tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+  applied: { label: "Done", tone: "bg-emerald-100 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" },
+  rejected: { label: "Not applied", tone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300" },
+  reverted: { label: "Undone", tone: "bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-300" },
   failed: { label: "Failed", tone: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200" },
 };
 
@@ -333,5 +330,5 @@ function seconds(ms: number | null) {
 }
 
 function PanelNote({ children, tone }: { children: React.ReactNode; tone?: "error" }) {
-  return <p className={`p-4 text-xs ${tone === "error" ? "text-red-800 dark:text-red-300" : "text-zinc-500"}`}>{children}</p>;
+  return <p className={`p-4 text-xs ${tone === "error" ? "text-red-800 dark:text-red-300" : "text-stone-500"}`}>{children}</p>;
 }

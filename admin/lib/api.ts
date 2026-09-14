@@ -1,5 +1,10 @@
 import type {
   AdminIntegrationRequestsResponse,
+  AdminMetricsResponse,
+  CopilotMessagesResponse,
+  CopilotModelsResponse,
+  SendCopilotMessageRequest,
+  SendCopilotMessageResponse,
   AdminPingResponse,
   InstallIntegrationRequest,
   InstalledIntegrationsResponse,
@@ -93,6 +98,12 @@ export const api = {
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "PATCH", body: JSON.stringify({ slot }) }),
   uninstallIntegration: (id: string, integrationId: string) =>
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
+  adminMetrics: () => request<AdminMetricsResponse>("/admin/metrics"),
+  copilotModels: () => request<CopilotModelsResponse>("/copilot/models"),
+  copilotMessages: (id: string) => request<CopilotMessagesResponse>(`/portfolios/${id}/copilot/messages`),
+  /** Queues the request; the reply arrives with the change's events. */
+  sendCopilotMessage: (id: string, body: SendCopilotMessageRequest) =>
+    request<SendCopilotMessageResponse>(`/portfolios/${id}/copilot/messages`, { method: "POST", body: JSON.stringify(body) }),
   adminIntegrationRequests: () => request<AdminIntegrationRequestsResponse>("/admin/integration-requests"),
   /** Development only: runs an edit through the safety net. */
   devEdit: (id: string, body: EditOperationRequest) =>

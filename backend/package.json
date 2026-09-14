@@ -29,6 +29,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1131.0",
     "@nestjs/bullmq": "^11",
     "@nestjs/common": "^11",
     "@nestjs/config": "^4",

@@ -3,7 +3,11 @@ import { DynamicModule, Global, Module } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
+import { AiService } from "./ai/ai.service";
 import { AuthModule } from "./auth/auth.module";
+import { CopilotController } from "./copilot/copilot.controller";
+import { CopilotPlanner } from "./copilot/copilot-planner";
+import { CopilotService } from "./copilot/copilot.service";
 import { CatalogueController } from "./catalogue/catalogue.controller";
 import { CatalogueIngest } from "./catalogue/catalogue-ingest";
 import { CatalogueService } from "./catalogue/catalogue.service";
@@ -23,10 +27,10 @@ import { GitSync } from "./operations/git-sync";
 import { IntegrationPlanner } from "./operations/integration-planner";
 import { IntegrationsController } from "./operations/integrations.controller";
 import { IntegrationsService } from "./operations/integrations.service";
-import { DEPLOYMENT_TRACKING, OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
+import { DEPLOYMENT_TRACKING, FOLLOW_UPS, OperationRunner, PUSH_RETRIES } from "./operations/operation-runner";
 import { DevEditController, OperationsController } from "./operations/operations.controller";
 import { OPERATIONS_QUEUE } from "./operations/operations.constants";
-import { OperationsProcessor, QueuedDeploymentTracking, QueuedPushRetries } from "./operations/operations.processor";
+import { OperationsProcessor, QueuedDeploymentTracking, QueuedFollowUps, QueuedPushRetries } from "./operations/operations.processor";
 import { OperationsService } from "./operations/operations.service";
 import { PublishController } from "./operations/publish.controller";
 import { PENDING_PUSHES } from "./operations/pending-pushes";
@@ -73,6 +77,7 @@ class RoleModule {
     PublishController,
     CatalogueController,
     IntegrationsController,
+    CopilotController,
     DevEditController,
     GitHubAppSetupController,
   ],
@@ -85,6 +90,8 @@ class RoleModule {
     CatalogueService,
     IntegrationRequestsService,
     IntegrationsService,
+    AiService,
+    CopilotService,
     PortfolioEventsHub,
     ...previewApiProviders,
     {
@@ -120,6 +127,10 @@ export class ApiModule {}
     OperationRunner,
     IntegrationPlanner,
     CatalogueIngest,
+    CatalogueService,
+    AiService,
+    CopilotPlanner,
+    { provide: FOLLOW_UPS, useClass: QueuedFollowUps },
     GitSync,
     { provide: PENDING_PUSHES, useExisting: GitSync },
     { provide: PUSH_RETRIES, useClass: QueuedPushRetries },

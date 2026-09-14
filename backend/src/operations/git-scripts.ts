@@ -247,3 +247,20 @@ export function affectedRoutes(changedFiles: string[]): string[] {
   }
   return [...routes];
 }
+
+/**
+ * Co-pilot context (staging tree): the tracked source files it may read, each in its own section, up to a byte budget.
+ * Paths come from git, so ignored and generated files are never included.
+ */
+export const contextScript = () => `${header("context")}
+budget=$PLINTH_MAX_BYTES
+git ls-files -z -- $PLINTH_DIRS | while IFS= read -r -d '' f; do
+  case "$f" in *.ts|*.tsx|*.css) ;; *) continue ;; esac
+  size=$(wc -c < "$f")
+  if [ "$size" -gt "$budget" ]; then echo "PLINTH_TRUNCATED=1"; break; fi
+  budget=$((budget - size))
+  echo "---PLINTH:file:$f---"
+  cat "$f"
+  echo
+done
+`;

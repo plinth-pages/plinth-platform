@@ -10,8 +10,11 @@ import { GIT_TOKENS, type GitTokenSource } from "../sandbox/git-tokens";
 import { SANDBOX_DRIVER, SandboxNotRunningError, type ExecResult, type SandboxDriver, type WorkspaceRoot } from "../sandbox/sandbox-driver";
 import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
 import { parseBuildOutput, parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
+import { CopilotPlanner, copilotInputSchema, parseContext } from "../copilot/copilot-planner";
+import { CONTEXT_DIRECTORIES, MAX_CONTEXT_BYTES } from "../copilot/copilot-plan";
 import { commitSubject, editInputSchema } from "./edit-input";
-import { IntegrationPlanner, installInputSchema, moveInputSchema, uninstallInputSchema, type FileChange, type Plan } from "./integration-planner";
+import { OperationAborted } from "./operation-errors";
+import { IntegrationPlanner, installInputSchema, moveInputSchema, uninstallInputSchema, type FileChange, type FollowUp, type Plan } from "./integration-planner";
 import {
   EXIT,
   OPERATION_BRANCH_PREFIX,
@@ -28,6 +31,7 @@ import {
   publishPushScript,
   publishStatusScript,
   revertScript,
+  contextScript,
   stageScript,
   vendorScript,
 } from "./git-scripts";
@@ -50,8 +54,12 @@ export interface DeploymentTracking {
 
 export type DrainOutcome = "drained" | "sandbox_not_running";
 
-/** An infrastructure failure: the operation ends `failed`, never `rejected`. */
-class OperationAborted extends Error {}
+/** Queues operations a finished operation asked for — e.g. an integration install requested through the co-pilot. */
+export const FOLLOW_UPS = Symbol("FOLLOW_UPS");
+export interface FollowUpQueue {
+  enqueue(portfolioId: string, followUps: FollowUp[]): Promise<void>;
+}
+
 
 const STEP_TIMEOUT = { short: 60_000, prepare: 6 * 60_000, check: 3 * 60_000, apply: 6 * 60_000, health: 4 * 60_000, build: 8 * 60_000 };
 
@@ -78,6 +86,8 @@ export class OperationRunner {
     @Inject(HOSTING) private readonly hosting: Hosting,
     @Inject(DEPLOYMENT_TRACKING) private readonly tracking: DeploymentTracking,
     private readonly integrations: IntegrationPlanner,
+    private readonly copilot: CopilotPlanner,
+    @Inject(FOLLOW_UPS) private readonly followUps: FollowUpQueue,
   ) {}
 
   async drain(portfolioId: string): Promise<DrainOutcome> {
@@ -127,6 +137,7 @@ export class OperationRunner {
       if (plan.kind === "noop") {
         await this.discard(externalId);
         await this.finish(operation, "applied", began, { diff: plan.message });
+        await this.queueFollowUps(operation, plan.followUps);
         return;
       }
       if (plan.kind === "reject") return this.reject(operation, externalId, began, plan.failures, null);
@@ -141,6 +152,7 @@ export class OperationRunner {
       if (prepared.exitCode === EXIT.noChanges) {
         await this.discard(externalId);
         await this.finish(operation, "applied", began, { diff: "No changes: the files already had this content." });
+        await this.queueFollowUps(operation, plan.followUps);
         return;
       }
       if (prepared.exitCode === EXIT.installFailed || prepared.exitCode === EXIT.formatFailed) {
@@ -222,6 +234,7 @@ export class OperationRunner {
 
       if (plan.onApplied) await this.prisma.$transaction((tx) => plan.onApplied!(tx));
       await this.finish(operation, "applied", began, {});
+      await this.queueFollowUps(operation, plan.followUps);
     } catch (error) {
       const message = committed
         ? `The change was applied, but Plinth couldn't confirm the page still renders: ${errorText(error)}`
@@ -322,7 +335,19 @@ export class OperationRunner {
     await this.finish(operation, "failed", began, { error: message });
   }
 
+  private async queueFollowUps(operation: Operation, followUps: FollowUp[] | undefined) {
+    if (!followUps?.length) return;
+    await this.followUps.enqueue(operation.portfolioId, followUps).catch((error) => this.logger.warn(`Follow-ups for ${operation.id} weren't queued: ${errorText(error)}`));
+  }
+
   private async planChange(operation: Operation, externalId: string): Promise<Plan> {
+    if (operation.type === "copilot") {
+      return this.copilot.plan(operation, async () => {
+        const read = await this.exec(externalId, "staging", contextScript(), { PLINTH_DIRS: CONTEXT_DIRECTORIES.join(" "), PLINTH_MAX_BYTES: String(MAX_CONTEXT_BYTES) }, STEP_TIMEOUT.short);
+        this.expectSuccess(read, "Reading your portfolio");
+        return parseContext(read.stdout);
+      });
+    }
     if (operation.type === "edit") {
       return { kind: "change", files: editInputSchema.parse(operation.input).files, tarball: null, onApplied: null };
     }
@@ -401,7 +426,7 @@ export class OperationRunner {
 
   /** Refuses malformed input before anything touches the sandbox. Publish is handled by publish(). */
   private validateInput(operation: Operation): void {
-    const schema = { edit: editInputSchema, install: installInputSchema, uninstall: uninstallInputSchema, move: moveInputSchema }[operation.type as string];
+    const schema = { edit: editInputSchema, copilot: copilotInputSchema, install: installInputSchema, uninstall: uninstallInputSchema, move: moveInputSchema }[operation.type as string];
     if (!schema) throw new OperationAborted(`Operations of type ${operation.type} aren't supported yet.`);
     const parsed = schema.safeParse(operation.input);
     if (!parsed.success) throw new OperationAborted(`The change is invalid: ${parsed.error.issues.map((i) => i.message).join("; ")}`);

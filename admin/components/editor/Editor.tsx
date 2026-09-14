@@ -8,7 +8,9 @@ import { ApiError, api } from "@/lib/api";
 import { useOperations } from "@/lib/useOperations";
 import { usePublish } from "@/lib/usePublish";
 import { usePreview, type PreviewPhase } from "@/lib/usePreview";
+import { Brand } from "@/components/ui/Brand";
 import { CodeView, type CodeTarget } from "./CodeView";
+import { CopilotChat } from "./CopilotChat";
 import { DeploymentToast } from "./DeploymentToast";
 import { OutcomeToast } from "./OutcomeToast";
 import { PublishButton } from "./PublishButton";
@@ -35,7 +37,7 @@ export function Editor({ portfolioId }: { portfolioId: string }) {
   if (error) return <Message title="Can't open the editor" detail={error} />;
   if (!portfolio) return <Message title="Opening the editor…" />;
   if (portfolio.status !== "ready") {
-    return <Message title="Your repository is still being set up" detail="The editor opens once it's ready." />;
+    return <Message title="Your portfolio is still being set up" detail="The editor opens as soon as it's ready." />;
   }
   return (
     <WideEnough fallback={<Message title="Use a larger screen to edit" detail="The editor needs at least a tablet-sized window." />}>
@@ -77,7 +79,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   }, [outcomeKey]);
   const [tab, setTab] = useState<Tab>("preview");
   const [device, setDevice] = useState<Device>("desktop");
-  const [panel, setPanel] = useState<SidePanel>("slots");
+  const [panel, setPanel] = useState<SidePanel>("integrations");
   const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
 
   // Deep links: ?tab=code&file=app/page.tsx. The file is still subject to the backend's refusal rules.
@@ -107,30 +109,43 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-4 border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-950">
+      <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-950">
         <div className="flex min-w-0 items-center gap-3">
-          <Link href="/dashboard" className="rounded px-1.5 py-1 text-sm text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:hover:bg-zinc-900 dark:hover:text-zinc-100">
-            ← Dashboard
+          <Brand />
+          <span aria-hidden className="h-5 w-px bg-stone-200 dark:bg-stone-800" />
+          <Link href="/dashboard" className="truncate rounded-md px-1.5 py-1 text-sm text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none dark:text-stone-400 dark:hover:bg-stone-900 dark:hover:text-stone-100">
+            {portfolioTitle(portfolio.role)}
           </Link>
-          <span className="truncate font-mono text-sm">{portfolio.repoName}</span>
-          <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">draft</span>
+          <StatusChip phase={phase} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {error ? <span className="max-w-64 truncate text-xs text-red-700 dark:text-red-300">{error}</span> : null}
-          <StatusChip phase={phase} />
-          {phase === "live" || phase === "unhealthy" ? (
-            <button onClick={() => void restart()} className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-900">
-              Restart
-            </button>
+          {error && isAdmin ? <span className="max-w-64 truncate text-xs text-red-700 dark:text-red-300">{error}</span> : null}
+          {tab === "preview" ? (
+            <div role="radiogroup" aria-label="Device width" className="hidden rounded-lg bg-stone-100 p-0.5 md:flex dark:bg-stone-900">
+              {DEVICES.map((d) => (
+                <button
+                  key={d.id}
+                  role="radio"
+                  aria-checked={device === d.id}
+                  onClick={() => setDevice(d.id)}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none ${
+                    device === d.id ? "bg-white text-stone-900 shadow-sm dark:bg-stone-700 dark:text-stone-100" : "text-stone-500 hover:text-stone-800 dark:hover:text-stone-300"
+                  }`}
+                >
+                  {d.label.split(" ")[0]}
+                </button>
+              ))}
+            </div>
           ) : null}
           {preview?.previewUrl && phase === "live" ? (
             <a
               href={preview.previewUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded-md border border-zinc-300 px-2.5 py-1 text-xs font-medium hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none dark:border-zinc-700 dark:hover:bg-zinc-900"
+              title="Open the preview in a new tab"
+              className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900 focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none dark:text-stone-400 dark:hover:bg-stone-900"
             >
-              Open preview ↗
+              Preview ↗
             </a>
           ) : null}
           <PublishButton
@@ -145,54 +160,40 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
 
       <div
         className={`grid min-h-0 flex-1 ${
-          panel === "integrations" ? "grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[260px_minmax(0,1fr)_380px]" : "grid-cols-[minmax(0,1fr)_280px] lg:grid-cols-[260px_minmax(0,1fr)_300px]"
+          panel === "integrations" ? "grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[340px_minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[340px_minmax(0,1fr)_320px]"
         }`}
       >
-        <CopilotColumn />
+        <CopilotChat portfolioId={portfolio.id} operations={operations.operations} live={phase === "live"} />
 
         <main className="flex min-h-0 flex-col">
-          <div className="flex h-10 shrink-0 items-end justify-between gap-4 border-b border-zinc-200 bg-white px-4 dark:border-zinc-800 dark:bg-zinc-950">
-            <div role="tablist" aria-label="Views" className="flex gap-4">
-              {(["preview", "code"] as const).map((id) => (
-                <button
-                  key={id}
-                  role="tab"
-                  aria-selected={tab === id}
-                  onClick={() => showTab(id)}
-                  className={`-mb-px border-b-2 pb-2 text-xs font-medium capitalize focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none ${
-                    tab === id ? "border-zinc-900 text-zinc-900 dark:border-zinc-100 dark:text-zinc-100" : "border-transparent text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
-                  }`}
-                >
-                  {id}
-                </button>
-              ))}
-            </div>
-            {tab === "preview" ? (
-              <div role="radiogroup" aria-label="Device width" className="mb-1.5 flex rounded-md bg-zinc-100 p-0.5 dark:bg-zinc-900">
-                {DEVICES.map((d) => (
+          {isAdmin ? (
+            <div className="flex h-9 shrink-0 items-end gap-4 border-b border-stone-200 bg-white px-4 dark:border-stone-800 dark:bg-stone-950">
+              <div role="tablist" aria-label="Views" className="flex gap-4">
+                {(["preview", "code"] as const).map((id) => (
                   <button
-                    key={d.id}
-                    role="radio"
-                    aria-checked={device === d.id}
-                    onClick={() => setDevice(d.id)}
-                    className={`rounded px-2 py-0.5 text-[11px] font-medium focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none ${
-                      device === d.id ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100" : "text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300"
+                    key={id}
+                    role="tab"
+                    aria-selected={tab === id}
+                    onClick={() => showTab(id)}
+                    className={`-mb-px border-b-2 pb-2 text-xs font-medium capitalize focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:outline-none ${
+                      tab === id ? "border-stone-900 text-stone-900 dark:border-stone-100 dark:text-stone-100" : "border-transparent text-stone-500 hover:text-stone-800 dark:hover:text-stone-300"
                     }`}
                   >
-                    {d.label}
+                    {id}
                   </button>
                 ))}
               </div>
-            ) : null}
-          </div>
-          <div className="min-h-0 flex-1 bg-white dark:bg-zinc-950">
-            {tab === "preview" ? (
+              <span className="mb-2 ml-auto rounded bg-brand-50 px-1.5 text-[10px] font-semibold text-brand-700 uppercase dark:bg-brand-950 dark:text-brand-300">Admin</span>
+            </div>
+          ) : null}
+          <div className="min-h-0 flex-1 bg-white dark:bg-stone-950">
+            {tab === "preview" || !isAdmin ? (
               <PreviewFrame
                 url={preview?.previewUrl ?? null}
                 phase={phase}
                 device={device}
                 generation={liveGeneration}
-                working={operations.working ? workingLabel(operations.active?.status) : null}
+                working={operations.working ? workingLabel(operations.active) : null}
               />
             ) : (
               <CodeView portfolioId={portfolio.id} live={phase === "live"} target={codeTarget} onOpen={openCode} revision={operations.revision} />
@@ -223,56 +224,49 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   );
 }
 
-function workingLabel(status: string | undefined): string {
-  switch (status) {
+function workingLabel(operation: { status: string; type: string } | null): string {
+  const copilot = operation?.type === "copilot";
+  switch (operation?.status) {
     case "queued":
       return "Getting ready";
     case "staging":
-      return "Preparing your change";
+      return copilot ? "The co-pilot is making your change" : "Preparing your change";
     case "checking":
-      return "Checking types and slots";
+      return "Making sure nothing breaks";
     case "applying":
-      return "Applying and checking the page";
+      return "Updating your preview";
     default:
       return "Finishing up";
   }
 }
 
-function CopilotColumn() {
-  return (
-    <aside className="hidden min-h-0 flex-col border-r border-zinc-200 bg-white lg:flex dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="flex h-10 shrink-0 items-end border-b border-zinc-200 px-4 pb-2 dark:border-zinc-800">
-        <span className="text-xs font-medium">Co-pilot</span>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col justify-end gap-3 p-4">
-        <p className="text-xs text-zinc-500">
-          Describe a change — “make the hero bolder”, “add my LeetCode stats” — and the co-pilot edits your code. Every
-          edit is type-checked first and undone if it breaks the build.
-        </p>
-        <textarea
-          disabled
-          rows={3}
-          placeholder="The co-pilot isn't available yet"
-          className="resize-none rounded-md border border-zinc-200 bg-zinc-50 p-2 text-xs placeholder:text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900"
-        />
-      </div>
-    </aside>
-  );
+const ROLE_TITLES: Record<string, string> = {
+  developer: "Developer",
+  designer: "Designer",
+  student: "Student",
+  creator: "Creator",
+  freelancer: "Freelancer",
+  founder: "Founder",
+  researcher: "Researcher",
+};
+
+function portfolioTitle(role: string) {
+  return `${ROLE_TITLES[role] ?? "My"} portfolio`;
 }
 
 const CHIP: Record<PreviewPhase, { label: string; dot: string }> = {
-  loading: { label: "Connecting", dot: "bg-zinc-400" },
+  loading: { label: "Connecting", dot: "bg-stone-400" },
   starting: { label: "Starting", dot: "bg-amber-500 animate-pulse motion-reduce:animate-none" },
   waking: { label: "Waking", dot: "bg-amber-500 animate-pulse motion-reduce:animate-none" },
-  live: { label: "Live", dot: "bg-emerald-500" },
+  live: { label: "Preview ready", dot: "bg-emerald-500" },
   paused: { label: "Paused", dot: "bg-sky-500" },
-  stopped: { label: "Stopped", dot: "bg-zinc-400" },
+  stopped: { label: "Stopped", dot: "bg-stone-400" },
   unhealthy: { label: "Needs attention", dot: "bg-red-500" },
 };
 
 function StatusChip({ phase }: { phase: PreviewPhase }) {
   return (
-    <span role="status" className="flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs dark:border-zinc-800">
+    <span role="status" className="hidden items-center gap-1.5 rounded-full bg-stone-100 px-2.5 py-0.5 text-xs text-stone-600 sm:flex dark:bg-stone-900 dark:text-stone-400">
       <span className={`h-1.5 w-1.5 rounded-full ${CHIP[phase].dot}`} />
       {CHIP[phase].label}
     </span>
@@ -283,7 +277,7 @@ function Message({ title, detail }: { title: string; detail?: string }) {
   return (
     <main className="flex h-dvh flex-col items-center justify-center gap-1 p-8 text-center">
       <p className="font-medium">{title}</p>
-      {detail ? <p className="text-sm text-zinc-500">{detail}</p> : null}
+      {detail ? <p className="text-sm text-stone-500">{detail}</p> : null}
     </main>
   );
 }

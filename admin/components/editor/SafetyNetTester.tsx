@@ -85,9 +85,9 @@ export function SafetyNetTester({ portfolioId, disabled }: { portfolioId: string
   }
 
   return (
-    <section className="flex flex-col gap-2 border-t border-zinc-200 pt-4 dark:border-zinc-800">
+    <section className="flex flex-col gap-2 border-t border-stone-200 pt-4 dark:border-stone-800">
       <h3 className="font-medium">Test the safety net</h3>
-      <p className="text-zinc-500">Development only. Each button submits a real change to your draft branch.</p>
+      <p className="text-stone-500">Development only. Each button submits a real change to your draft branch.</p>
       <div className="grid grid-cols-2 gap-2">
         {SCENARIOS.map((scenario) => (
           <button
@@ -95,10 +95,10 @@ export function SafetyNetTester({ portfolioId, disabled }: { portfolioId: string
             onClick={() => void run(scenario)}
             disabled={disabled || busy !== null}
             title={`Expected: ${scenario.expect}`}
-            className="flex flex-col items-start rounded-md border border-zinc-300 px-2.5 py-1.5 text-left hover:bg-zinc-100 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+            className="flex flex-col items-start rounded-md border border-stone-300 px-2.5 py-1.5 text-left hover:bg-stone-100 focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:outline-none disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-900"
           >
             <span className="font-medium">{busy === scenario.id ? "Submitting…" : scenario.label}</span>
-            <span className="text-[11px] text-zinc-500">{scenario.expect}</span>
+            <span className="text-[11px] text-stone-500">{scenario.expect}</span>
           </button>
         ))}
       </div>

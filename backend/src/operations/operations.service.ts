@@ -1,6 +1,6 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from "@nestjs/common";
-import type { Operation, OperationType, Prisma, User } from "@prisma/client";
+import type { Operation, OperationActor, OperationType, Prisma, User } from "@prisma/client";
 import type { OperationFailure, OperationSummary, OperationTimings } from "@plinth-pages/shared";
 import type { Queue } from "bullmq";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
@@ -33,8 +33,8 @@ export class OperationsService {
   }
 
   /** Records an operation and queues it for the worker. Callers have already checked ownership and validated the input. */
-  async enqueue(portfolioId: string, type: OperationType, summary: string, input: Prisma.InputJsonValue): Promise<OperationSummary> {
-    const operation = await this.prisma.operation.create({ data: { portfolioId, type, actor: "user", summary, input } });
+  async enqueue(portfolioId: string, type: OperationType, summary: string, input: Prisma.InputJsonValue, actor: OperationActor = "user"): Promise<OperationSummary> {
+    const operation = await this.prisma.operation.create({ data: { portfolioId, type, actor, summary, input } });
     // A change counts as activity: the sandbox must not idle-pause while it waits in the queue.
     await this.prisma.sandbox.upsert({
       where: { portfolioId },

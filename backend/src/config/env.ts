@@ -72,6 +72,12 @@ const envSchema = z
     VERCEL_TOKEN: z.string().optional(),
     /** Only for a Vercel team; leave unset for a personal (Hobby) account. */
     VERCEL_TEAM_ID: z.string().optional(),
+    // AI co-pilot. Bedrock uses the standard AWS variable names; any provider left unset is simply unavailable.
+    AWS_REGION: z.string().optional(),
+    AWS_ACCESS_KEY_ID: z.string().optional(),
+    AWS_SECRET_ACCESS_KEY: z.string().optional(),
+    GEMINI_API_KEY: z.string().optional(),
+    COPILOT_DAILY_MESSAGES: z.coerce.number().int().positive().default(40),
   })
   .superRefine((env, ctx) => {
     const required = env.ORCHESTRATOR_ROLE === "api" ? API_ONLY : WORKER_ONLY;

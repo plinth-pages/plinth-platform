@@ -30,6 +30,7 @@ model User {
 
   portfolios          Portfolio[]
   integrationRequests IntegrationRequest[]
+  copilotMessages     CopilotMessage[]
 
   @@map("users")
 }
@@ -71,6 +72,7 @@ model Portfolio {
   operations            Operation[]
   deployments           Deployment[]
   installedIntegrations InstalledIntegration[]
+  copilotMessages       CopilotMessage[]
   credentials           Credential[]
   conversations         Conversation[]
 
@@ -144,6 +146,7 @@ enum OperationType {
   theme
   fleet_update
   publish
+  copilot
 }
 
 enum OperationActor {
@@ -288,6 +291,38 @@ model IntegrationRequest {
   @@unique([userId, key])
   @@index([key])
   @@map("integration_requests")
+}
+
+enum CopilotRole {
+  user
+  assistant
+}
+
+/// The co-pilot conversation for a portfolio. A user message creates a `copilot` operation; the worker writes the
+/// assistant reply (with token usage) when it plans that operation.
+model CopilotMessage {
+  id           String      @id @default(cuid())
+  portfolioId  String      @map("portfolio_id")
+  userId       String      @map("user_id")
+  role         CopilotRole
+  content      String
+  /// Model registry id, e.g. "claude-3-haiku".
+  model        String?
+  operationId  String?     @map("operation_id")
+  /// Files the reply changed and integrations it queued, for the chat to show.
+  changes      Json?
+  refused      Boolean     @default(false)
+  inputTokens  Int?        @map("input_tokens")
+  outputTokens Int?        @map("output_tokens")
+  latencyMs    Int?        @map("latency_ms")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([portfolioId, createdAt])
+  @@index([userId, createdAt])
+  @@map("copilot_messages")
 }
 
 model Credential {

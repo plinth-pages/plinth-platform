@@ -7,9 +7,13 @@ import { PrismaService } from "../prisma/prisma.service";
 import { SANDBOX_LOCKS, type SandboxLocks } from "../sandbox/sandbox-locks";
 import { SandboxLifecycle } from "../sandbox/sandbox.lifecycle";
 import { GitSync } from "./git-sync";
-import { OperationRunner, type DeploymentTracking, type PushRetries } from "./operation-runner";
+import type { Prisma } from "@prisma/client";
+import type { FollowUp } from "./integration-planner";
+import { OperationRunner, type DeploymentTracking, type FollowUpQueue, type PushRetries } from "./operation-runner";
 import {
   OPERATION_BUSY_RETRY_MS,
+  OPERATION_JOB_OPTIONS,
+  operationJobId,
   OPERATIONS_QUEUE,
   PUSH_JOB_OPTIONS,
   TRACK_DEPLOYMENT_JOB_OPTIONS,
@@ -103,6 +107,26 @@ export class QueuedDeploymentTracking implements DeploymentTracking {
 
   async track(portfolioId: string, deploymentId: string): Promise<void> {
     await this.queue.add("track-deployment", { portfolioId, deploymentId }, { jobId: trackDeploymentJobId(deploymentId), delay: 5_000, ...TRACK_DEPLOYMENT_JOB_OPTIONS });
+  }
+}
+
+/** Worker only: records and queues operations a finished operation asked for. They run after it, in order. */
+@Injectable()
+export class QueuedFollowUps implements FollowUpQueue {
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(OPERATIONS_QUEUE) private readonly queue: Queue<OperationJobData>,
+    @Inject(PORTFOLIO_EVENTS) private readonly events: PortfolioEventPublisher,
+  ) {}
+
+  async enqueue(portfolioId: string, followUps: FollowUp[]): Promise<void> {
+    for (const followUp of followUps) {
+      const operation = await this.prisma.operation.create({
+        data: { portfolioId, type: followUp.type, actor: "copilot", summary: followUp.summary, input: followUp.input as Prisma.InputJsonValue },
+      });
+      await this.queue.add("run", { portfolioId, operationId: operation.id }, { jobId: operationJobId(operation.id), ...OPERATION_JOB_OPTIONS });
+      await this.events.publish(portfolioId, { type: "operation", operationId: operation.id, status: "queued", at: new Date().toISOString() }).catch(() => undefined);
+    }
   }
 }
 

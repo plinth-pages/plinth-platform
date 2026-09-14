@@ -5,10 +5,48 @@
   --font-mono: var(--font-mono-face), ui-monospace, monospace;
 }
 
+/* One accent, used for the co-pilot and focus. Neutrals are warm stone; success stays emerald, errors red. */
+@theme {
+  --color-brand-50: #eef1fd;
+  --color-brand-100: #dde3fb;
+  --color-brand-200: #bcc7f7;
+  --color-brand-300: #93a3f0;
+  --color-brand-400: #6b7fe6;
+  --color-brand-500: #4c62dc;
+  --color-brand-600: #3a4ecb;
+  --color-brand-700: #2f3fa6;
+  --color-brand-800: #2a3784;
+  --color-brand-900: #26306a;
+  --color-brand-950: #161b3e;
+  --shadow-card: 0 1px 2px rgb(28 25 23 / 0.04), 0 1px 1px rgb(28 25 23 / 0.03);
+  --shadow-float: 0 12px 32px -8px rgb(28 25 23 / 0.18), 0 2px 6px rgb(28 25 23 / 0.06);
+}
+
 :root {
   color-scheme: light dark;
 }
 
 body {
-  @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  @apply bg-stone-50 text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-toast-in {
+    animation: none;
+  }
 }
