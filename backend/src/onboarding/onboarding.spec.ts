@@ -95,6 +95,8 @@ describe("setupProgress", () => {
   });
 
   it("still opens the editor when personalisation couldn't be applied", () => {
+    // A portfolio from before onboarding has no personalisation: it must not look set-up-in-progress forever.
+    expect(setupProgress(portfolio("ready"), sandbox("running"), null)).toMatchObject({ ready: true });
     const skipped = setupProgress(portfolio("ready"), sandbox("running"), op("rejected"));
     expect(skipped).toMatchObject({ ready: true, retry: null });
     expect(skipped.steps[3].state).toBe("skipped");

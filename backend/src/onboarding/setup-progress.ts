@@ -17,7 +17,10 @@ export function setupProgress(portfolio: Portfolio, sandbox: Sandbox | null, per
 
   let details: SetupStep["state"] = "pending";
   if (repository === "done" && preview === "done") {
-    if (!personalise || ACTIVE.has(personalise.status)) details = "active";
+    // Personalisation is queued the moment the repository is ready, so by the time the editor is live a missing
+    // operation means there is none to wait for (a portfolio created before onboarding existed) — not one pending.
+    if (!personalise) details = "skipped";
+    else if (ACTIVE.has(personalise.status)) details = "active";
     else details = personalise.status === "applied" ? "done" : "skipped";
   }
 
