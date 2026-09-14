@@ -3,6 +3,7 @@ import type {
   ConnectCredentialsRequest,
   PortfolioCredentialsResponse,
   AdminMetricsResponse,
+  BillingStatusResponse,
   CopilotMessagesResponse,
   CopilotModelsResponse,
   SendCopilotMessageRequest,
@@ -114,6 +115,10 @@ export const api = {
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "PATCH", body: JSON.stringify({ slot }) }),
   uninstallIntegration: (id: string, integrationId: string) =>
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
+  billingStatus: () => request<BillingStatusResponse>("/billing"),
+  /** A Stripe Checkout URL for Pro. The plan changes when Stripe's webhook confirms payment. */
+  checkout: () => request<{ url: string }>("/billing/checkout", { method: "POST" }),
+  billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
   adminMetrics: () => request<AdminMetricsResponse>("/admin/metrics"),
   copilotModels: () => request<CopilotModelsResponse>("/copilot/models"),
   copilotMessages: (id: string) => request<CopilotMessagesResponse>(`/portfolios/${id}/copilot/messages`),

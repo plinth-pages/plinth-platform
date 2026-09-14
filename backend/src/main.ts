@@ -25,7 +25,8 @@ async function bootstrap() {
     return;
   }
 
-  const app = await NestFactory.create(AppModule.forRole("api"), { abortOnError: false });
+  // rawBody: Stripe webhooks are verified against the exact bytes Stripe signed.
+  const app = await NestFactory.create(AppModule.forRole("api"), { abortOnError: false, rawBody: true });
   const config = app.get<ConfigService<Env, true>>(ConfigService);
 
   app.setGlobalPrefix("v1");

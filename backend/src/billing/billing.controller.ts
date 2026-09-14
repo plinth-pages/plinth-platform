@@ -1,0 +1,42 @@
+import { Controller, Get, Headers, HttpCode, Post, Req, UseGuards } from "@nestjs/common";
+import type { RawBodyRequest } from "@nestjs/common";
+import type { User } from "@prisma/client";
+import type { BillingStatusResponse } from "@plinth-pages/shared";
+import type { Request } from "express";
+import { CurrentUser } from "../auth/roles";
+import { SessionGuard } from "../auth/session.guard";
+import { BillingService } from "./billing.service";
+
+@Controller("billing")
+export class BillingController {
+  constructor(private readonly billing: BillingService) {}
+
+  @Get()
+  @UseGuards(SessionGuard)
+  status(@CurrentUser() user: User): BillingStatusResponse {
+    return this.billing.status(user);
+  }
+
+  /** Returns a Stripe Checkout URL; the plan changes only when Stripe's webhook confirms payment. */
+  @Post("checkout")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  checkout(@CurrentUser() user: User) {
+    return this.billing.checkout(user);
+  }
+
+  @Post("portal")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  portal(@CurrentUser() user: User) {
+    return this.billing.portal(user);
+  }
+
+  /** Stripe → Plinth. Authenticated by the Stripe signature over the raw body, not by a session. */
+  @Post("webhook")
+  @HttpCode(200)
+  async webhook(@Req() req: RawBodyRequest<Request>, @Headers("stripe-signature") signature: string | undefined) {
+    const applied = await this.billing.handleWebhook(req.rawBody, signature);
+    return { received: true, duplicate: !applied };
+  }
+}

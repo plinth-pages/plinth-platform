@@ -46,8 +46,10 @@
     "groq-sdk": "^1.6.0",
     "http-proxy-3": "2.0.1",
     "ioredis": "5.11.1",
+    "openai": "^7.15.0",
     "reflect-metadata": "^0.2",
     "rxjs": "^7",
+    "stripe": "^22.6.2",
     "undici": "^7",
     "zod": "^3.24"
   },

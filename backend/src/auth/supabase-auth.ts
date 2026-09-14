@@ -83,10 +83,13 @@ export class SupabaseAuth {
     if (!supabaseUser?.id) throw new ServiceUnavailableException("Sign-in is unavailable right now. Please try again.");
 
     const name = nameForNewUser ?? supabaseUser.user_metadata?.name ?? null;
+    // Like ADMIN_GITHUB_LOGINS, the env list is re-applied on every sign-in.
+    const admins = new Set(this.config.get("ADMIN_EMAILS", { infer: true }).split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean));
+    const role = admins.has(supabaseUser.email.toLowerCase()) ? "admin" : "user";
     return this.prisma.user.upsert({
       where: { supabaseId: supabaseUser.id },
-      create: { supabaseId: supabaseUser.id, email: supabaseUser.email, githubLogin: handleFromEmail(supabaseUser.email), name },
-      update: { email: supabaseUser.email },
+      create: { supabaseId: supabaseUser.id, email: supabaseUser.email, githubLogin: handleFromEmail(supabaseUser.email), name, role },
+      update: { email: supabaseUser.email, role },
     });
   }
 

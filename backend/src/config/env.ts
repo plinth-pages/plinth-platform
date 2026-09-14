@@ -79,6 +79,13 @@ const envSchema = z
     GEMINI_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
     ANTHROPIC_API_KEY: z.string().optional(),
+    OPENAI_API_KEY: z.string().optional(),
+    // Billing (Phase 14). Without a price id, checkout creates the $15/month Pro price inline.
+    STRIPE_SECRET_KEY: z.string().optional(),
+    STRIPE_WEBHOOK_SECRET: z.string().optional(),
+    STRIPE_PRO_PRICE_ID: z.string().optional(),
+    /** Emails that get the admin role when they sign in with email and password. */
+    ADMIN_EMAILS: z.string().default(""),
     // Email sign-in (Supabase Auth). SUPABASE_URL defaults to the project the database belongs to.
     SUPABASE_URL: z.string().url().optional(),
     SUPABASE_ANON_KEY: z.string().optional(),

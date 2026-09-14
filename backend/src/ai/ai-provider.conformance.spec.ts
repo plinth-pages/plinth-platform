@@ -4,6 +4,7 @@ import { AnthropicProvider, type AnthropicMessages } from "./anthropic.provider"
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
 import { GroqProvider, type GroqChat } from "./groq.provider";
+import { OpenAIProvider, type OpenAIChat } from "./openai.provider";
 
 /**
  * The contract every AI provider must honour, run against each vendor with its SDK faked. A new provider is added to
@@ -34,6 +35,21 @@ const PROVIDERS: ProviderUnderTest[] = [
         },
       } as unknown as GroqChat;
       return new GroqProvider(undefined, chat);
+    },
+  },
+  {
+    name: "openai",
+    build: (scenario) => {
+      if (!scenario) return new OpenAIProvider(undefined);
+      const chat = {
+        create: async () => {
+          if (scenario === "rate-limited") throw Object.assign(new Error("Rate limit reached"), { status: 429 });
+          if (scenario === "rejected") throw Object.assign(new Error("Incorrect API key"), { status: 401 });
+          const toolCalls = scenario === "tool" ? [{ id: "1", type: "function", function: { name: "submit_changes", arguments: JSON.stringify(ANSWER) } }] : undefined;
+          return { choices: [{ finish_reason: "stop", message: { content: "plain text", tool_calls: toolCalls } }], usage: { prompt_tokens: USAGE.input, completion_tokens: USAGE.output } };
+        },
+      } as unknown as OpenAIChat;
+      return new OpenAIProvider(undefined, chat);
     },
   },
   {

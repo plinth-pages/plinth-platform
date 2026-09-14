@@ -13,24 +13,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Plan {
+  free
+  pro
+}
+
 enum UserRole {
   user
   admin
 }
 
 model User {
-  id          String   @id @default(cuid())
+  id                     String    @id @default(cuid())
   /// Set for GitHub sign-in.
-  githubId    String?  @unique @map("github_id")
+  githubId               String?   @unique @map("github_id")
   /// Set for email sign-in (Supabase Auth user id).
-  supabaseId  String?  @unique @map("supabase_id")
-  email       String?
-  githubLogin String   @map("github_login")
-  name        String?
-  avatarUrl   String?  @map("avatar_url")
-  role        UserRole @default(user)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  supabaseId             String?   @unique @map("supabase_id")
+  email                  String?
+  githubLogin            String    @map("github_login")
+  name                   String?
+  avatarUrl              String?   @map("avatar_url")
+  role                   UserRole  @default(user)
+  plan                   Plan      @default(free)
+  /// Stripe customer and subscription, set by checkout and kept current by webhooks.
+  stripeCustomerId       String?   @unique @map("stripe_customer_id")
+  stripeSubscriptionId   String?   @map("stripe_subscription_id")
+  /// Stripe subscription status (active, trialing, past_due, canceled…).
+  subscriptionStatus     String?   @map("subscription_status")
+  planRenewsAt           DateTime? @map("plan_renews_at")
+  planCancelsAtPeriodEnd Boolean   @default(false) @map("plan_cancels_at_period_end")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
   portfolios          Portfolio[]
   integrationRequests IntegrationRequest[]
@@ -336,6 +349,16 @@ model CopilotMessage {
 
 /// A user secret, sealed with AES-256-GCM (credentials/vault.ts). Plaintext exists only in memory, in the sandbox
 /// .env.local, and as a sensitive Vercel environment variable.
+/// Stripe webhook events already handled. Stripe retries deliveries, so each event is applied once.
+model BillingEvent {
+  id         String   @id // Stripe event id
+  type       String
+  userId     String?  @map("user_id")
+  receivedAt DateTime @default(now()) @map("received_at")
+
+  @@map("billing_events")
+}
+
 model Credential {
   id            String    @id @default(cuid())
   portfolioId   String    @map("portfolio_id")

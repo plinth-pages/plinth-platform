@@ -4,6 +4,7 @@ export type UserRole = "user" | "admin";
 
 export interface SessionUser {
   id: string;
+  plan: "free" | "pro";
   githubLogin: string;
   name: string | null;
   avatarUrl: string | null;
@@ -521,7 +522,7 @@ export interface CopilotMessageSummary {
 
 export interface CopilotMessagesResponse {
   messages: CopilotMessageSummary[];
-  usage: { used: number; limit: number };
+  usage: CopilotUsage;
 }
 
 export interface SendCopilotMessageRequest {
@@ -534,7 +535,38 @@ export interface SendCopilotMessageResponse {
   operation: OperationSummary;
 }
 
+export type PlanId = "free" | "pro";
+
+export interface CopilotUsage {
+  plan: PlanId;
+  /** Messages in the last 24 hours. */
+  used: number;
+  limit: number;
+  /** Tokens in the last 30 days. */
+  tokensUsed: number;
+  tokenLimit: number;
+}
+
+export interface PlanLimits {
+  dailyMessages: number;
+  monthlyTokens: number;
+  premiumModels: boolean;
+}
+
+export interface BillingStatusResponse {
+  plan: PlanId;
+  status: string | null;
+  renewsAt: string | null;
+  cancelsAtPeriodEnd: boolean;
+  priceUsd: number;
+  limits: Record<PlanId, PlanLimits>;
+  /** Stripe is configured on this server. */
+  checkoutAvailable: boolean;
+}
+
 export interface AdminMetricsResponse {
+  plans: { free: number; pro: number; mrrUsd: number; upgrades30d: number; signups7d: number };
+  copilot30d: { messages: number; tokens: number; byModel: { model: string; messages: number; tokens: number }[] };
   users: number;
   portfolios: { total: number; ready: number; provisioning: number; failed: number };
   sandboxesRunning: number;

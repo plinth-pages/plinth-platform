@@ -1,12 +1,13 @@
 "use client";
 
-import type { CopilotMessageSummary, CopilotModelSummary, OperationStatus, OperationSummary } from "@plinth-pages/shared";
+import type { CopilotMessageSummary, CopilotModelSummary, CopilotUsage, OperationStatus, OperationSummary } from "@plinth-pages/shared";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LockIcon, useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
 
 const ACTIVE: OperationStatus[] = ["queued", "staging", "checking", "applying"];
-const PREMIUM = "Pro Plan required. Upgrade coming soon!";
+const PREMIUM = "This model is part of Pro. Upgrade on the Plan & billing page.";
 
 const SUGGESTIONS = ["Make it dark", "Show my best repos", "Add my work experience: ", "Rewrite my headline to sound more confident"];
 
@@ -32,7 +33,7 @@ function areaName(path: string) {
 export function CopilotChat({ portfolioId, operations, live }: { portfolioId: string; operations: OperationSummary[]; live: boolean }) {
   const toast = useToast();
   const [messages, setMessages] = useState<CopilotMessageSummary[] | null>(null);
-  const [usage, setUsage] = useState<{ used: number; limit: number } | null>(null);
+  const [usage, setUsage] = useState<CopilotUsage | null>(null);
   const [models, setModels] = useState<CopilotModelSummary[]>([]);
   const [model, setModel] = useState<string>("free");
   const [draft, setDraft] = useState("");
@@ -74,7 +75,8 @@ export function CopilotChat({ portfolioId, operations, live }: { portfolioId: st
   const pending = messages?.some((message) => message.role === "user" && message.operation && ACTIVE.includes(message.operation.status) && !messages.some((reply) => reply.role === "assistant" && reply.operation?.id === message.operation?.id));
   const activeStatus = operations.find((operation) => operation.type === "copilot" && ACTIVE.includes(operation.status))?.status;
   const busy = sending || Boolean(activeStatus);
-  const outOfMessages = usage ? usage.used >= usage.limit : false;
+  const outOfMessages = usage ? usage.used >= usage.limit || usage.tokensUsed >= usage.tokenLimit : false;
+  const tokenShare = usage ? Math.min(1, usage.tokensUsed / usage.tokenLimit) : 0;
 
   async function send(text: string) {
     const message = text.trim();
@@ -98,7 +100,15 @@ export function CopilotChat({ portfolioId, operations, live }: { portfolioId: st
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-stone-200 px-4 dark:border-stone-800">
         <SparkIcon className="h-4 w-4 text-brand-600 dark:text-brand-400" />
         <span className="text-sm font-semibold">Co-pilot</span>
-        {usage ? <span className="ml-auto text-[11px] text-stone-500 tabular-nums">{Math.max(0, usage.limit - usage.used)} left today</span> : null}
+        {usage ? (
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-stone-500 tabular-nums" title={`${usage.used} of ${usage.limit} messages today · ${Math.round(tokenShare * 100)}% of this month's allowance`}>
+            {usage.plan === "pro" ? <span className="rounded bg-brand-50 px-1 font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">PRO</span> : null}
+            <span className="h-1.5 w-12 overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800">
+              <span className={`block h-full rounded-full ${tokenShare > 0.9 ? "bg-red-500" : "bg-brand-500"}`} style={{ width: `${Math.max(4, tokenShare * 100)}%` }} />
+            </span>
+            {Math.max(0, usage.limit - usage.used)} left today
+          </span>
+        ) : null}
       </div>
 
       <div ref={list} className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -135,6 +145,14 @@ export function CopilotChat({ portfolioId, operations, live }: { portfolioId: st
         }}
         className="shrink-0 border-t border-stone-200 p-3 dark:border-stone-800"
       >
+        {outOfMessages && usage?.plan === "free" ? (
+          <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-900 dark:bg-brand-950 dark:text-brand-200">
+            You&apos;ve reached the Free plan&apos;s limit.
+            <Link href="/billing" className="shrink-0 rounded-md bg-brand-600 px-2 py-1 font-semibold text-white hover:bg-brand-700">
+              Upgrade
+            </Link>
+          </div>
+        ) : null}
         <div className="rounded-xl bg-stone-50 ring-1 ring-stone-200 focus-within:ring-2 focus-within:ring-brand-500 dark:bg-stone-900 dark:ring-stone-800">
           <textarea
             value={draft}
@@ -148,7 +166,7 @@ export function CopilotChat({ portfolioId, operations, live }: { portfolioId: st
             rows={3}
             maxLength={2000}
             disabled={!live || outOfMessages}
-            placeholder={!live ? "Your preview is starting…" : outOfMessages ? "You've used today's messages" : "Describe a change…"}
+            placeholder={!live ? "Your preview is starting…" : outOfMessages ? "You've reached your co-pilot limit" : "Describe a change…"}
             aria-label="Message the co-pilot"
             className="block w-full resize-none bg-transparent px-3 pt-2.5 text-sm placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
           />
@@ -304,6 +322,13 @@ function ModelSelect({ models, value, onChange, onLocked }: { models: CopilotMod
               </button>
             </li>
           ))}
+          {models.some((model) => model.locked) ? (
+            <li className="mt-1 border-t border-stone-100 px-2.5 pt-2 pb-1 dark:border-stone-800">
+              <Link href="/billing" className="text-xs font-semibold text-brand-700 hover:underline dark:text-brand-300">
+                Upgrade to Pro for Claude and GPT-4o →
+              </Link>
+            </li>
+          ) : null}
         </ul>
       ) : null}
     </div>

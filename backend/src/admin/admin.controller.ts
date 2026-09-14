@@ -1,6 +1,7 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import type { User } from "@prisma/client";
 import type { AdminIntegrationRequestsResponse, AdminMetricsResponse, AdminPingResponse, OperationStatus } from "@plinth-pages/shared";
+import { PLANS } from "../billing/plans";
 import { PrismaService } from "../prisma/prisma.service";
 import { CurrentUser, Roles, RolesGuard } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
@@ -19,6 +20,15 @@ export class AdminController {
   @Get("metrics")
   async metrics(): Promise<AdminMetricsResponse> {
     const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
+    const month = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+    const [plans, signups7d, upgrades30d, copilot30d, copilotByModel] = await Promise.all([
+      this.prisma.user.groupBy({ by: ["plan"], _count: { _all: true } }),
+      this.prisma.user.count({ where: { createdAt: { gte: since } } }),
+      this.prisma.billingEvent.count({ where: { type: "checkout.session.completed", receivedAt: { gte: month } } }),
+      this.prisma.copilotMessage.aggregate({ where: { role: "assistant", createdAt: { gte: month } }, _count: { _all: true }, _sum: { inputTokens: true, outputTokens: true } }),
+      this.prisma.copilotMessage.groupBy({ by: ["model"], where: { role: "assistant", createdAt: { gte: month } }, _count: { _all: true }, _sum: { inputTokens: true, outputTokens: true } }),
+    ]);
+    const byPlan = Object.fromEntries(plans.map((row) => [row.plan, row._count._all]));
     const [users, portfolios, sandboxesRunning, operations, deployments, copilot, installed, requests] = await Promise.all([
       this.prisma.user.count(),
       this.prisma.portfolio.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -46,6 +56,14 @@ export class AdminController {
       deployments7d: { ready: byDeployment.ready ?? 0, failed: byDeployment.failed ?? 0 },
       copilot7d: { messages: copilot._count._all, inputTokens: copilot._sum.inputTokens ?? 0, outputTokens: copilot._sum.outputTokens ?? 0 },
       integrations: { installed, requests },
+      plans: { free: byPlan.free ?? 0, pro: byPlan.pro ?? 0, mrrUsd: (byPlan.pro ?? 0) * PLANS.pro.priceUsd, upgrades30d, signups7d },
+      copilot30d: {
+        messages: copilot30d._count._all,
+        tokens: (copilot30d._sum.inputTokens ?? 0) + (copilot30d._sum.outputTokens ?? 0),
+        byModel: copilotByModel
+          .map((row) => ({ model: row.model ?? "unknown", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
+          .sort((a, b) => b.tokens - a.tokens),
+      },
     };
   }
 

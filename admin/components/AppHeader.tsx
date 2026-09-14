@@ -47,6 +47,15 @@ export function AppHeader({ user }: { user: SessionUser }) {
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-6">
         <Brand />
         <div className="flex items-center gap-2">
+          {user.plan === "pro" ? (
+            <Link href="/billing" className="rounded-full bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+              Pro
+            </Link>
+          ) : (
+            <Link href="/billing" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white shadow-card hover:bg-brand-700">
+              Upgrade
+            </Link>
+          )}
           {user.role === "admin" ? (
             <Link href="/admin" className="rounded-md px-2.5 py-1.5 text-sm text-stone-600 hover:bg-stone-200/60 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100">
               Admin

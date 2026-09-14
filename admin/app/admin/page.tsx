@@ -41,7 +41,33 @@ export default function AdminOverviewPage() {
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Users" value={metrics.users} />
+        <Stat label="MRR" value={metrics.plans.mrrUsd} prefix="$" note={`${metrics.plans.pro} Pro × $15`} />
+        <Stat label="Pro users" value={metrics.plans.pro} note={`${metrics.users ? Math.round((metrics.plans.pro / metrics.users) * 100) : 0}% of users · ${metrics.plans.upgrades30d} upgrades in 30 days`} />
+        <Stat label="New sign-ups" value={metrics.plans.signups7d} note="Last 7 days" />
+        <Stat label="AI tokens (30 days)" value={metrics.copilot30d.tokens} note={`${metrics.copilot30d.messages.toLocaleString()} co-pilot replies`} />
+      </div>
+
+      {metrics.copilot30d.byModel.length ? (
+        <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
+          <h2 className="font-medium">AI usage by model · 30 days</h2>
+          <ul className="mt-4 flex flex-col gap-2.5">
+            {metrics.copilot30d.byModel.map((row) => (
+              <li key={row.model} className="grid grid-cols-[9rem_minmax(0,1fr)_auto] items-center gap-3 text-sm">
+                <span className="truncate font-mono text-xs">{row.model}</span>
+                <span className="h-2 rounded-full bg-stone-100 dark:bg-stone-800">
+                  <span className="block h-full rounded-full bg-brand-500" style={{ width: `${Math.max(2, (row.tokens / Math.max(1, metrics.copilot30d.byModel[0].tokens)) * 100)}%` }} />
+                </span>
+                <span className="text-xs text-stone-500 tabular-nums">
+                  {compact(row.tokens)} tokens · {row.messages}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Stat label="Users" value={metrics.users} note={`${metrics.plans.free} Free · ${metrics.plans.pro} Pro`} />
         <Stat label="Portfolios" value={metrics.portfolios.total} note={`${metrics.portfolios.ready} ready · ${metrics.portfolios.provisioning} setting up · ${metrics.portfolios.failed} failed`} />
         <Stat label="Previews running" value={metrics.sandboxesRunning} note="Billed by the minute" />
         <Stat label="Integrations installed" value={metrics.integrations.installed} note={`${metrics.integrations.requests} requests`} />
@@ -97,11 +123,14 @@ export default function AdminOverviewPage() {
   );
 }
 
-function Stat({ label, value, note }: { label: string; value: number; note?: string }) {
+function Stat({ label, value, note, prefix = "" }: { label: string; value: number; note?: string; prefix?: string }) {
   return (
     <div className="rounded-2xl bg-white p-4 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
       <p className="text-xs text-stone-500">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">{value.toLocaleString()}</p>
+      <p className="mt-1 text-2xl font-semibold tracking-tight tabular-nums">
+        {prefix}
+        {value.toLocaleString()}
+      </p>
       {note ? <p className="mt-1 truncate text-xs text-stone-500">{note}</p> : null}
     </div>
   );

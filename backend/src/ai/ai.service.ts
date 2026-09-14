@@ -8,6 +8,7 @@ import { AnthropicProvider } from "./anthropic.provider";
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
 import { GroqProvider } from "./groq.provider";
+import { OpenAIProvider } from "./openai.provider";
 
 export { buildModels, DEFAULT_GROQ_MODEL, DEFAULT_MODEL_ID, type ModelDefinition } from "./ai-models";
 
@@ -19,6 +20,7 @@ export function createProviders(config: ConfigService<Env, true>): AiProvider[] 
   return [
     new GroqProvider(config.get("GROQ_API_KEY", { infer: true })),
     new AnthropicProvider(config.get("ANTHROPIC_API_KEY", { infer: true })),
+    new OpenAIProvider(config.get("OPENAI_API_KEY", { infer: true })),
     new BedrockProvider({
       region: config.get("AWS_REGION", { infer: true }),
       accessKeyId: config.get("AWS_ACCESS_KEY_ID", { infer: true }),
@@ -42,8 +44,8 @@ export class AiService {
     return this.models.find((model) => model.id === id);
   }
 
-  /** What the model selector shows. Pro models are listed but locked until plans exist. */
-  catalogue(): CopilotModelSummary[] {
+  /** What the model selector shows for a plan: Pro models are locked on Free, and unavailable until their vendor is configured. */
+  catalogue(plan: "free" | "pro" = "free"): CopilotModelSummary[] {
     return this.models
       .filter((model) => !model.hidden)
       .map((model) => ({
@@ -51,8 +53,8 @@ export class AiService {
         label: model.label,
         badge: model.badge,
         tier: model.tier,
-        locked: model.tier !== "free",
-        available: model.tier === "free" && Boolean(this.providers.get(model.provider)?.configured()),
+        locked: model.tier === "pro" && plan !== "pro",
+        available: (model.tier === "free" || plan === "pro") && Boolean(this.providers.get(model.provider)?.configured()),
         default: model.id === DEFAULT_MODEL_ID,
       }));
   }

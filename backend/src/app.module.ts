@@ -5,6 +5,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
 import { AiService } from "./ai/ai.service";
 import { AuthModule } from "./auth/auth.module";
+import { BillingController } from "./billing/billing.controller";
+import { BillingService, STRIPE, createStripe } from "./billing/billing.service";
 import { CredentialSync, SECRET_ENVIRONMENT } from "./credentials/credential-sync";
 import { CredentialsController } from "./credentials/credentials.controller";
 import { CredentialsService } from "./credentials/credentials.service";
@@ -84,6 +86,7 @@ class RoleModule {
     CatalogueController,
     IntegrationsController,
     CopilotController,
+    BillingController,
     CredentialsController,
     VisitorCounterController,
     DevEditController,
@@ -102,6 +105,8 @@ class RoleModule {
     CopilotService,
     vaultProvider,
     CredentialsService,
+    BillingService,
+    { provide: STRIPE, inject: [ConfigService], useFactory: createStripe },
     PortfolioEventsHub,
     ...previewApiProviders,
     {

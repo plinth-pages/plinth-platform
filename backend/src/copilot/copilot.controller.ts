@@ -11,8 +11,8 @@ export class CopilotController {
   constructor(private readonly copilot: CopilotService) {}
 
   @Get("copilot/models")
-  models(): CopilotModelsResponse {
-    return this.copilot.models();
+  models(@CurrentUser() user: User): CopilotModelsResponse {
+    return this.copilot.models(user);
   }
 
   @Get("portfolios/:id/copilot/messages")

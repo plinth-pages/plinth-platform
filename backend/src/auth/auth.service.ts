@@ -115,6 +115,7 @@ export class AuthService {
       name: user.name,
       avatarUrl: user.avatarUrl,
       role: user.role,
+      plan: user.plan,
     };
   }
 }
