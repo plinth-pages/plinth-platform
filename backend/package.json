@@ -29,6 +29,7 @@
     "testEnvironment": "node"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@aws-sdk/client-bedrock-runtime": "^3.1131.0",
     "@nestjs/bullmq": "^11",
     "@nestjs/common": "^11",

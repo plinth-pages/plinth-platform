@@ -78,6 +78,7 @@ const envSchema = z
     AWS_SECRET_ACCESS_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
+    ANTHROPIC_API_KEY: z.string().optional(),
     /** The Groq model behind the free tier. */
     GROQ_MODEL: z.string().optional(),
     COPILOT_DAILY_MESSAGES: z.coerce.number().int().positive().default(40),

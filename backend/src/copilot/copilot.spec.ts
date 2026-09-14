@@ -180,11 +180,11 @@ describe("model catalogue", () => {
     const service = new AiService(config, [{ id: "groq", configured: () => true, generate: async () => Promise.reject(new Error("unused")) }]);
     expect(service.catalogue()).toEqual([
       { id: "free", label: "GPT-OSS 120B", badge: "Free", tier: "free", locked: false, available: true, default: true },
-      { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
+      { id: "claude-3-5-sonnet", label: "Claude Sonnet 5", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
       { id: "gpt-4o", label: "GPT-4o", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
     ]);
     expect(buildModels().find((model) => model.id === "claude-3-haiku")).toMatchObject({ provider: "bedrock", providerModel: "anthropic.claude-3-haiku-20240307-v1:0", hidden: true });
-    expect(buildModels("llama3-70b-8192")[0]).toMatchObject({ label: "Llama 3 70B", provider: "groq", providerModel: "llama3-70b-8192" });
+    expect(buildModels({ groqModel: "llama3-70b-8192" })[0]).toMatchObject({ label: "Llama 3 70B", provider: "groq", providerModel: "llama3-70b-8192" });
   });
 
   it("reports a model unavailable when its provider has no credentials", () => {
