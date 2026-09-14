@@ -48,6 +48,7 @@
     "ioredis": "5.11.1",
     "reflect-metadata": "^0.2",
     "rxjs": "^7",
+    "undici": "^7",
     "zod": "^3.24"
   },
   "devDependencies": {

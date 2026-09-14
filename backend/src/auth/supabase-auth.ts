@@ -4,6 +4,7 @@ import type { User } from "@prisma/client";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
+import { createDohFallbackFetch } from "./doh-fetch";
 
 /** Lets tests replace calls to Supabase. */
 export const SUPABASE_FETCH = Symbol("SUPABASE_FETCH");
@@ -38,7 +39,8 @@ export class SupabaseAuth {
     private readonly config: ConfigService<Env, true>,
     @Optional() @Inject(SUPABASE_FETCH) fetchImpl?: typeof fetch,
   ) {
-    this.fetchImpl = fetchImpl ?? fetch;
+    // Some networks block supabase.co at the DNS level; the fallback resolves the real address when that happens.
+    this.fetchImpl = fetchImpl ?? createDohFallbackFetch();
   }
 
   get configured(): boolean {
