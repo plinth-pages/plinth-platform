@@ -8,9 +8,8 @@ import { BrandMark } from "@/components/ui/Brand";
 import { ArrowRight, buttonClass } from "@/components/ui/Button";
 
 export const metadata: Metadata = {
-  title: "Plinth — Your personal site, engineered by AI",
-  description:
-    "Describe a change in plain words. Plinth makes it, checks it, and puts it live in one click — on a site that's genuinely yours.",
+  title: "Plinth — Describe what you do. Watch it get built.",
+  description: "Real React code engineered by AI, type-checked for safety, and deployed in seconds. You own every line.",
 };
 
 const CONNECTS = ["GitHub", "LeetCode", "Resend", "Contact forms", "Visitor analytics"];
@@ -18,31 +17,34 @@ const CONNECTS = ["GitHub", "LeetCode", "Resend", "Contact forms", "Visitor anal
 const EXAMPLES: { prompt: string; title: string; changes: Change[]; result: { ok: boolean; text: string } }[] = [
   {
     prompt: "Switch to a dark theme with a teal accent",
-    title: "Look",
+    title: "Theme",
     changes: [
-      ["-", "Light theme, indigo accent"],
-      ["+", "Dark theme, teal accent"],
-      [" ", "Fonts and layout"],
+      [" ", "const theme = {"],
+      ["-", '  mode: "light",'],
+      ["+", '  mode: "dark",'],
+      ["-", '  accent: "indigo",'],
+      ["+", '  accent: "teal",'],
+      [" ", "};"],
     ],
-    result: { ok: true, text: "All checks passed · live in your preview" },
+    result: { ok: true, text: "Type-checked · applied" },
   },
   {
     prompt: "Add my LeetCode stats under my projects",
     title: "Homepage",
     changes: [
-      [" ", "Projects"],
-      ["+", "LeetCode stats, updated automatically"],
-      [" ", "Experience"],
+      [" ", "<Projects items={projects} />"],
+      ["+", '<LeetCodeStats username="rahul-das" />'],
+      [" ", "<Experience items={roles} />"],
     ],
-    result: { ok: true, text: "All checks passed · live in your preview" },
+    result: { ok: true, text: "Type-checked · applied" },
   },
   {
     prompt: "Delete the projects section",
     title: "Homepage",
     changes: [
-      [" ", "Intro"],
-      ["-", "Projects"],
-      [" ", "Experience"],
+      [" ", "<Hero profile={profile} />"],
+      ["-", "<Projects items={projects} />"],
+      [" ", "<Experience items={roles} />"],
     ],
     result: { ok: false, text: "Would break your layout · undone, your site is untouched" },
   },
@@ -61,7 +63,7 @@ export default function LandingPage() {
           <span className="text-[15px] font-semibold tracking-tight">Plinth</span>
         </Link>
         <nav className="hidden items-center gap-7 text-sm text-stone-400 md:flex">
-          <a href="#engineering" className="transition-colors hover:text-white">Why Plinth</a>
+          <a href="#engineering" className="transition-colors hover:text-white">Under the hood</a>
           <a href="#examples" className="transition-colors hover:text-white">Examples</a>
           <a href="#pricing" className="transition-colors hover:text-white">Pricing</a>
         </nav>
@@ -79,19 +81,19 @@ export default function LandingPage() {
             <ArrowRight className="h-3.5 w-3.5 text-stone-500 transition-transform group-hover:translate-x-0.5" />
           </a>
           <h1 className="mx-auto mt-8 max-w-4xl bg-gradient-to-b from-white via-white to-stone-400 bg-clip-text pb-2 text-5xl leading-[1.02] font-semibold tracking-[-0.045em] text-balance text-transparent md:text-7xl">
-            Your personal site,
+            Describe what you do.
             <br />
-            <span className="bg-gradient-to-r from-brand-300 via-violet-300 to-fuchsia-300 bg-clip-text text-transparent">engineered by AI.</span>
+            <span className="bg-gradient-to-r from-brand-300 via-violet-300 to-fuchsia-300 bg-clip-text text-transparent">Watch it get built.</span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-balance text-stone-400">
-            Describe a change in plain words. Plinth makes it, checks it, and puts it live in one click — on a site that&apos;s genuinely yours.
+            Real React code engineered by AI, type-checked for safety, and deployed in seconds. You own every line.
           </p>
           <div className="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <Link href="/login" className={buttonClass({ variant: "brand", size: "lg", className: "min-w-44" })}>
               Start building free <ArrowRight />
             </Link>
             <a href="#engineering" className={buttonClass({ variant: "glass", size: "lg", className: "min-w-44" })}>
-              Why Plinth
+              Under the hood
             </a>
           </div>
           <p className="mt-4 text-[13px] text-stone-500">Free plan · No card required</p>
@@ -110,11 +112,11 @@ export default function LandingPage() {
           </p>
         </section>
 
-        {/* Why Plinth */}
+        {/* Under the hood */}
         <section id="engineering" className="mx-auto max-w-6xl scroll-mt-20 px-6 py-24 md:py-28">
-          <SectionHeading eyebrow="Why Plinth" title="Powerful enough for engineers. Simple enough for anyone." body="The AI never gets free rein over your site. Every change is checked, saved and reversible." />
+          <SectionHeading eyebrow="Under the hood" title="Real code. Handled carefully." body="The AI never gets free rein over your site. Every change is checked, saved and reversible." />
           <div className="mt-14 grid gap-4 md:grid-cols-2">
-            <Tile title="Yours to keep" body="Your site is real, standard code — not a locked template. Every change is saved, so you can always see what changed and when.">
+            <Tile title="You own every line" body="Your site is standard React code, not a locked template. Every change is saved, so you can always see what changed and when.">
               <ol className="flex flex-col gap-1.5 text-[13px]">
                 {[
                   ["Added a contact form", "2 min ago"],
@@ -146,9 +148,9 @@ export default function LandingPage() {
               </div>
             </Tile>
 
-            <Tile title="Nothing ships broken" body="Before any change reaches your preview, Plinth makes sure your site still works. If something's off, the change is undone automatically.">
+            <Tile title="Type-checked for safety" body="Before any change reaches your preview, it's type-checked and tested. If anything is off, the change is undone automatically.">
               <ol className="flex flex-col gap-1.5 text-[13px]">
-                {["Everything still works", "Layout intact", "Page loads correctly"].map((label) => (
+                {["Types check", "Layout intact", "Page loads"].map((label) => (
                   <li key={label} className="flex items-center gap-3 rounded-lg bg-white/[0.025] px-3 py-2 ring-1 ring-white/[0.06]">
                     <span className="text-stone-300">{label}</span>
                     <span className="ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-400">
@@ -186,12 +188,12 @@ export default function LandingPage() {
 
         {/* Examples */}
         <section id="examples" className="mx-auto max-w-6xl scroll-mt-20 px-6 pb-24 md:pb-28">
-          <SectionHeading eyebrow="Examples" title="See exactly what changed." body="Every request comes with a clear summary of what's different — and anything that fails a check never reaches your site." />
+          <SectionHeading eyebrow="Plain words in, real code out" title="See exactly what changed." body="Every request becomes a change you can read line by line — and anything that fails a check never reaches your site." />
           <div className="mt-14 grid gap-4 lg:grid-cols-3">
             {EXAMPLES.map((example) => (
               <article key={example.prompt} className="flex flex-col gap-4 rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.07]">
                 <p className="self-end rounded-2xl rounded-br-md bg-white px-3 py-2 text-[13px] text-stone-900">{example.prompt}</p>
-                <ChangeList title={example.title} changes={example.changes} />
+                <ChangeList title={example.title} changes={example.changes} code />
                 <p className={`mt-auto flex items-center gap-2 text-[13px] ${example.result.ok ? "text-emerald-400" : "text-red-300"}`}>
                   <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${example.result.ok ? "bg-emerald-400/15" : "bg-red-400/15"}`}>
                     {example.result.ok ? <Check className="h-2.5 w-2.5" /> : <span className="text-[10px] leading-none">✕</span>}
@@ -254,7 +256,7 @@ export default function LandingPage() {
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-white/[0.06] to-white/[0.01] px-8 py-16 text-center ring-1 ring-white/10 md:py-20">
             <div aria-hidden className="absolute inset-x-0 -bottom-48 mx-auto h-96 w-[760px] max-w-full bg-[radial-gradient(closest-side,rgb(76_98_220/0.35),transparent)]" />
             <h2 className="relative mx-auto max-w-2xl bg-gradient-to-b from-white to-stone-400 bg-clip-text text-4xl font-semibold tracking-[-0.035em] text-balance text-transparent md:text-5xl">Ship a site you actually own.</h2>
-            <p className="relative mx-auto mt-4 max-w-md text-stone-400">Checked changes, live in about a minute.</p>
+            <p className="relative mx-auto mt-4 max-w-md text-stone-400">Real React code, checked changes, live in seconds.</p>
             <div className="relative mt-8 flex justify-center">
               <Link href="/login" className={buttonClass({ variant: "inverse", size: "lg" })}>
                 Start building free <ArrowRight />
@@ -271,7 +273,7 @@ export default function LandingPage() {
             <span>© {new Date().getFullYear()} Plinth</span>
           </div>
           <div className="flex gap-6">
-            <a href="#engineering" className="hover:text-stone-300">Why Plinth</a>
+            <a href="#engineering" className="hover:text-stone-300">Under the hood</a>
             <a href="#pricing" className="hover:text-stone-300">Pricing</a>
             <Link href="/login?mode=signin" className="hover:text-stone-300">Sign in</Link>
           </div>

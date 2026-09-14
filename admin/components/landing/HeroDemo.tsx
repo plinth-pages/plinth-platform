@@ -6,13 +6,16 @@ import { ChangeList, Check, type Change } from "./Diff";
 const PROMPT = "Add a contact form that emails me through Resend, and a visitor counter in the footer";
 
 const CHANGES: Change[] = [
-  [" ", "Intro and projects"],
-  ["+", "Contact form, sends messages to your inbox"],
-  ["-", "Plain footer"],
-  ["+", "Footer with a live visitor counter"],
+  [" ", "<Projects items={projects} />"],
+  ["+", "<ContactForm />"],
+  [" ", ""],
+  ["-", "<Footer />"],
+  ["+", "<Footer>"],
+  ["+", "  <VisitorCounter />"],
+  ["+", "</Footer>"],
 ];
 
-const CHECKS = ["Everything still works", "Layout intact", "Page loads correctly"];
+const CHECKS = ["Types check", "Layout intact", "Page loads"];
 
 /*
  * Stages: 0 typing · 1 sent, thinking · 2 reply and diff · 3–5 checks running one by one · 6 all passed · 7 preview updated.
@@ -188,7 +191,7 @@ export function HeroDemo() {
                   className={`-mb-px border-b-2 px-3 pb-2 text-xs font-medium transition-colors ${shownTab === id ? "border-brand-400 text-white" : "border-transparent text-stone-500 hover:text-stone-300"}`}
                 >
                   {id === "preview" ? "Preview" : "Changes"}
-                  {id === "diff" && stage >= 2 ? <span className="ml-1.5 text-[10px] text-emerald-400">2 new</span> : null}
+                  {id === "diff" && stage >= 2 ? <span className="ml-1.5 font-mono text-[10px] text-emerald-400">+4 −1</span> : null}
                 </button>
               ))}
             </div>
@@ -196,7 +199,7 @@ export function HeroDemo() {
             <div className="flex-1 p-4 md:p-6">
               {shownTab === "diff" ? (
                 stage >= 2 ? (
-                  <ChangeList title="Homepage" changes={CHANGES} stagger />
+                  <ChangeList title="Homepage" changes={CHANGES} stagger code />
                 ) : (
                   <p className="p-6 text-center text-sm text-stone-500">No changes yet.</p>
                 )
