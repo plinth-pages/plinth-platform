@@ -88,17 +88,22 @@ export class GitHubAppAuth {
   private async resolveInstallationId(): Promise<number> {
     if (this.installationId) return this.installationId;
 
-    const response = await this.fetchImpl(`${GITHUB_API}/orgs/${this.org}/installation`, {
-      headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${this.appJwt()}` },
-    });
-    const body = (await response.json().catch(() => null)) as { id?: number; message?: string } | null;
-    if (response.status === 404) {
+    // GITHUB_ORG may name an organization or a personal account; GitHub looks their installations up separately.
+    let response: Response | undefined;
+    for (const kind of ["orgs", "users"]) {
+      response = await this.fetchImpl(`${GITHUB_API}/${kind}/${this.org}/installation`, {
+        headers: { ...GITHUB_HEADERS, Authorization: `Bearer ${this.appJwt()}` },
+      });
+      if (response.status !== 404) break;
+    }
+    const body = (await response!.json().catch(() => null)) as { id?: number; message?: string } | null;
+    if (response!.status === 404) {
       throw new GitHubApiError(
         404,
-        `The Plinth GitHub App is not installed on the ${this.org} organization. Install it on all repositories, then retry.`,
+        `The Plinth GitHub App is not installed on the ${this.org} GitHub account. Install it there on all repositories, then retry.`,
       );
     }
-    if (!response.ok || !body?.id) throw toGitHubError(response, body);
+    if (!response!.ok || !body?.id) throw toGitHubError(response!, body);
 
     this.installationId = body.id;
     return body.id;

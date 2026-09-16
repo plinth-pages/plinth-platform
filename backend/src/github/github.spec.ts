@@ -157,7 +157,24 @@ describe("GitHubAppAuth", () => {
   it("explains a missing installation instead of surfacing a bare 404", async () => {
     const { impl } = fakeFetch(() => ({ status: 404, body: { message: "Not Found" } }));
     await expect(new GitHubAppAuth("123", pem, "plinth-pages", impl).installationToken()).rejects.toThrow(
-      /not installed on the plinth-pages organization/,
+      /not installed on the plinth-pages GitHub account/,
     );
+  });
+
+  it("finds the installation on a personal account when GITHUB_ORG is a user", async () => {
+    const expiresAt = new Date(Date.now() + 60 * 60_000).toISOString();
+    const { impl, calls } = fakeFetch((url) =>
+      url.includes("/orgs/")
+        ? { status: 404, body: { message: "Not Found" } }
+        : url.endsWith("/users/sumit/installation")
+          ? { status: 200, body: { id: 42 } }
+          : { status: 201, body: { token: "ghs_user", expires_at: expiresAt } },
+    );
+    expect(await new GitHubAppAuth("123", pem, "sumit", impl).installationToken()).toBe("ghs_user");
+    expect(calls.map((c) => c.url)).toEqual([
+      "https://api.github.com/orgs/sumit/installation",
+      "https://api.github.com/users/sumit/installation",
+      "https://api.github.com/app/installations/42/access_tokens",
+    ]);
   });
 });
