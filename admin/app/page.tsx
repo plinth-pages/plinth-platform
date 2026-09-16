@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ChangeList, Check, type Change } from "@/components/landing/Diff";
+import { Check } from "@/components/landing/Diff";
+import { ExampleWork } from "@/components/landing/ExampleWork";
 import { ExampleSites } from "@/components/landing/ExampleSites";
 import { HeroDemo } from "@/components/landing/HeroDemo";
 import { NavActions } from "@/components/landing/NavActions";
@@ -13,42 +14,6 @@ export const metadata: Metadata = {
 };
 
 const CONNECTS = ["GitHub", "LeetCode", "Resend", "Contact forms", "Visitor analytics"];
-
-const EXAMPLES: { prompt: string; title: string; changes: Change[]; result: { ok: boolean; text: string } }[] = [
-  {
-    prompt: "Switch to a dark theme with a teal accent",
-    title: "Theme",
-    changes: [
-      [" ", "const theme = {"],
-      ["-", '  mode: "light",'],
-      ["+", '  mode: "dark",'],
-      ["-", '  accent: "indigo",'],
-      ["+", '  accent: "teal",'],
-      [" ", "};"],
-    ],
-    result: { ok: true, text: "Type-checked · applied" },
-  },
-  {
-    prompt: "Add my LeetCode stats under my projects",
-    title: "Homepage",
-    changes: [
-      [" ", "<Projects items={projects} />"],
-      ["+", '<LeetCodeStats username="rahul-das" />'],
-      [" ", "<Experience items={roles} />"],
-    ],
-    result: { ok: true, text: "Type-checked · applied" },
-  },
-  {
-    prompt: "Delete the projects section",
-    title: "Homepage",
-    changes: [
-      [" ", "<Hero profile={profile} />"],
-      ["-", "<Projects items={projects} />"],
-      [" ", "<Experience items={roles} />"],
-    ],
-    result: { ok: false, text: "Would break your layout · undone, your site is untouched" },
-  },
-];
 
 export default function LandingPage() {
   return (
@@ -188,20 +153,9 @@ export default function LandingPage() {
 
         {/* Examples */}
         <section id="examples" className="mx-auto max-w-6xl scroll-mt-20 px-6 pb-24 md:pb-28">
-          <SectionHeading eyebrow="Plain words in, real code out" title="See exactly what changed." body="Every request becomes a change you can read line by line — and anything that fails a check never reaches your site." />
-          <div className="mt-14 grid gap-4 lg:grid-cols-3">
-            {EXAMPLES.map((example) => (
-              <article key={example.prompt} className="flex flex-col gap-4 rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.07]">
-                <p className="self-end rounded-2xl rounded-br-md bg-white px-3 py-2 text-[13px] text-stone-900">{example.prompt}</p>
-                <ChangeList title={example.title} changes={example.changes} code />
-                <p className={`mt-auto flex items-center gap-2 text-[13px] ${example.result.ok ? "text-emerald-400" : "text-red-300"}`}>
-                  <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${example.result.ok ? "bg-emerald-400/15" : "bg-red-400/15"}`}>
-                    {example.result.ok ? <Check className="h-2.5 w-2.5" /> : <span className="text-[10px] leading-none">✕</span>}
-                  </span>
-                  {example.result.text}
-                </p>
-              </article>
-            ))}
+          <SectionHeading eyebrow="Plain words in, real code out" title="Real work, reviewed line by line." body="Integrations wired in, live data pulled, themes rebuilt — every request becomes code you can read, and anything unsafe is stopped before it ships." />
+          <div className="mt-14">
+            <ExampleWork />
           </div>
         </section>
 
