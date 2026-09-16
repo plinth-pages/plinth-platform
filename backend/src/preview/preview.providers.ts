@@ -34,6 +34,7 @@ export class PreviewProxyHost implements OnApplicationBootstrap, OnApplicationSh
         this.prisma.sandbox.findUnique({ where: { portfolioId }, select: { status: true, previewUrl: true, trafficToken: true } }),
       wake: async (portfolioId) => void (await enqueueSandboxJob(this.queue, "ensure", portfolioId)),
       frameAncestors: [this.config.get("ADMIN_URL", { infer: true })],
+      hostHeader: this.config.get("PREVIEW_HOST_HEADER", { infer: true }),
       logger: this.logger,
       cacheMs: 2_000,
     });

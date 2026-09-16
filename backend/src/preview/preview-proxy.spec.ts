@@ -24,6 +24,13 @@ describe("PreviewUrls", () => {
     expect(urls.labelFromHost(host)).toBe(expected);
   });
 
+  it("takes labels directly under the apex domain without catching its other hosts", () => {
+    const apex = new PreviewUrls("https://{session}.plinthpages.me");
+    expect(apex.url(LABEL)).toBe(`https://${LABEL}.plinthpages.me`);
+    expect(apex.labelFromHost(`${LABEL}.plinthpages.me`)).toBe(LABEL);
+    for (const host of ["www.plinthpages.me", "api.plinthpages.me", "plinthpages.me"]) expect(apex.labelFromHost(host)).toBeNull();
+  });
+
   it("rejects a template whose hostname does not start with {session}", () => {
     expect(() => new PreviewUrls("http://preview.localhost/{session}")).toThrow();
   });
@@ -124,6 +131,7 @@ describe("PreviewProxy", () => {
       findTarget: async () => target,
       wake: async (portfolioId) => void woken.push(portfolioId),
       frameAncestors: ["http://localhost:3000"],
+      hostHeader: "x-plinth-preview-host",
       logger: { warn: () => undefined },
       cacheMs: 0,
     });
@@ -160,6 +168,16 @@ describe("PreviewProxy", () => {
     expect(seen[0].origin).toBe(upstreamUrl);
     expect(seen[0].host).toBe(new URL(upstreamUrl).host);
     expect(JSON.stringify(res.headers)).not.toContain("traffic-secret");
+  });
+
+  it("reads the preview host from the edge's header when the request arrives under the edge's own Host", async () => {
+    const res = await get("plinth-api.up.railway.app", "/about", { "x-plinth-preview-host": host });
+    expect(res.status).toBe(200);
+    expect(res.body).toBe("draft /about");
+    expect(seen[0]["x-plinth-preview-host"]).toBeUndefined();
+
+    const unknown = await get("plinth-api.up.railway.app", "/", { "x-plinth-preview-host": "www.preview.localhost" });
+    expect(unknown.status).toBe(404);
   });
 
   it("allows framing only by the IDE and keeps drafts out of search engines", async () => {

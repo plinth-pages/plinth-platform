@@ -20,6 +20,8 @@ export interface PreviewProxyDeps {
   /** Origins allowed to frame previews (the IDE). */
   frameAncestors: string[];
   logger: { warn(message: string): void };
+  /** Request header carrying the preview hostname when an edge forwards under its own Host. */
+  hostHeader?: string;
   /** How long session and target lookups are cached. Next.js loads dozens of assets per page view. */
   cacheMs: number;
 }
@@ -118,7 +120,8 @@ export class PreviewProxy {
   private async route(
     req: IncomingMessage,
   ): Promise<{ kind: "not_found" | "expired" | "sleeping" } | { kind: "ready"; route: Route }> {
-    const label = this.deps.urls.labelFromHost(req.headers.host);
+    const forwarded = this.deps.hostHeader ? req.headers[this.deps.hostHeader] : undefined;
+    const label = this.deps.urls.labelFromHost((Array.isArray(forwarded) ? forwarded[0] : forwarded) ?? req.headers.host);
     if (!label) return { kind: "not_found" };
 
     const session = await this.cached(this.sessionCache, label, () => this.deps.resolveSession(label));
@@ -137,6 +140,8 @@ export class PreviewProxy {
     const route = this.routes.get(req);
     if (!route) return;
     proxyReq.setHeader(TRAFFIC_TOKEN_HEADER, route.token);
+    // The preview hostname is the capability; the sandbox has no use for it.
+    if (this.deps.hostHeader) proxyReq.removeHeader(this.deps.hostHeader);
     // Next.js checks that dev requests come from the host it is served on.
     if (req.headers.origin) proxyReq.setHeader("origin", new URL(route.target).origin);
     if (req.headers.referer) proxyReq.removeHeader("referer");

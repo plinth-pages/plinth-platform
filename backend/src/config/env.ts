@@ -97,6 +97,15 @@ const envSchema = z
     // stay listed until every secret sealed with them has been re-saved.
     CREDENTIALS_KEYS: z.string().optional(),
     CREDENTIALS_ACTIVE_KEY: z.string().optional(),
+    /**
+     * Set when a trusted edge forwards previews under its own hostname (the Cloudflare Worker in front of Railway): the
+     * proxy then reads the preview's hostname from this request header instead of Host. Lowercase, e.g.
+     * `x-plinth-preview-host`.
+     */
+    PREVIEW_HOST_HEADER: z
+      .string()
+      .regex(/^[a-z0-9-]+$/, "Must be a lowercase header name")
+      .optional(),
     /** Public address of this API, for integrations that call it from a visitor's browser (Visitor Counter). */
     PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
   })
