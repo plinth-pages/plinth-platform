@@ -180,6 +180,42 @@ describe("PreviewProxy", () => {
     expect(unknown.status).toBe(404);
   });
 
+  it("shares another server's port, taking only requests the edge marked as previews", async () => {
+    const api = createServer((req, res) => {
+      let body = "";
+      req.on("data", (chunk) => (body += chunk));
+      req.on("end", () => res.end(`api ${req.method} ${req.url} ${body}`));
+    });
+    proxy.attach(api);
+    await new Promise<void>((resolve) => api.listen(0, "127.0.0.1", resolve));
+    const port = (api.address() as AddressInfo).port;
+    const call = (headers: Record<string, string>, method = "GET", body = "") =>
+      new Promise<{ status: number; body: string }>((resolve, reject) => {
+        const req = request({ port, method, path: "/v1/health", headers: { host: "api.plinthpages.me", ...headers } }, (res) => {
+          let text = "";
+          res.on("data", (chunk) => (text += chunk));
+          res.on("end", () => resolve({ status: res.statusCode!, body: text }));
+        });
+        req.on("error", reject);
+        req.end(body);
+      });
+
+    try {
+      expect(await call({ "x-plinth-preview-host": host })).toEqual({ status: 200, body: "draft /v1/health" });
+      expect(await call({}, "POST", "payload")).toEqual({ status: 200, body: "api POST /v1/health payload" });
+      const refused = await new Promise<string>((resolve) => {
+        const req = request({ port, path: "/", headers: { connection: "Upgrade", upgrade: "websocket" } });
+        req.on("upgrade", () => resolve("upgraded"));
+        req.on("error", () => resolve("refused"));
+        req.on("response", () => resolve("response"));
+        req.end();
+      });
+      expect(refused).toBe("refused");
+    } finally {
+      await new Promise<void>((resolve) => api.close(() => resolve()));
+    }
+  });
+
   it("allows framing only by the IDE and keeps drafts out of search engines", async () => {
     const res = await get(host);
     expect(res.headers["x-frame-options"]).toBeUndefined();

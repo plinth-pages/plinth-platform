@@ -1,6 +1,7 @@
 import { InjectQueue } from "@nestjs/bullmq";
 import { Inject, Injectable, Logger, OnApplicationBootstrap, OnApplicationShutdown, type Provider } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { HttpAdapterHost } from "@nestjs/core";
 import { getQueueToken } from "@nestjs/bullmq";
 import type { Queue } from "bullmq";
 import type { Env } from "../config/env";
@@ -24,6 +25,7 @@ export class PreviewProxyHost implements OnApplicationBootstrap, OnApplicationSh
     @Inject(PREVIEW_SESSIONS) private readonly sessions: PreviewSessions,
     @Inject(PREVIEW_URLS) private readonly urls: PreviewUrls,
     @InjectQueue(SANDBOX_QUEUE) private readonly queue: Queue<SandboxJobData>,
+    private readonly adapterHost: HttpAdapterHost,
   ) {}
 
   async onApplicationBootstrap() {
@@ -41,6 +43,14 @@ export class PreviewProxyHost implements OnApplicationBootstrap, OnApplicationSh
     const port = this.config.get("PREVIEW_PROXY_PORT", { infer: true });
     await this.proxy.listen(port);
     this.logger.log(`Preview proxy listening on :${port} (${this.urls.url("{session}")})`);
+
+    // Behind an edge that marks preview requests, also take them on the API's own port: hosts like Railway expose only
+    // one public port per service.
+    const hostHeader = this.config.get("PREVIEW_HOST_HEADER", { infer: true });
+    if (hostHeader) {
+      this.proxy.attach(this.adapterHost.httpAdapter.getHttpServer());
+      this.logger.log(`Preview proxy also serving the API port for requests with ${hostHeader}`);
+    }
   }
 
   async onApplicationShutdown() {

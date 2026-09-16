@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "http";
+import { createServer, type IncomingMessage, type RequestListener, type Server, type ServerResponse } from "http";
 import { createProxyServer } from "http-proxy-3";
 import type { Duplex } from "stream";
 import type { PreviewSession, PreviewUrls } from "./preview-sessions";
@@ -80,6 +80,29 @@ export class PreviewProxy {
     this.server = createServer((req, res) => void this.handle(req, res));
     this.server.on("upgrade", (req, socket, head) => void this.upgrade(req, socket, head));
     return new Promise((resolve) => this.server!.listen(port, resolve));
+  }
+
+  /**
+   * Also serves previews on another server's port — the API's, where a host allows only one public port. Only requests
+   * carrying `hostHeader` (set by the edge that forwards previews) are taken; everything else reaches the server's own
+   * handler untouched, body included, because the split happens before any framework middleware runs.
+   */
+  attach(server: Server): void {
+    const header = this.deps.hostHeader;
+    if (!header) throw new Error("Sharing a port needs hostHeader, to tell preview requests apart.");
+    const isPreview = (req: IncomingMessage) => req.headers[header] !== undefined;
+
+    const own = server.listeners("request") as RequestListener[];
+    server.removeAllListeners("request");
+    server.on("request", (req: IncomingMessage, res: ServerResponse) => {
+      if (isPreview(req)) void this.handle(req, res);
+      else for (const listener of own) listener.call(server, req, res);
+    });
+    // The API has no websockets of its own; any other upgrade is refused rather than left hanging.
+    server.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+      if (isPreview(req)) void this.upgrade(req, socket, head);
+      else socket.destroy();
+    });
   }
 
   async close(): Promise<void> {
