@@ -36,6 +36,19 @@ import type {
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/v1";
 
+export type LegalRequestKind = "access" | "correction" | "deletion" | "consent_withdrawal" | "grievance" | "other";
+
+export interface AdminLegalRequest {
+  id: string;
+  kind: LegalRequestKind;
+  name: string;
+  email: string;
+  message: string;
+  signedIn: boolean;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -56,6 +69,10 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+    // Signed in but hasn't accepted the current Terms: every signed-in call says so until they do.
+    if (response.status === 403 && body?.code === "terms_required" && typeof window !== "undefined" && window.location.pathname !== "/accept-terms") {
+      window.location.assign(`/accept-terms?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+    }
     throw new ApiError(response.status, String(body?.message ?? response.statusText), body);
   }
   return (response.status === 204 ? undefined : await response.json()) as T;
@@ -65,9 +82,14 @@ export const api = {
   signInUrl: `${API_URL}/auth/github`,
   githubAppSetupUrl: `${API_URL}/dev/github-app/new`,
   me: () => request<MeResponse>("/auth/me"),
-  authMethods: () => request<{ email: boolean; github: boolean }>("/auth/methods"),
+  authMethods: () => request<{ email: boolean; github: boolean; termsVersion: string }>("/auth/methods"),
+  acceptTerms: (version: string) => request<MeResponse>("/auth/accept-terms", { method: "POST", body: JSON.stringify({ version }) }),
+  submitLegalRequest: (body: { kind: LegalRequestKind; name: string; email: string; message: string }) =>
+    request<{ id: string; receivedAt: string }>("/legal/requests", { method: "POST", body: JSON.stringify(body) }),
+  adminLegalRequests: () => request<{ requests: AdminLegalRequest[] }>("/admin/legal-requests"),
+  resolveLegalRequest: (id: string) => request<void>("/admin/legal-requests/resolve", { method: "POST", body: JSON.stringify({ id }) }),
   /** Creates the account. Signs in (`next` is where to go), or asks the person to confirm the emailed link first. */
-  register: (body: { name: string; email: string; password: string }) =>
+  register: (body: { name: string; email: string; password: string; acceptTerms: boolean }) =>
     request<(MeResponse & { next: string }) | { confirmEmail: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
   /** The link from the confirmation email. Signs the account in. */
   confirmEmail: (body: { token_hash: string; type: string }) =>
