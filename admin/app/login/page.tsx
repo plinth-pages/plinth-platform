@@ -32,7 +32,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-12">
           <AuthForms githubUrl={api.signInUrl} initialMode={mode === "signin" ? "signin" : "signup"} notice={auth_error} />
-          <p className="mt-10 text-center text-xs leading-relaxed text-stone-400">By continuing you agree to use Plinth responsibly. Your code and keys stay yours.</p>
+          <p className="mt-10 text-center text-xs leading-relaxed text-stone-400">
+            <Link href="/terms" className="hover:text-stone-600 dark:hover:text-stone-200">Terms</Link> ·{" "}
+            <Link href="/privacy" className="hover:text-stone-600 dark:hover:text-stone-200">Privacy</Link> ·{" "}
+            <Link href="/privacy/request" className="hover:text-stone-600 dark:hover:text-stone-200">Privacy requests</Link>
+          </p>
         </div>
       </section>
 

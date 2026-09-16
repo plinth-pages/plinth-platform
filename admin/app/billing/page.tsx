@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { BillingStatusResponse, SessionUser } from "@plinth-pages/shared";
 import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -144,6 +145,10 @@ function Billing() {
             )}
           </PlanCard>
         </div>
+        <p className="text-center text-[13px] text-stone-500">
+          Subscriptions renew monthly until cancelled and are covered by our{" "}
+          <Link href="/terms#plans" className="underline underline-offset-2">Terms</Link>.{" "}
+        </p>
         <p className="text-center text-[13px] text-stone-500">Payments are handled securely by Stripe. Cancel any time; Pro stays active until the end of the period you&apos;ve paid for.</p>
       </main>
     </div>
