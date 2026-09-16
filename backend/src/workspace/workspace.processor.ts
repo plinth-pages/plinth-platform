@@ -1,11 +1,12 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
+import { LoggedWorkerHost, WORKER_DEFAULTS } from "../queue/logged-worker-host";
 import { UnrecoverableError, type Job } from "bullmq";
 import { WorkspaceReader } from "./workspace-reader";
 import { WORKSPACE_QUEUE, type WorkspaceJob } from "./workspace.constants";
 
 // Reads are short and independent; plenty can run at once.
-@Processor(WORKSPACE_QUEUE, { concurrency: 16 })
-export class WorkspaceProcessor extends WorkerHost {
+@Processor(WORKSPACE_QUEUE, { ...WORKER_DEFAULTS, concurrency: 16 })
+export class WorkspaceProcessor extends LoggedWorkerHost {
   constructor(private readonly reader: WorkspaceReader) {
     super();
   }

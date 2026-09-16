@@ -1,4 +1,6 @@
+import { InjectQueue } from "@nestjs/bullmq";
 import { Controller, Get, UseGuards } from "@nestjs/common";
+import type { Queue } from "bullmq";
 import type { User } from "@prisma/client";
 import type { AdminIntegrationRequestsResponse, AdminMetricsResponse, AdminPingResponse, OperationStatus } from "@plinth-pages/shared";
 import { PLANS } from "../billing/plans";
@@ -6,6 +8,11 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CurrentUser, Roles, RolesGuard } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
 import { IntegrationRequestsService } from "../catalogue/integration-requests.service";
+import { OPERATIONS_QUEUE } from "../operations/operations.constants";
+import { PROVISIONING_QUEUE, provisionJobId } from "../provisioning/provisioning.constants";
+import { SANDBOX_QUEUE } from "../sandbox/sandbox.constants";
+import { WORKSPACE_QUEUE } from "../workspace/workspace.constants";
+import { PING_QUEUE } from "../queue/queue.constants";
 
 @Controller("admin")
 @UseGuards(SessionGuard, RolesGuard)
@@ -14,7 +21,52 @@ export class AdminController {
   constructor(
     private readonly requests: IntegrationRequestsService,
     private readonly prisma: PrismaService,
+    @InjectQueue(PROVISIONING_QUEUE) private readonly provisioning: Queue,
+    @InjectQueue(OPERATIONS_QUEUE) private readonly operations: Queue,
+    @InjectQueue(SANDBOX_QUEUE) private readonly sandbox: Queue,
+    @InjectQueue(WORKSPACE_QUEUE) private readonly workspace: Queue,
+    @InjectQueue(PING_QUEUE) private readonly pingQueue: Queue,
   ) {}
+
+  /**
+   * Queue health for diagnosing jobs that never run: counts per state, and where each still-provisioning portfolio's
+   * job actually is. A portfolio whose job is missing, or sits in waiting while nothing becomes active, points at the
+   * worker; one stuck in active points at the job itself.
+   */
+  @Get("queues")
+  async queues() {
+    const queues = [this.provisioning, this.operations, this.sandbox, this.workspace, this.pingQueue];
+    const counts = await Promise.all(
+      queues.map(async (queue) => ({
+        queue: queue.name,
+        paused: await queue.isPaused(),
+        counts: await queue.getJobCounts("waiting", "prioritized", "active", "delayed", "failed", "completed"),
+      })),
+    );
+    const stuck = await this.prisma.portfolio.findMany({
+      where: { status: "provisioning" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { id: true, provisionAttempts: true, createdAt: true, updatedAt: true },
+    });
+    const provisioning = await Promise.all(
+      stuck.map(async (portfolio) => {
+        const job = await this.provisioning.getJob(provisionJobId(portfolio.id));
+        return {
+          ...portfolio,
+          job: job
+            ? {
+                state: await job.getState(),
+                attemptsMade: job.attemptsMade,
+                processedOn: job.processedOn ? new Date(job.processedOn).toISOString() : null,
+                failedReason: job.failedReason || null,
+              }
+            : null,
+        };
+      }),
+    );
+    return { checkedAt: new Date().toISOString(), counts, provisioning };
+  }
 
   /** Platform health at a glance for the super admin. */
   @Get("metrics")

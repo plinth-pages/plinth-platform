@@ -1,4 +1,5 @@
-import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
+import { InjectQueue, Processor } from "@nestjs/bullmq";
+import { LoggedWorkerHost, WORKER_DEFAULTS } from "../queue/logged-worker-host";
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { DelayedError, UnrecoverableError, type Job, type Queue } from "bullmq";
 import { GitHubRateLimitError } from "../github/github.errors";
@@ -6,8 +7,8 @@ import { SandboxLifecycle, errorMessage } from "./sandbox.lifecycle";
 import { BUSY_RETRY_MS, SANDBOX_QUEUE, SWEEP_EVERY_MS, type SandboxJobData } from "./sandbox.constants";
 
 // Most of a sandbox job is waiting on E2B or the dev server, so several can run side by side.
-@Processor(SANDBOX_QUEUE, { concurrency: 5 })
-export class SandboxProcessor extends WorkerHost {
+@Processor(SANDBOX_QUEUE, { ...WORKER_DEFAULTS, concurrency: 5 })
+export class SandboxProcessor extends LoggedWorkerHost {
   private readonly logger = new Logger(SandboxProcessor.name);
 
   constructor(private readonly lifecycle: SandboxLifecycle) {

@@ -1,4 +1,5 @@
-import { InjectQueue, Processor, WorkerHost } from "@nestjs/bullmq";
+import { InjectQueue, Processor } from "@nestjs/bullmq";
+import { LoggedWorkerHost, WORKER_DEFAULTS } from "../queue/logged-worker-host";
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { CredentialSync } from "../credentials/credential-sync";
 import { DelayedError, type Job, type Queue } from "bullmq";
@@ -24,8 +25,9 @@ import {
 } from "./operations.constants";
 
 // Operations for different portfolios run side by side; for one portfolio, the sandbox lock makes them sequential.
-@Processor(OPERATIONS_QUEUE, { concurrency: 8 })
-export class OperationsProcessor extends WorkerHost {
+@Processor(OPERATIONS_QUEUE, { ...WORKER_DEFAULTS, concurrency: 8 })
+export class OperationsProcessor extends LoggedWorkerHost {
+  protected override readonly logStarts = true;
   private readonly logger = new Logger(OperationsProcessor.name);
 
   constructor(

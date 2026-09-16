@@ -6,4 +6,6 @@ coverage/
 .env
 .env.*
 !.env.example
+*.prod.env
+.prod.env
 .DS_Store

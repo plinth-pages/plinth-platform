@@ -1,3 +1,9 @@
+/** Where a Redis URL points, without its credentials — logged at boot so the api and worker can be compared. */
+export function describeRedis(redisUrl: string): string {
+  const url = new URL(redisUrl);
+  return `${url.protocol}//${url.hostname}:${url.port || 6379}${url.protocol === "rediss:" ? " (TLS)" : ""}`;
+}
+
 /** BullMQ/ioredis connection options from a `redis://` or `rediss://` URL. */
 export function redisConnection(redisUrl: string) {
   const url = new URL(redisUrl);

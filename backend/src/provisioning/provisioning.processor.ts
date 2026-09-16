@@ -1,4 +1,5 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
+import { LoggedWorkerHost, WORKER_DEFAULTS } from "../queue/logged-worker-host";
 import { Logger } from "@nestjs/common";
 import { DelayedError, UnrecoverableError, type Job } from "bullmq";
 import { GitHubApiError, GitHubRateLimitError, isRetryableGitHubError } from "../github/github.errors";
@@ -9,8 +10,9 @@ import { PROVISIONING_QUEUE, type ProvisionJobData } from "./provisioning.consta
 
 // Concurrency and a queue-wide limiter keep bursts of sign-ups under GitHub's secondary rate limit
 // (roughly 80 repository creations per minute).
-@Processor(PROVISIONING_QUEUE, { concurrency: 2, limiter: { max: 20, duration: 60_000 } })
-export class ProvisioningProcessor extends WorkerHost {
+@Processor(PROVISIONING_QUEUE, { ...WORKER_DEFAULTS, concurrency: 2, limiter: { max: 20, duration: 60_000 } })
+export class ProvisioningProcessor extends LoggedWorkerHost {
+  protected override readonly logStarts = true;
   private readonly logger = new Logger(ProvisioningProcessor.name);
 
   constructor(

@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { existsSync } from "fs";
 import { AppModule } from "./app.module";
 import { validateEnv, type Env } from "./config/env";
+import { describeRedis } from "./queue/redis-connection";
 import { resolveRole } from "./config/role";
 
 async function bootstrap() {
@@ -14,7 +15,9 @@ async function bootstrap() {
   // Validate before Nest starts: ConfigModule validates asynchronously inside Nest's own error
   // handler, which buries the message under a framework stack trace.
   if (existsSync(".env")) process.loadEnvFile(".env");
-  validateEnv(process.env);
+  const env = validateEnv(process.env);
+  // The api enqueues and the worker consumes: if these two lines differ between them, jobs are never picked up.
+  Logger.log(`${role} using Redis ${describeRedis(env.REDIS_URL)}`, "Bootstrap");
 
   if (role === "worker") {
     const worker = await NestFactory.createApplicationContext(AppModule.forRole("worker"), {

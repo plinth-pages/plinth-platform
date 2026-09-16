@@ -1,4 +1,5 @@
-import { Processor, WorkerHost } from "@nestjs/bullmq";
+import { Processor } from "@nestjs/bullmq";
+import { LoggedWorkerHost, WORKER_DEFAULTS } from "../queue/logged-worker-host";
 import { Inject } from "@nestjs/common";
 import type { PingJobResult } from "@plinth-pages/shared";
 import type { Job } from "bullmq";
@@ -9,8 +10,8 @@ export interface PingJobData {
   enqueuedByPid: number;
 }
 
-@Processor(PING_QUEUE)
-export class PingProcessor extends WorkerHost {
+@Processor(PING_QUEUE, { ...WORKER_DEFAULTS })
+export class PingProcessor extends LoggedWorkerHost {
   constructor(@Inject(ORCHESTRATOR_ROLE) private readonly role: OrchestratorRole) {
     super();
   }
