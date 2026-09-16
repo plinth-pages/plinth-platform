@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { TERMS_VERSION, hasAcceptedTerms } from "../legal/terms";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
 import type { User } from "@prisma/client";
@@ -116,6 +117,12 @@ export class AuthService {
       avatarUrl: user.avatarUrl,
       role: user.role,
       plan: user.plan,
+      termsAccepted: hasAcceptedTerms(user),
     };
+  }
+
+  /** Records acceptance of the current Terms and Privacy Policy. */
+  acceptTerms(userId: string, acceptedAt = new Date()): Promise<User> {
+    return this.prisma.user.update({ where: { id: userId }, data: { termsVersion: TERMS_VERSION, termsAcceptedAt: acceptedAt } });
   }
 }

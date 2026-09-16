@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "@prisma/client";
 import type { MeResponse } from "@plinth-pages/shared";
@@ -7,8 +7,12 @@ import type { CookieOptions, Request, Response } from "express";
 import type { Env } from "../config/env";
 import { AuthService } from "./auth.service";
 import { SupabaseAuth } from "./supabase-auth";
+import { AllowWithoutTerms, TERMS_VERSION } from "../legal/terms";
 import { CurrentUser } from "./roles";
 import { OAUTH_STATE_COOKIE, SESSION_COOKIE, SESSION_TTL_SECONDS } from "./session";
+
+/** Carries "I accept the Terms" across the GitHub round trip. */
+const TERMS_COOKIE = "plinth_terms";
 import { SessionGuard } from "./session.guard";
 
 @Controller("auth")
@@ -51,10 +55,22 @@ export class AuthController {
     return { user: this.auth.toSessionUser(user), next: "/start" };
   }
 
-  /** Which sign-in methods this server offers. */
+  /** Which sign-in methods this server offers, and which Terms version sign-up accepts. */
   @Get("methods")
   methods() {
-    return { email: this.supabase.configured, github: true };
+    return { email: this.supabase.configured, github: true, termsVersion: TERMS_VERSION };
+  }
+
+  /** Accepts the current Terms and Privacy Policy for the signed-in user. */
+  @Post("accept-terms")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  @AllowWithoutTerms()
+  async acceptTerms(@CurrentUser() user: User, @Body() body: { version?: string }) {
+    if (body?.version !== TERMS_VERSION) {
+      throw new BadRequestException({ statusCode: 400, code: "terms_outdated", message: "The Terms were updated while this page was open. Please review them again." });
+    }
+    return { user: this.auth.toSessionUser(await this.auth.acceptTerms(user.id)) };
   }
 
   private cookieOptions(maxAgeSeconds: number): CookieOptions {
@@ -67,10 +83,13 @@ export class AuthController {
     };
   }
 
+  /** `?terms=<version>` when the person ticked the consent box before choosing GitHub. */
   @Get("github")
-  start(@Res() res: Response) {
+  start(@Res() res: Response, @Query("terms") terms: string | undefined) {
     const state = randomBytes(24).toString("base64url");
     res.cookie(OAUTH_STATE_COOKIE, state, this.cookieOptions(10 * 60));
+    if (terms === TERMS_VERSION) res.cookie(TERMS_COOKIE, terms, this.cookieOptions(10 * 60));
+    else res.clearCookie(TERMS_COOKIE, { path: "/" });
     res.redirect(this.auth.authorizeUrl(state));
   }
 
@@ -86,14 +105,17 @@ export class AuthController {
       res.redirect(`${adminUrl}/login?auth_error=${encodeURIComponent(message)}`);
 
     const expected: string | undefined = req.cookies?.[OAUTH_STATE_COOKIE];
+    const acceptedTerms = req.cookies?.[TERMS_COOKIE] === TERMS_VERSION;
     res.clearCookie(OAUTH_STATE_COOKIE, { path: "/" });
+    res.clearCookie(TERMS_COOKIE, { path: "/" });
 
     if (!code || !state || !expected || !sameString(state, expected)) {
       return fail("That sign-in link expired. Please try again.");
     }
 
     try {
-      const user = await this.auth.signInWithCode(code);
+      let user = await this.auth.signInWithCode(code);
+      if (acceptedTerms) user = await this.auth.acceptTerms(user.id);
       res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
       res.redirect(`${adminUrl}/start`);
     } catch (error) {
@@ -103,6 +125,7 @@ export class AuthController {
 
   @Get("me")
   @UseGuards(SessionGuard)
+  @AllowWithoutTerms()
   me(@CurrentUser() user: User): MeResponse {
     return { user: this.auth.toSessionUser(user) };
   }

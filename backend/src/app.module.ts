@@ -3,6 +3,7 @@ import { DynamicModule, Global, Module } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
 import { AdminController } from "./admin/admin.controller";
+import { LegalController } from "./legal/legal.controller";
 import { AiService } from "./ai/ai.service";
 import { AuthModule } from "./auth/auth.module";
 import { BillingController } from "./billing/billing.controller";
@@ -77,6 +78,7 @@ class RoleModule {
   controllers: [
     HealthController,
     AdminController,
+    LegalController,
     JobsController,
     PortfoliosController,
     PreviewController,

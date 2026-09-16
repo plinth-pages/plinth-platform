@@ -9,6 +9,8 @@ export interface SessionUser {
   name: string | null;
   avatarUrl: string | null;
   role: UserRole;
+  /** Whether the user has accepted the current Terms and Privacy Policy. */
+  termsAccepted: boolean;
 }
 
 export interface MeResponse {

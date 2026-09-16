@@ -42,12 +42,16 @@ model User {
   subscriptionStatus     String?   @map("subscription_status")
   planRenewsAt           DateTime? @map("plan_renews_at")
   planCancelsAtPeriodEnd Boolean   @default(false) @map("plan_cancels_at_period_end")
+  /// Version of the Terms and Privacy Policy the user accepted, and when. Null until they accept.
+  termsVersion           String?   @map("terms_version")
+  termsAcceptedAt        DateTime? @map("terms_accepted_at")
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
   portfolios          Portfolio[]
   integrationRequests IntegrationRequest[]
   copilotMessages     CopilotMessage[]
+  legalRequests       LegalRequest[]
 
   @@map("users")
 }
@@ -422,4 +426,31 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@map("messages")
+}
+
+enum LegalRequestKind {
+  access
+  correction
+  deletion
+  consent_withdrawal
+  grievance
+  other
+}
+
+/// Privacy and legal requests sent through the site's request form (there is no public contact address).
+model LegalRequest {
+  id         String           @id @default(cuid())
+  kind       LegalRequestKind
+  name       String
+  email      String
+  message    String
+  /// Set when the sender was signed in.
+  userId     String?          @map("user_id")
+  resolvedAt DateTime?        @map("resolved_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@map("legal_requests")
 }

@@ -4,6 +4,7 @@ import type { User } from "@prisma/client";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
+import { TERMS_VERSION } from "../legal/terms";
 import { createDohFallbackFetch } from "./doh-fetch";
 
 /** Lets tests replace calls to Supabase. */
@@ -13,6 +14,7 @@ export const registerSchema = z.object({
   name: z.string().trim().min(1, "Tell us your name.").max(80),
   email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(200),
   password: z.string().min(8, "Use at least 8 characters.").max(72, "Use at most 72 characters."),
+  acceptTerms: z.literal(true, { errorMap: () => ({ message: "Please accept the Terms and Privacy Policy to continue." }) }),
 });
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address.").max(200),
@@ -34,7 +36,8 @@ export type RegisterOutcome = { kind: "signed_in"; user: User } | { kind: "confi
 interface SupabaseUser {
   id: string;
   email: string;
-  user_metadata?: { name?: string };
+  /** Consent is stored with the Supabase user at sign-up, so it survives until the Plinth account is created. */
+  user_metadata?: { name?: string; terms_version?: string; terms_accepted_at?: string };
 }
 
 /** A handle for repository names, from the email's local part. Not unique on its own; repo names add a suffix. */
@@ -72,7 +75,11 @@ export class SupabaseAuth {
     if (!parsed.success) throw fieldsError(parsed.error.issues);
     const { name, email, password } = parsed.data;
 
-    const signup = await this.call("/auth/v1/signup", this.anonKey(), { email, password, data: { name } });
+    const signup = await this.call("/auth/v1/signup", this.anonKey(), {
+      email,
+      password,
+      data: { name, terms_version: TERMS_VERSION, terms_accepted_at: new Date().toISOString() },
+    });
     if (!signup.ok) {
       const message = errorMessage(signup.body);
       if (signup.status === 422 && /already|registered|exists/i.test(message)) {
@@ -140,12 +147,17 @@ export class SupabaseAuth {
 
   private upsert(supabaseUser: SupabaseUser, nameForNewUser?: string): Promise<User> {
     const name = nameForNewUser ?? supabaseUser.user_metadata?.name ?? null;
+    const metadata = supabaseUser.user_metadata;
+    const consent =
+      metadata?.terms_version && metadata.terms_accepted_at
+        ? { termsVersion: metadata.terms_version, termsAcceptedAt: new Date(metadata.terms_accepted_at) }
+        : {};
     // Like ADMIN_GITHUB_LOGINS, the env list is re-applied on every sign-in.
     const admins = new Set(this.config.get("ADMIN_EMAILS", { infer: true }).split(",").map((entry) => entry.trim().toLowerCase()).filter(Boolean));
     const role = admins.has(supabaseUser.email.toLowerCase()) ? "admin" : "user";
     return this.prisma.user.upsert({
       where: { supabaseId: supabaseUser.id },
-      create: { supabaseId: supabaseUser.id, email: supabaseUser.email, githubLogin: handleFromEmail(supabaseUser.email), name, role },
+      create: { supabaseId: supabaseUser.id, email: supabaseUser.email, githubLogin: handleFromEmail(supabaseUser.email), name, role, ...consent },
       update: { email: supabaseUser.email, role },
     });
   }
