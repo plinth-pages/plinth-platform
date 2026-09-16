@@ -1,0 +1,146 @@
+<!--
+  Supabase → Authentication → Emails → "Confirm sign up"
+  Subject: Confirm your email to start building on Plinth
+  Needs Site URL = https://www.plinthpages.me (Authentication → URL Configuration).
+  Email clients ignore <style> blocks and SVG unevenly, so everything is tables and inline styles.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="supported-color-schemes" content="dark">
+  <title>Confirm your email</title>
+</head>
+<body style="margin:0;padding:0;background-color:#07080b;">
+  <!-- Preview line shown next to the subject in the inbox -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:#07080b;">
+    One click and your site starts building. Describe what you do, watch it get built.&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#07080b" style="background-color:#07080b;background-image:radial-gradient(ellipse at top,#1a2150 0%,#07080b 60%);">
+    <tr>
+      <td align="center" style="padding:48px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding-bottom:28px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td width="28" height="28" align="center" valign="middle" bgcolor="#4c62dc" style="width:28px;height:28px;border-radius:8px;background-color:#4c62dc;background-image:linear-gradient(135deg,#6b7fe6,#8b5cf6);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:15px;font-weight:800;color:#ffffff;line-height:28px;">P</td>
+                  <td style="padding-left:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:18px;font-weight:700;letter-spacing:-0.3px;color:#ffffff;">Plinth</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Card -->
+          <tr>
+            <td bgcolor="#0e1016" style="background-color:#0e1016;border:1px solid #23263a;border-radius:20px;overflow:hidden;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <!-- Accent line -->
+                <tr>
+                  <td height="3" bgcolor="#4c62dc" style="height:3px;line-height:3px;font-size:0;background-color:#4c62dc;background-image:linear-gradient(90deg,#93a3f0,#a78bfa,#f0abfc);">&nbsp;</td>
+                </tr>
+                <tr>
+                  <td style="padding:40px 36px 12px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;">
+                    <p style="margin:0 0 14px 0;display:inline-block;font-size:12px;font-weight:600;letter-spacing:0.4px;color:#6ee7b7;">
+                      <span style="display:inline-block;background-color:#0f2a22;border:1px solid #1f4d3d;border-radius:999px;padding:4px 10px;">&#10003;&nbsp; One step left</span>
+                    </p>
+                    <h1 style="margin:0;font-size:30px;line-height:1.15;font-weight:700;letter-spacing:-0.8px;color:#ffffff;">
+                      Confirm your email.<br>
+                      <span style="color:#a5b4fc;">Watch your site get built.</span>
+                    </h1>
+                    <p style="margin:18px 0 0 0;font-size:16px;line-height:1.6;color:#a8a29e;">
+                      {{ if .Data.name }}Hi {{ .Data.name }}, welcome{{ else }}Welcome{{ end }} to Plinth. Confirm it's really you and we'll take you straight to your editor.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Button -->
+                <tr>
+                  <td style="padding:28px 36px 8px 36px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                      <tr>
+                        <td align="center" bgcolor="#4c62dc" style="border-radius:12px;background-color:#4c62dc;background-image:linear-gradient(180deg,#5b70e3,#3a4ecb);box-shadow:0 8px 24px rgba(76,98,220,0.35);">
+                          <a href="{{ .SiteURL }}/verify-email?token_hash={{ .TokenHash }}&type=email" target="_blank" style="display:block;padding:15px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:16px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:12px;">
+                            Confirm my email &nbsp;&rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    <p style="margin:12px 0 0 0;text-align:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:13px;color:#78716c;">
+                      This link works once and expires in 1 hour.
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- What happens next -->
+                <tr>
+                  <td style="padding:28px 36px 8px 36px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#0a0b10" style="background-color:#0a0b10;border:1px solid #1d2030;border-radius:14px;">
+                      <tr>
+                        <td style="padding:18px 20px 6px 20px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#78716c;">What happens next</td>
+                      </tr>
+                      <tr>
+                        <td style="padding:6px 20px 18px 20px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:14px;line-height:1.5;color:#d6d3d1;">
+                            <tr>
+                              <td width="26" valign="top" style="padding:6px 0;color:#93a3f0;font-weight:700;">01</td>
+                              <td style="padding:6px 0;"><strong style="color:#ffffff;">Pick your role and look</strong> — we fill in what we can from your profile.</td>
+                            </tr>
+                            <tr>
+                              <td width="26" valign="top" style="padding:6px 0;color:#93a3f0;font-weight:700;">02</td>
+                              <td style="padding:6px 0;"><strong style="color:#ffffff;">Describe changes in plain words</strong> — every one is checked before you see it.</td>
+                            </tr>
+                            <tr>
+                              <td width="26" valign="top" style="padding:6px 0;color:#93a3f0;font-weight:700;">03</td>
+                              <td style="padding:6px 0;"><strong style="color:#ffffff;">Publish in one click</strong> — real React code, and you own every line.</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Checks strip -->
+                <tr>
+                  <td align="center" style="padding:20px 36px 4px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:12px;color:#6ee7b7;">
+                    <span style="display:inline-block;margin:0 4px 6px 4px;padding:4px 10px;border-radius:999px;background-color:#0f2a22;border:1px solid #1f4d3d;">&#10003; Types check</span>
+                    <span style="display:inline-block;margin:0 4px 6px 4px;padding:4px 10px;border-radius:999px;background-color:#0f2a22;border:1px solid #1f4d3d;">&#10003; Layout intact</span>
+                    <span style="display:inline-block;margin:0 4px 6px 4px;padding:4px 10px;border-radius:999px;background-color:#0f2a22;border:1px solid #1f4d3d;">&#10003; Page loads</span>
+                  </td>
+                </tr>
+
+                <!-- Fallback link -->
+                <tr>
+                  <td style="padding:24px 36px 36px 36px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;">
+                    <p style="margin:0;font-size:13px;line-height:1.6;color:#78716c;">
+                      Button not working? Paste this into your browser:<br>
+                      <a href="{{ .SiteURL }}/verify-email?token_hash={{ .TokenHash }}&type=email" target="_blank" style="color:#93a3f0;text-decoration:underline;word-break:break-all;">{{ .SiteURL }}/verify-email?token_hash={{ .TokenHash }}&amp;type=email</a>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td align="center" style="padding:28px 24px 0 24px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Arial,sans-serif;font-size:12px;line-height:1.6;color:#57534e;">
+              You're getting this because {{ .Email }} was used to sign up at
+              <a href="{{ .SiteURL }}" target="_blank" style="color:#78716c;text-decoration:underline;">plinthpages.me</a>.<br>
+              Didn't sign up? Ignore this email — no account is created until the link is confirmed.
+              <p style="margin:16px 0 0 0;color:#44403c;">Plinth · Describe what you do. Watch it get built.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
