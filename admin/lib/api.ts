@@ -66,9 +66,13 @@ export const api = {
   githubAppSetupUrl: `${API_URL}/dev/github-app/new`,
   me: () => request<MeResponse>("/auth/me"),
   authMethods: () => request<{ email: boolean; github: boolean }>("/auth/methods"),
-  /** Creates the account and signs in immediately. `next` is where to go. */
+  /** Creates the account. Signs in (`next` is where to go), or asks the person to confirm the emailed link first. */
   register: (body: { name: string; email: string; password: string }) =>
-    request<MeResponse & { next: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
+    request<(MeResponse & { next: string }) | { confirmEmail: string }>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
+  /** The link from the confirmation email. Signs the account in. */
+  confirmEmail: (body: { token_hash: string; type: string }) =>
+    request<MeResponse & { next: string }>("/auth/confirm", { method: "POST", body: JSON.stringify(body) }),
+  resendConfirmation: (email: string) => request<void>("/auth/resend-confirmation", { method: "POST", body: JSON.stringify({ email }) }),
   login: (body: { email: string; password: string }) => request<MeResponse & { next: string }>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   adminPing: () => request<AdminPingResponse>("/admin/ping"),

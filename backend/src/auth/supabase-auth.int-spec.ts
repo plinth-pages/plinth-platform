@@ -8,29 +8,43 @@ process.loadEnvFile(".env");
 jest.setTimeout(30_000);
 
 const prisma = new PrismaService();
-const values: Record<string, string> = { SUPABASE_URL: "https://ref.supabase.co", SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service" };
+const values: Record<string, string> = { SUPABASE_URL: "https://ref.supabase.co", SUPABASE_ANON_KEY: "anon", SUPABASE_SERVICE_ROLE_KEY: "service", ADMIN_EMAILS: "" };
 const config = { get: (key: string) => values[key] } as unknown as ConfigService<Env, true>;
 const emails: string[] = [];
 
-/** A tiny Supabase: users by email, password grant. */
-function fakeSupabase() {
-  const users = new Map<string, { id: string; password: string; name?: string }>();
+/** A tiny Supabase: users by email, sign-up (optionally requiring confirmation), verify, resend, password grant. */
+function fakeSupabase({ confirm = false } = {}) {
+  const users = new Map<string, { id: string; password: string; name?: string; confirmed: boolean; tokenHash: string }>();
   const calls: { path: string; key: string; body: Record<string, unknown> }[] = [];
   const fetchImpl = (async (url: string, init: RequestInit) => {
     const path = url.replace("https://ref.supabase.co", "");
     const body = JSON.parse(String(init.body));
     calls.push({ path, key: (init.headers as Record<string, string>).apikey, body });
     const json = (status: number, data: object) => new Response(JSON.stringify(data), { status });
-    if (path === "/auth/v1/admin/users") {
-      if (users.has(body.email)) return json(422, { msg: "A user with this email address has already been registered" });
-      users.set(body.email, { id: `sb-${Math.random().toString(36).slice(2)}`, password: body.password, name: body.user_metadata?.name });
-      return json(200, { id: users.get(body.email)!.id });
+    const session = (email: string, u: { id: string; name?: string }) => ({ access_token: "t", user: { id: u.id, email, user_metadata: { name: u.name } } });
+    if (path === "/auth/v1/signup") {
+      if (users.has(body.email)) {
+        // Supabase hides existing accounts when confirmation is on.
+        return confirm ? json(200, { id: "obfuscated", email: body.email }) : json(422, { msg: "User already registered" });
+      }
+      const created = { id: `sb-${Math.random().toString(36).slice(2)}`, password: body.password, name: body.data?.name, confirmed: !confirm, tokenHash: `hash-${Math.random().toString(36).slice(2)}` };
+      users.set(body.email, created);
+      return json(200, confirm ? { id: created.id, email: body.email, confirmation_sent_at: new Date().toISOString() } : session(body.email, created));
     }
+    if (path === "/auth/v1/verify") {
+      const entry = [...users.entries()].find(([, u]) => u.tokenHash === body.token_hash);
+      if (!entry) return json(403, { error_code: "otp_expired", msg: "Email link is invalid or has expired" });
+      entry[1].confirmed = true;
+      entry[1].tokenHash = "used";
+      return json(200, session(entry[0], entry[1]));
+    }
+    if (path === "/auth/v1/resend") return json(200, {});
     const user = users.get(body.email);
-    if (!user || user.password !== body.password) return json(400, { error_description: "Invalid login credentials" });
-    return json(200, { access_token: "t", user: { id: user.id, email: body.email, user_metadata: { name: user.name } } });
+    if (!user || user.password !== body.password) return json(400, { error_code: "invalid_credentials", msg: "Invalid login credentials" });
+    if (!user.confirmed) return json(400, { error_code: "email_not_confirmed", msg: "Email not confirmed" });
+    return json(200, session(body.email, user));
   }) as unknown as typeof fetch;
-  return { fetchImpl, calls };
+  return { fetchImpl, calls, users };
 }
 
 beforeAll(() => prisma.$connect());
@@ -39,15 +53,16 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-it("registers a confirmed account (no email link) and signs it in, then signs in again as the same user", async () => {
+it("signs a new account straight in when confirmation is off, then signs in again as the same user", async () => {
   const { fetchImpl, calls } = fakeSupabase();
   const auth = new SupabaseAuth(prisma, config, fetchImpl);
   const email = `new-${Date.now()}@example.com`;
   emails.push(email);
 
-  const user = await auth.register({ name: "Asha Menon", email: email.toUpperCase(), password: "correct horse" });
-  expect(calls[0]).toMatchObject({ path: "/auth/v1/admin/users", key: "service", body: { email, email_confirm: true } });
-  expect(calls[1]).toMatchObject({ path: "/auth/v1/token?grant_type=password", key: "anon" });
+  const outcome = await auth.register({ name: "Asha Menon", email: email.toUpperCase(), password: "correct horse" });
+  expect(calls[0]).toMatchObject({ path: "/auth/v1/signup", key: "anon", body: { email, data: { name: "Asha Menon" } } });
+  if (outcome.kind !== "signed_in") throw new Error("expected a session");
+  const user = outcome.user;
   expect(user).toMatchObject({ email, name: "Asha Menon", githubId: null, githubLogin: handleFromEmail(email), role: "user" });
 
   const again = await auth.login({ email, password: "correct horse" });
@@ -65,6 +80,28 @@ it("gives clear errors: duplicate email, wrong password, weak password", async (
   await expect(auth.register({ name: "A", email, password: "longenough" })).rejects.toMatchObject({ response: { fields: { email: "This email is already registered." } } });
   await expect(auth.login({ email, password: "wrong-password" })).rejects.toThrow("That email and password don't match.");
   await expect(auth.register({ name: "A", email: "x@example.com", password: "short" })).rejects.toMatchObject({ response: { fields: { password: "Use at least 8 characters." } } });
+});
+
+it("with confirmation on: no account until the link is confirmed, sign-in refused meanwhile, links single-use", async () => {
+  const { fetchImpl, users } = fakeSupabase({ confirm: true });
+  const auth = new SupabaseAuth(prisma, config, fetchImpl);
+  const email = `confirm-${Date.now()}@example.com`;
+  emails.push(email);
+
+  expect(await auth.register({ name: "Priya", email, password: "longenough" })).toEqual({ kind: "confirm_email", email });
+  expect(await prisma.user.count({ where: { email } })).toBe(0);
+  await expect(auth.login({ email, password: "longenough" })).rejects.toMatchObject({ response: { code: "email_not_confirmed" } });
+  await expect(auth.resendConfirmation({ email })).resolves.toBeUndefined();
+
+  const tokenHash = users.get(email)!.tokenHash;
+  const user = await auth.confirm({ token_hash: tokenHash, type: "email" });
+  expect(user).toMatchObject({ email, name: "Priya" });
+  await expect(auth.confirm({ token_hash: tokenHash, type: "email" })).rejects.toMatchObject({ response: { code: "link_invalid" } });
+  expect((await auth.login({ email, password: "longenough" })).id).toBe(user.id);
+
+  // Registering the same address again reveals nothing and creates nothing.
+  expect(await auth.register({ name: "Someone else", email, password: "different-pass" })).toEqual({ kind: "confirm_email", email });
+  expect(await prisma.user.count({ where: { email } })).toBe(1);
 });
 
 it("reports itself unconfigured without keys", async () => {

@@ -19,12 +19,28 @@ export class AuthController {
     private readonly supabase: SupabaseAuth,
   ) {}
 
-  /** Creates a confirmed account and signs it in immediately: no confirmation email. */
+  /** Signs the new account in, or — when Supabase requires confirmation — reports that a link was emailed. */
   @Post("register")
   async register(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
-    const user = await this.supabase.register(body);
+    const outcome = await this.supabase.register(body);
+    if (outcome.kind === "confirm_email") return { confirmEmail: outcome.email };
+    res.cookie(SESSION_COOKIE, await this.auth.signSession(outcome.user), this.cookieOptions(SESSION_TTL_SECONDS));
+    return { user: this.auth.toSessionUser(outcome.user), next: "/onboarding" };
+  }
+
+  /** The emailed confirmation link, posted from the site's /verify-email page (a click, so mail scanners can't use it up). */
+  @Post("confirm")
+  @HttpCode(200)
+  async confirm(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const user = await this.supabase.confirm(body);
     res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
-    return { user: this.auth.toSessionUser(user), next: "/onboarding" };
+    return { user: this.auth.toSessionUser(user), next: "/start" };
+  }
+
+  @Post("resend-confirmation")
+  @HttpCode(204)
+  async resendConfirmation(@Body() body: unknown) {
+    await this.supabase.resendConfirmation(body);
   }
 
   @Post("login")
