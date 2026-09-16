@@ -8,7 +8,7 @@ const mono = JetBrains_Mono({ variable: "--font-mono-face", subsets: ["latin"] }
 
 export const metadata: Metadata = {
   title: "Plinth",
-  description: "Describe your portfolio. Watch it get built.",
+  description: "Describe what you do. Watch it get built. Real React code, engineered by AI and checked on every change.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
