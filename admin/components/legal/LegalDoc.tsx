@@ -12,7 +12,7 @@ export interface LegalSection {
 /** Header and footer shared by the legal pages. */
 export function LegalShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-white text-stone-800 dark:bg-stone-950 dark:text-stone-300">
+    <div className="flex min-h-screen flex-col bg-white text-stone-800 dark:bg-stone-950 dark:text-stone-300">
       <header className="sticky top-0 z-10 border-b border-stone-200/80 bg-white/85 backdrop-blur dark:border-stone-800 dark:bg-stone-950/85">
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
           <Link href="/" className="flex items-center gap-2">
@@ -29,7 +29,7 @@ export function LegalShell({ children }: { children: React.ReactNode }) {
 
       {children}
 
-      <footer className="border-t border-stone-200 dark:border-stone-800">
+      <footer className="mt-auto border-t border-stone-200 dark:border-stone-800">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-8 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
           <span>© {new Date().getFullYear()} Plinth</span>
           <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">

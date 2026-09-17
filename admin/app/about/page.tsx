@@ -10,7 +10,7 @@ const AVATAR = "https://github.com/sumitverma77.png?size=200";
 export default function AboutPage() {
   return (
     <LegalShell>
-      <main className="mx-auto max-w-[62ch] px-6 py-16">
+      <main className="mx-auto w-full max-w-[62ch] flex-1 px-6 py-16">
         <h1 className="text-3xl font-semibold tracking-[-0.03em] text-stone-900 dark:text-white">About</h1>
 
         <div className="mt-8 flex items-center gap-4">
