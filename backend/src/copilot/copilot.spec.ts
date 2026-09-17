@@ -5,7 +5,7 @@ import { GeminiProvider } from "../ai/gemini.provider";
 import { GroqProvider, type GroqChat } from "../ai/groq.provider";
 import { applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
-import { parseContext } from "./copilot-planner";
+import { affordableTokens, parseContext } from "./copilot-planner";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn } from "./copilot-prompt";
 
 const files: Record<string, string> = {
@@ -218,5 +218,18 @@ describe("selectContext", () => {
     const selected = selectContext(tree, "Update my projects", 3_500);
     expect(selected.included.reduce((sum, file) => sum + file.content.length, 0)).toBeLessThanOrEqual(3_500);
     expect(selected.included.map((file) => file.path)).toContain("content/projects.ts");
+  });
+});
+
+describe("affordableTokens", () => {
+  it("reads the smaller reply size a low-credit account can pay for", () => {
+    const refusal = new AiProviderError("openai", "This request requires more credits, or fewer max_tokens. You requested up to 16000 tokens, but can only afford 4000.", false, "402");
+    expect(affordableTokens(refusal)).toBe(3950);
+  });
+
+  it("gives up when the account can't afford a useful reply, or the error is something else", () => {
+    expect(affordableTokens(new AiProviderError("openai", "You requested up to 16000 tokens, but can only afford 300.", false, "402"))).toBeNull();
+    expect(affordableTokens(new AiProviderError("openai", "Rate limited", true, "429"))).toBeNull();
+    expect(affordableTokens(new Error("can only afford 4000"))).toBeNull();
   });
 });

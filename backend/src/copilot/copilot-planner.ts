@@ -25,6 +25,17 @@ function tooLarge(error: unknown) {
 }
 const AI_TIMEOUT_MS = 90_000;
 
+/**
+ * A pay-as-you-go account (OpenRouter, for example) can refuse a request because the reply it *might* produce costs
+ * more than the remaining credit, and says how much it can afford. Below a useful size, retrying isn't worth it.
+ */
+export function affordableTokens(error: unknown): number | null {
+  if (!(error instanceof AiProviderError) || (error.code !== "402" && !/afford|credits/i.test(error.message))) return null;
+  const match = /can only afford (\d+)/i.exec(error.message);
+  const tokens = match ? Number(match[1]) - 50 : 0;
+  return tokens >= 800 ? tokens : null;
+}
+
 /** Runs one context read (the `context` script in the staging tree). Supplied by the runner. */
 export type ContextReader = () => Promise<{ files: ContextFile[]; truncated: boolean }>;
 
@@ -75,13 +86,13 @@ export class CopilotPlanner {
     const model = this.ai.findModel(input.model);
     const placed = installed.map((row) => ({ id: row.integrationId, slot: row.slot }));
     const previous = history.reverse().map((entry) => ({ role: entry.role, text: entry.content.length > HISTORY_CHARS ? `${entry.content.slice(0, HISTORY_CHARS)}…` : entry.content }));
-    const attempt = (budget: number) => {
+    const attempt = (budget: number, maxTokens = model?.maxOutputTokens ?? 1_500) => {
       const selected = selectContext(context.files, message.content, budget);
       return this.ai.generate(input.model, {
         system: SYSTEM_PROMPT,
         messages: [...previous, { role: "user" as const, text: buildUserTurn(message.content, selected.included, available, placed, selected.omitted) }],
         tool: SUBMIT_CHANGES_TOOL,
-        maxTokens: model?.maxOutputTokens ?? 1_500,
+        maxTokens,
         temperature: 0.2,
         signal: AbortSignal.timeout(AI_TIMEOUT_MS),
       });
@@ -91,7 +102,15 @@ export class CopilotPlanner {
     let result: Awaited<ReturnType<AiService["generate"]>>;
     try {
       const budget = model?.contextChars ?? 11_000;
-      result = await attempt(budget).catch((error) => (tooLarge(error) ? attempt(Math.floor(budget / 2)) : Promise.reject(error)));
+      result = await attempt(budget).catch((error) => {
+        if (tooLarge(error)) return attempt(Math.floor(budget / 2));
+        const affordable = affordableTokens(error);
+        if (affordable) {
+          this.logger.warn(`${input.model}: provider allows only ${affordable} output tokens; retrying with that limit`);
+          return attempt(budget, affordable);
+        }
+        return Promise.reject(error);
+      });
     } catch (error) {
       const text = tooLarge(error)
         ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro."
