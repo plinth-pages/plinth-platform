@@ -39,7 +39,6 @@ interface SiteData {
   installed: InstalledIntegrationSummary[];
   catalogue: CatalogueIntegration[];
   usage: CopilotUsage | null;
-  personalised: boolean;
 }
 
 /** The signed-in home: the site at a glance, a way straight into the co-pilot, and what to do next. */
@@ -92,20 +91,17 @@ function SiteHome({ site, user }: { site: PortfolioSummary; user: SessionUser })
   }, [site.id]);
 
   const load = useCallback(async () => {
-    const [operations, installed, catalogue, messages, setup] = await Promise.all([
+    const [operations, installed, catalogue, messages] = await Promise.all([
       api.operations(site.id).then((r) => r.operations, () => []),
       api.installedIntegrations(site.id).then((r) => r.installed, () => []),
       api.integrations().then((r) => r.integrations, () => []),
       api.copilotMessages(site.id).catch(() => null),
-      api.portfolioSetup(site.id).catch(() => null),
     ]);
-    const personalise = setup?.steps.find((step) => step.id === "personalise");
     setData({
       operations,
       installed,
       catalogue,
       usage: messages?.usage ?? null,
-      personalised: personalise ? personalise.state === "done" : false,
     });
   }, [site.id]);
 
@@ -121,9 +117,8 @@ function SiteHome({ site, user }: { site: PortfolioSummary; user: SessionUser })
       <SiteCard site={site} publish={publish} onPublished={loadPublish} className="lg:col-span-2" />
       <PlanCard user={user} usage={data.usage} />
       <PromptCard site={site} className="lg:col-span-2" />
-      <Checklist site={site} data={data} published={Boolean(publish?.liveUrl)} />
-      <IntegrationsCard site={site} installed={data.installed} catalogue={data.catalogue} className="lg:col-span-2" />
       <ActivityCard operations={data.operations} />
+      <IntegrationsCard site={site} installed={data.installed} catalogue={data.catalogue} className="lg:col-span-3" />
     </div>
   );
 }
@@ -327,53 +322,12 @@ function PromptCard({ site, className = "" }: { site: PortfolioSummary; classNam
   );
 }
 
-function Checklist({ site, data, published }: { site: PortfolioSummary; data: SiteData; published: boolean }) {
-  // Setup's own personalisation edit is actor "system"; only the person's changes count.
-  const madeChange = data.operations.some((op) => op.actor !== "system" && (op.type === "copilot" || op.type === "edit") && op.status === "applied");
-  const items = [
-    { label: "Site created", done: true },
-    { label: "Filled in from your profile", done: data.personalised },
-    { label: "Make your first co-pilot change", done: madeChange, href: `/portfolios/${site.id}` },
-    { label: "Add an integration", done: data.installed.length > 0, href: `/portfolios/${site.id}` },
-    { label: "Publish your site", done: published, href: `/portfolios/${site.id}` },
-  ];
-  const done = items.filter((item) => item.done).length;
-
-  return (
-    <section className="flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold">Launch checklist</p>
-        <span className="text-xs font-medium text-stone-500 tabular-nums">
-          {done}/{items.length}
-        </span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
-        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(done / items.length) * 100}%` }} />
-      </div>
-      <ul className="flex flex-col gap-2.5 text-sm">
-        {items.map((item) => (
-          <li key={item.label} className="flex items-center gap-2.5">
-            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] ${item.done ? "bg-emerald-500 text-white" : "ring-1 ring-stone-300 dark:ring-stone-700"}`}>{item.done ? "✓" : ""}</span>
-            {item.done || !item.href ? (
-              <span className={item.done ? "text-stone-400 line-through decoration-stone-300" : ""}>{item.label}</span>
-            ) : (
-              <Link href={item.href} className="font-medium hover:text-brand-600 dark:hover:text-brand-300">
-                {item.label} →
-              </Link>
-            )}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 function IntegrationsCard({ site, installed, catalogue, className = "" }: { site: PortfolioSummary; installed: InstalledIntegrationSummary[]; catalogue: CatalogueIntegration[]; className?: string }) {
   const installedIds = new Set(installed.map((i) => i.id));
   const recommended = catalogue
     .filter((entry) => !installedIds.has(entry.id))
     .sort((a, b) => Number(b.recommendedFor.includes(site.role)) - Number(a.recommendedFor.includes(site.role)))
-    .slice(0, 3);
+    .slice(0, 4);
 
   return (
     <section className={`flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
@@ -398,7 +352,7 @@ function IntegrationsCard({ site, installed, catalogue, className = "" }: { site
       ) : null}
 
       {recommended.length ? (
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {recommended.map((entry) => (
             <Link
               key={entry.id}
