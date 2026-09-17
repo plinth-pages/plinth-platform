@@ -3,6 +3,9 @@ import type {
   ConnectCredentialsRequest,
   PortfolioCredentialsResponse,
   AdminMetricsDays,
+  AdminPromoCode,
+  CreatePromoCodeRequest,
+  PromoCodePreview,
   AdminMetricsResponse,
   BillingStatusResponse,
   CopilotMessagesResponse,
@@ -143,8 +146,12 @@ export const api = {
   uninstallIntegration: (id: string, integrationId: string) =>
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
   billingStatus: () => request<BillingStatusResponse>("/billing"),
+  previewPromo: (code: string) => request<PromoCodePreview>(`/billing/promo?code=${encodeURIComponent(code)}`),
+  adminPromoCodes: () => request<{ codes: AdminPromoCode[] }>("/admin/promo-codes"),
+  createPromoCode: (body: CreatePromoCodeRequest) => request<{ code: AdminPromoCode }>("/admin/promo-codes", { method: "POST", body: JSON.stringify(body) }),
+  deactivatePromoCode: (id: string) => request<void>(`/admin/promo-codes/${id}/deactivate`, { method: "POST" }),
   /** A Stripe Checkout URL for Pro. The plan changes when Stripe's webhook confirms payment. */
-  checkout: () => request<{ url: string }>("/billing/checkout", { method: "POST" }),
+  checkout: (promoCode?: string) => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify(promoCode ? { promoCode } : {}) }),
   confirmCheckout: (sessionId: string) => request<BillingStatusResponse>("/billing/confirm", { method: "POST", body: JSON.stringify({ sessionId }) }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
   adminMetrics: (days: AdminMetricsDays = 30) => request<AdminMetricsResponse>(`/admin/metrics?days=${days}`),

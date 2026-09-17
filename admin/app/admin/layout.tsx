@@ -11,6 +11,7 @@ import { ApiError, api } from "@/lib/api";
 const NAV = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/requests", label: "Integration requests" },
+  { href: "/admin/promos", label: "Promo codes" },
   { href: "/admin/legal", label: "Privacy requests" },
   { href: "/admin/platform", label: "Platform" },
 ];

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { BillingStatusResponse, SessionUser } from "@plinth-pages/shared";
+import type { BillingStatusResponse, PromoCodePreview, SessionUser } from "@plinth-pages/shared";
 import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
@@ -19,6 +19,14 @@ export default function BillingPage() {
 
 const compact = (n: number) => Intl.NumberFormat("en", { notation: "compact" }).format(n);
 
+/** A code from a shared link survives the trip through sign-in until the person reaches this page. */
+const PROMO_KEY = "plinth_promo";
+
+function describePromo(promo: PromoCodePreview): string {
+  const length = promo.duration === "forever" ? "every month" : promo.duration === "repeating" ? `for ${promo.durationMonths} months` : "on your first month";
+  return `${promo.percentOff}% off ${length}`;
+}
+
 function Billing() {
   const router = useRouter();
   const toast = useToast();
@@ -26,6 +34,35 @@ function Billing() {
   const [billing, setBilling] = useState<BillingStatusResponse | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [promo, setPromo] = useState<PromoCodePreview | null>(null);
+
+  const applyPromo = useCallback(
+    async (code: string, quiet = false) => {
+      try {
+        const preview = await api.previewPromo(code);
+        setPromo(preview);
+        try {
+          localStorage.setItem(PROMO_KEY, preview.code);
+        } catch {}
+        if (!quiet) toast(`${preview.code} applied — ${describePromo(preview)}.`, "success");
+        return true;
+      } catch (e) {
+        try {
+          localStorage.removeItem(PROMO_KEY);
+        } catch {}
+        if (!quiet) toast(e instanceof Error ? e.message : "That promo code isn't valid.", "error");
+        return false;
+      }
+    },
+    [toast],
+  );
+
+  const removePromo = () => {
+    setPromo(null);
+    try {
+      localStorage.removeItem(PROMO_KEY);
+    } catch {}
+  };
 
   const load = useCallback(async () => {
     const [me, status] = await Promise.all([api.me(), api.billingStatus()]);
@@ -37,6 +74,13 @@ function Billing() {
   useEffect(() => {
     load().catch((e) => e instanceof ApiError && e.status === 401 && router.replace("/login"));
     const params = new URLSearchParams(window.location.search);
+    let saved: string | null = null;
+    try {
+      saved = localStorage.getItem(PROMO_KEY);
+    } catch {}
+    const linked = params.get("code") ?? saved;
+    if (linked) void applyPromo(linked, !params.get("code"));
+    if (params.get("code")) window.history.replaceState(null, "", "/billing");
     const checkout = params.get("checkout");
     const sessionId = params.get("session_id");
     if (!checkout) return;
@@ -55,6 +99,7 @@ function Billing() {
         clearInterval(timer);
         setConfirming(false);
         void load();
+        removePromoAfterCheckout();
         toast("Welcome to Pro! Premium models and higher limits are unlocked.", "success");
       } else if (tries >= 30) {
         clearInterval(timer);
@@ -63,7 +108,7 @@ function Billing() {
       }
     }, 2_000);
     return () => clearInterval(timer);
-  }, [load, router, toast]);
+  }, [load, router, toast, applyPromo]);
 
   async function go(action: () => Promise<{ url: string }>) {
     setBusy(true);
@@ -77,6 +122,7 @@ function Billing() {
 
   if (!user || !billing) return <main className="min-h-screen" aria-busy="true" />;
   const pro = billing.plan === "pro";
+  const discounted = promo && !pro ? Math.round(billing.priceUsd * (100 - promo.percentOff)) / 100 : null;
 
   return (
     <div className="min-h-screen">
@@ -109,6 +155,7 @@ function Billing() {
           <PlanCard
             name="Pro"
             price={`$${billing.priceUsd}`}
+            discountedPrice={discounted === null ? undefined : `$${discounted % 1 ? discounted.toFixed(2) : discounted}`}
             highlight
             current={pro}
             features={[
@@ -131,8 +178,10 @@ function Billing() {
                 </Button>
               </div>
             ) : (
+              <div className="flex flex-col gap-3">
+              <PromoField promo={promo} onApply={(code) => applyPromo(code)} onRemove={removePromo} />
               <Button
-                onClick={() => void go(api.checkout)}
+                onClick={() => void go(() => api.checkout(promo?.code))}
                 disabled={busy || confirming || !billing.checkoutAvailable}
                 title={billing.checkoutAvailable ? undefined : "Billing isn't set up on this server yet"}
                 variant="brand"
@@ -142,6 +191,7 @@ function Billing() {
                 {busy ? "Opening checkout…" : confirming ? "Confirming…" : "Upgrade to Pro"}
                 {!busy && !confirming ? <ArrowRight /> : null}
               </Button>
+              </div>
             )}
           </PlanCard>
         </div>
@@ -155,7 +205,79 @@ function Billing() {
   );
 }
 
-function PlanCard({ name, price, features, current, highlight, children }: { name: string; price: string; features: string[]; current: boolean; highlight?: boolean; children?: React.ReactNode }) {
+function removePromoAfterCheckout() {
+  try {
+    localStorage.removeItem(PROMO_KEY);
+  } catch {}
+}
+
+function PromoField({ promo, onApply, onRemove }: { promo: PromoCodePreview | null; onApply: (code: string) => Promise<boolean>; onRemove: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [checking, setChecking] = useState(false);
+
+  if (promo) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm ring-1 ring-emerald-600/15 dark:bg-emerald-950/50 dark:ring-emerald-900">
+        <span className="rounded-md bg-white px-1.5 py-0.5 font-mono text-xs font-semibold text-emerald-800 ring-1 ring-emerald-600/20 dark:bg-emerald-950 dark:text-emerald-300">{promo.code}</span>
+        <span className="text-emerald-900 dark:text-emerald-200">{describePromo(promo)}</span>
+        <button type="button" onClick={onRemove} className="ml-auto text-xs font-medium text-emerald-800 underline underline-offset-2 dark:text-emerald-300">
+          Remove
+        </button>
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="w-fit text-sm font-medium text-stone-600 underline-offset-4 hover:text-stone-900 hover:underline dark:text-stone-400 dark:hover:text-white">
+        Have a promo code?
+      </button>
+    );
+  }
+  return (
+    <form
+      className="flex gap-2"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (!code.trim()) return;
+        setChecking(true);
+        if (await onApply(code.trim())) setCode("");
+        setChecking(false);
+      }}
+    >
+      <input
+        value={code}
+        onChange={(event) => setCode(event.target.value.toUpperCase())}
+        placeholder="PROMO CODE"
+        autoFocus
+        maxLength={30}
+        aria-label="Promo code"
+        className="h-10 min-w-0 flex-1 rounded-[10px] border-0 bg-white px-3 font-mono text-sm tracking-wider uppercase shadow-[0_0_0_1px_rgb(28_25_23/0.12)] placeholder:text-stone-400 focus-visible:shadow-[0_0_0_1px_rgb(76_98_220),0_0_0_4px_rgb(76_98_220/0.15)] focus-visible:outline-none dark:bg-stone-900 dark:shadow-[0_0_0_1px_rgb(255_255_255/0.12)]"
+      />
+      <Button type="submit" variant="secondary" size="md" disabled={checking || !code.trim()}>
+        {checking ? "Checking…" : "Apply"}
+      </Button>
+    </form>
+  );
+}
+
+function PlanCard({
+  name,
+  price,
+  discountedPrice,
+  features,
+  current,
+  highlight,
+  children,
+}: {
+  name: string;
+  price: string;
+  discountedPrice?: string;
+  features: string[];
+  current: boolean;
+  highlight?: boolean;
+  children?: React.ReactNode;
+}) {
   return (
     <section
       className={`relative flex flex-col gap-6 rounded-2xl p-7 ${
@@ -168,7 +290,14 @@ function PlanCard({ name, price, features, current, highlight, children }: { nam
         <div>
           <h2 className="text-[15px] font-semibold tracking-tight">{name}</h2>
           <p className="mt-3">
-            <span className="text-5xl font-semibold tracking-[-0.04em]">{price}</span>
+            {discountedPrice ? (
+              <>
+                <span className="text-5xl font-semibold tracking-[-0.04em]">{discountedPrice}</span>
+                <span className="ml-2 text-lg text-stone-400 line-through">{price}</span>
+              </>
+            ) : (
+              <span className="text-5xl font-semibold tracking-[-0.04em]">{price}</span>
+            )}
             <span className="text-sm text-stone-500"> / month</span>
           </p>
         </div>
