@@ -7,12 +7,14 @@ import { CurrentUser } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
 import { BillingService } from "./billing.service";
 import { PromoCodes } from "./promo-codes";
+import { RazorpayService } from "./razorpay.service";
 
 @Controller("billing")
 export class BillingController {
   constructor(
     private readonly billing: BillingService,
     private readonly promos: PromoCodes,
+    private readonly razorpay: RazorpayService,
   ) {}
 
   @Get()
@@ -37,6 +39,22 @@ export class BillingController {
   @UseGuards(SessionGuard)
   confirm(@CurrentUser() user: User, @Body() body: { sessionId?: unknown } | undefined) {
     return this.billing.confirm(user, body?.sessionId);
+  }
+
+  /** Razorpay step 1: an order for the modal to collect. */
+  @Post("razorpay/order")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  createRazorpayOrder(@CurrentUser() user: User, @Body() body: { promoCode?: unknown } | undefined) {
+    return this.razorpay.createOrder(user, body?.promoCode);
+  }
+
+  /** Razorpay step 3: check the signature, then grant Pro. */
+  @Post("razorpay/verify")
+  @HttpCode(200)
+  @UseGuards(SessionGuard)
+  verifyRazorpay(@CurrentUser() user: User, @Body() body: unknown) {
+    return this.razorpay.verify(user, body);
   }
 
   @Post("portal")

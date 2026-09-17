@@ -100,6 +100,11 @@ const envSchema = z
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     // Billing (Phase 14). Without a price id, checkout creates the $15/month Pro price inline.
+    /** Razorpay Standard Checkout, for paying in rupees (UPI, cards, netbanking). Key secret stays on the server. */
+    RAZORPAY_KEY_ID: z.string().optional(),
+    RAZORPAY_KEY_SECRET: z.string().optional(),
+    /** Pro for 30 days, in paise. 120000 = ₹1,200. */
+    RAZORPAY_PRO_PRICE_PAISE: z.coerce.number().int().min(100).default(120_000),
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_WEBHOOK_SECRET: z.string().optional(),
     STRIPE_PRO_PRICE_ID: z.string().optional(),

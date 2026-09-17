@@ -1,4 +1,5 @@
 import { Injectable, UnauthorizedException } from "@nestjs/common";
+import { razorpayPlanExpired } from "../billing/razorpay.service";
 import { TERMS_VERSION, hasAcceptedTerms } from "../legal/terms";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
@@ -103,7 +104,11 @@ export class AuthService {
     if (!token) return null;
     try {
       const payload = await this.jwt.verifyAsync<SessionPayload>(token);
-      return await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      if (user && razorpayPlanExpired(user)) {
+        return this.prisma.user.update({ where: { id: user.id }, data: { plan: "free", paymentProvider: null, subscriptionStatus: null } });
+      }
+      return user;
     } catch {
       return null;
     }

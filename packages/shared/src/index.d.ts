@@ -568,6 +568,12 @@ export interface BillingStatusResponse {
   limits: Record<PlanId, PlanLimits>;
   /** Stripe is configured on this server. */
   checkoutAvailable: boolean;
+  /** Razorpay (rupees) is configured on this server. */
+  rupeesAvailable: boolean;
+  /** Price for 30 days of Pro in paise, when paying in rupees. */
+  rupeesPricePaise: number;
+  /** Which side is paying for the current plan: "stripe", "razorpay", or null on Free. */
+  paymentProvider: string | null;
 }
 
 export type PromoDuration = "once" | "repeating" | "forever";
@@ -607,6 +613,25 @@ export interface CreatePromoCodeRequest {
 
 /** Ranges the admin overview can show. */
 export type AdminMetricsDays = 7 | 30 | 90 | 365;
+
+/** What the browser needs to open Razorpay's modal. The key secret never leaves the server. */
+export interface RazorpayOrderResponse {
+  orderId: string;
+  /** In paise, after any discount. */
+  amount: number;
+  currency: string;
+  keyId: string;
+  /** Days of Pro this payment buys. */
+  days: number;
+  promo: { code: string; percentOff: number } | null;
+}
+
+export interface RazorpayVerifyResponse {
+  plan: PlanId;
+  renewsAt: string | null;
+  /** True when this payment had already been applied — the plan was not extended again. */
+  alreadyApplied: boolean;
+}
 
 export interface AdminUserSummary {
   id: string;

@@ -42,6 +42,8 @@ model User {
   subscriptionStatus     String?   @map("subscription_status")
   planRenewsAt           DateTime? @map("plan_renews_at")
   planCancelsAtPeriodEnd Boolean   @default(false) @map("plan_cancels_at_period_end")
+  /// Which side paid for the current plan: "stripe" (recurring) or "razorpay" (a paid month). Null on Free.
+  paymentProvider        String?   @map("payment_provider")
   /// Version of the Terms and Privacy Policy the user accepted, and when. Null until they accept.
   termsVersion           String?   @map("terms_version")
   termsAcceptedAt        DateTime? @map("terms_accepted_at")
@@ -56,6 +58,7 @@ model User {
   copilotMessages     CopilotMessage[]
   legalRequests       LegalRequest[]
   promoCodes          PromoCode[]
+  paymentOrders       PaymentOrder[]
 
   @@map("users")
 }
@@ -491,4 +494,35 @@ model PromoCode {
   createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
 
   @@map("promo_codes")
+}
+
+enum PaymentOrderStatus {
+  created
+  paid
+  failed
+}
+
+/// A single Razorpay order: created when checkout opens, marked paid once its signature is verified. Kept so a
+/// payment can be traced for support, and so the same payment can never be applied twice.
+model PaymentOrder {
+  id                String             @id @default(cuid())
+  userId            String             @map("user_id")
+  provider          String             @default("razorpay")
+  /// Razorpay's order id (order_...), and the payment id once it succeeds.
+  providerOrderId   String             @unique @map("provider_order_id")
+  providerPaymentId String?            @unique @map("provider_payment_id")
+  /// Charged amount in the currency's smallest unit (paise), after any discount.
+  amount            Int
+  currency          String             @default("INR")
+  /// Days of Pro this buys.
+  days              Int                @default(30)
+  promoCode         String?            @map("promo_code")
+  status            PaymentOrderStatus @default(created)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  paidAt            DateTime?          @map("paid_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("payment_orders")
 }

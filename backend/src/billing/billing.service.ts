@@ -44,6 +44,9 @@ export class BillingService {
       priceUsd: PLANS.pro.priceUsd,
       limits: { free: PLANS.free.limits, pro: PLANS.pro.limits },
       checkoutAvailable: this.configured,
+      rupeesAvailable: Boolean(this.config.get("RAZORPAY_KEY_ID", { infer: true }) && this.config.get("RAZORPAY_KEY_SECRET", { infer: true })),
+      rupeesPricePaise: this.config.get("RAZORPAY_PRO_PRICE_PAISE", { infer: true }),
+      paymentProvider: user.paymentProvider,
     };
   }
 

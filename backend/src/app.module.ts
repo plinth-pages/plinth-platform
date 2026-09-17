@@ -11,6 +11,7 @@ import { AuthModule } from "./auth/auth.module";
 import { BillingController } from "./billing/billing.controller";
 import { BillingService, STRIPE, createStripe } from "./billing/billing.service";
 import { PromoCodes } from "./billing/promo-codes";
+import { RazorpayService } from "./billing/razorpay.service";
 import { PromoCodesController } from "./billing/promo-codes.controller";
 import { CredentialSync, SECRET_ENVIRONMENT } from "./credentials/credential-sync";
 import { CredentialsController } from "./credentials/credentials.controller";
@@ -115,6 +116,7 @@ class RoleModule {
     CredentialsService,
     BillingService,
     PromoCodes,
+    RazorpayService,
     { provide: STRIPE, inject: [ConfigService], useFactory: createStripe },
     PortfolioEventsHub,
     ...previewApiProviders,
