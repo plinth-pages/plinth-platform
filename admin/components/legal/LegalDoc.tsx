@@ -33,6 +33,7 @@ export function LegalShell({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-sm text-stone-500 sm:flex-row sm:justify-between">
           <span>© {new Date().getFullYear()} Plinth · Operated by Sumit Verma, India</span>
           <span className="flex gap-5">
+            <Link href="/about">About</Link>
             <Link href="/terms">Terms</Link>
             <Link href="/privacy">Privacy</Link>
             <Link href="/privacy/request">Privacy requests</Link>

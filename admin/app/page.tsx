@@ -224,7 +224,13 @@ export default function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-8 text-sm text-stone-500 md:flex-row">
           <div className="flex items-center gap-2">
             <BrandMark className="h-4 w-4 text-stone-400" />
-            <span>© {new Date().getFullYear()} Plinth</span>
+            <span>
+              © {new Date().getFullYear()} Plinth · Built by{" "}
+              <Link href="/about" className="hover:text-stone-300">
+                Sumit Verma
+              </Link>{" "}
+              in India
+            </span>
           </div>
           <div className="flex gap-6">
             <a href="#engineering" className="hover:text-stone-300">Under the hood</a>
