@@ -93,6 +93,9 @@ export default function AdminOverviewPage() {
             ))}
           </ul>
           {metrics.ai.fallbacks ? <p className="mt-3 text-xs text-stone-500">Fallbacks usually mean a provider is out of credit or rate limited — check its dashboard.</p> : null}
+          {metrics.ai.byProvider.some((row) => row.provider === "not tracked") ? (
+            <p className="mt-2 text-xs text-stone-500">&ldquo;not tracked&rdquo; counts replies from before Plinth started recording which provider answered.</p>
+          ) : null}
         </section>
       ) : null}
 

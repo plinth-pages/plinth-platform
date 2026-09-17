@@ -118,7 +118,7 @@ export class AdminController {
           .map((row) => ({ model: row.model ?? "unknown", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
           .sort((a, b) => b.tokens - a.tokens),
         byProvider: aiByProvider
-          .map((row) => ({ provider: row.provider ?? "unrecorded", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
+          .map((row) => ({ provider: row.provider ?? "not tracked", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
           .sort((a, b) => b.tokens - a.tokens),
         fallbacks,
       },
