@@ -730,8 +730,8 @@ describe("co-pilot", () => {
     const op = await ask(portfolio.id, "Make the hero bigger");
     await runner.drain(portfolio.id);
 
-    expect(await reload(op.id)).toMatchObject({ status: "failed", error: "The co-pilot isn't available right now. Please try again later." });
-    expect(await replyTo(op.id)).toMatchObject({ content: "The co-pilot isn't available right now. Please try again later." });
+    expect(await reload(op.id)).toMatchObject({ status: "failed", error: "Plinth AI isn't available right now. Please try again later." });
+    expect(await replyTo(op.id)).toMatchObject({ content: "Plinth AI isn't available right now. Please try again later." });
     expect(sandbox.liveHistory).toHaveLength(1);
   });
 });
