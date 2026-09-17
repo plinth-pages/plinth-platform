@@ -98,7 +98,7 @@ export class CopilotPlanner {
         : error instanceof AiProviderError && error.retryable
           ? "Plinth AI is busy right now. Please try again in a moment."
           : "Plinth AI isn't available right now. Please try again later.";
-      this.logger.warn(`Co-pilot call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
+      this.logger.warn(`Plinth AI call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
       await this.reply(operation, message.userId, input.model, { content: text });
       throw new OperationAborted(text);
     }
@@ -108,7 +108,7 @@ export class CopilotPlanner {
     if (!parsed.success) {
       const content = "I couldn't work out a safe change for that. Could you describe it differently?";
       await this.reply(operation, message.userId, input.model, { content, ...usage });
-      return { kind: "reject", failures: [{ source: "copilot", message: "The co-pilot's answer wasn't a valid change." }] };
+      return { kind: "reject", failures: [{ source: "copilot", message: "Plinth AI's answer wasn't a valid change." }] };
     }
     const output = parsed.data;
 

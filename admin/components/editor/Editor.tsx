@@ -90,7 +90,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("welcome")) {
-      toast("Your portfolio is ready. Ask the co-pilot for anything you'd like to change.", "success");
+      toast("Your portfolio is ready. Ask Plinth AI for anything you'd like to change.", "success");
       const url = new URL(window.location.href);
       url.searchParams.delete("welcome");
       window.history.replaceState(null, "", url);
@@ -247,7 +247,7 @@ function workingLabel(operation: { status: string; type: string } | null): strin
     case "queued":
       return "Getting ready";
     case "staging":
-      return copilot ? "The co-pilot is making your change" : "Preparing your change";
+      return copilot ? "Plinth AI is making your change" : "Preparing your change";
     case "checking":
       return "Making sure nothing breaks";
     case "applying":

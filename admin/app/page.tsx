@@ -161,7 +161,7 @@ export default function LandingPage() {
 
         {/* Example sites by role */}
         <section className="mx-auto max-w-6xl px-6 pb-24 md:pb-28">
-          <SectionHeading eyebrow="Example sites" title="One template. Very different sites." body="Each of these started from the same place and a few sentences to the co-pilot." />
+          <SectionHeading eyebrow="Example sites" title="One template. Very different sites." body="Each of these started from the same place and a few sentences to Plinth AI." />
           <div className="mt-14">
             <ExampleSites />
           </div>
@@ -189,13 +189,13 @@ export default function LandingPage() {
         <section id="pricing" className="mx-auto max-w-4xl scroll-mt-20 px-6 pb-24 md:pb-28">
           <SectionHeading eyebrow="Pricing" title="Start free. Upgrade when you're ready." />
           <div className="mt-14 grid gap-4 md:grid-cols-2">
-            <PriceCard name="Free" price="$0" note="Everything you need to launch." features={["20 co-pilot messages a day", "Fast AI model", "Integrations & publishing", "Full safety net on every change"]} cta={<Link href="/login" className={buttonClass({ variant: "glass", size: "lg", full: true })}>Start free</Link>} />
+            <PriceCard name="Free" price="$0" note="Everything you need to launch." features={["60K AI tokens a day, 300K a month", "Fast AI model", "Integrations & publishing", "Full safety net on every change"]} cta={<Link href="/login" className={buttonClass({ variant: "glass", size: "lg", full: true })}>Start free</Link>} />
             <PriceCard
               name="Pro"
               price="$15"
               note="For people who keep iterating."
               highlight
-              features={["300 co-pilot messages a day", "Claude and GPT-4o", "5M AI tokens a month", "Everything in Free"]}
+              features={["1M AI tokens a day, 5M a month", "Claude and GPT-4o", "Longer, multi-part requests", "Everything in Free"]}
               cta={
                 <Link href="/login" className={buttonClass({ variant: "brand", size: "lg", full: true })}>
                   Get Pro <ArrowRight />

@@ -44,6 +44,6 @@ export function setupProgress(portfolio: Portfolio, sandbox: Sandbox | null, per
     ready: details === "done" || details === "skipped",
     failure,
     retry: repository === "failed" ? "provisioning" : preview === "failed" ? "preview" : null,
-    note: details === "skipped" ? "We kept the starter content — ask the co-pilot to add your details." : null,
+    note: details === "skipped" ? "We kept the starter content — ask Plinth AI to add your details." : null,
   };
 }

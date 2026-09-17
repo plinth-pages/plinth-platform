@@ -27,7 +27,7 @@ function areaName(path: string) {
 }
 
 /**
- * The co-pilot: describe a change, and it's made in your preview after it passes the same checks as every other
+ * Plinth AI: describe a change, and it's made in your preview after it passes the same checks as every other
  * change. Replies arrive through the operation's events, so the chat never blocks on the model.
  */
 export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }: { portfolioId: string; operations: OperationSummary[]; live: boolean; initialDraft?: string }) {
@@ -63,7 +63,7 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
     }, () => undefined);
   }, [load]);
 
-  // Any co-pilot change moving on means a reply or a new status to show.
+  // Any Plinth AI change moving on means a reply or a new status to show.
   const copilotSignature = useMemo(
     () => operations.filter((operation) => operation.type === "copilot" || operation.actor === "copilot").map((operation) => `${operation.id}:${operation.status}`).join(","),
     [operations],
@@ -171,8 +171,8 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
             rows={3}
             maxLength={maxChars}
             disabled={!live || outOfMessages}
-            placeholder={!live ? "Your preview is starting…" : outOfMessages ? "You've reached your co-pilot limit" : "Describe a change…"}
-            aria-label="Message the co-pilot"
+            placeholder={!live ? "Your preview is starting…" : outOfMessages ? "You've reached your Plinth AI limit" : "Describe a change…"}
+            aria-label="Message Plinth AI"
             className="block w-full resize-none bg-transparent px-3 pt-2.5 text-sm placeholder:text-stone-400 focus:outline-none disabled:cursor-not-allowed"
           />
           <div className="flex items-center justify-between gap-2 px-2 pb-2">

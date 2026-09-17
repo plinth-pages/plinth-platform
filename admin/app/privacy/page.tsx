@@ -14,7 +14,7 @@ const PROVIDERS: [string, string][] = [
   ["Redis Cloud", "Short-lived job queue data"],
   ["Resend", "Account emails, such as email confirmation"],
   ["Stripe", "Payments and subscriptions (Stripe holds your card details; we never see them)"],
-  ["AI providers (such as Groq, Anthropic, OpenAI, Google and Amazon Web Services)", "Generating co-pilot responses from your prompts and the relevant parts of your site"],
+  ["AI providers (such as Groq, Anthropic, OpenAI, Google and Amazon Web Services)", "Generating Plinth AI responses from your prompts and the relevant parts of your site"],
 ];
 
 const sections: LegalSection[] = [
@@ -45,7 +45,7 @@ const sections: LegalSection[] = [
             <strong>Your site and choices:</strong> the role and look you choose, the content and code of your site, and the history of changes.
           </li>
           <li>
-            <strong>Co-pilot activity:</strong> the messages you send and receive, the changes made, and usage figures such as message counts and AI tokens used.
+            <strong>Plinth AI activity:</strong> the messages you send and receive, the changes made, and usage figures such as the AI tokens used.
           </li>
           <li>
             <strong>Integration secrets:</strong> API keys you add for integrations. They are encrypted with AES-256-GCM and are only ever delivered to your own site&apos;s server-side environment.
@@ -83,7 +83,7 @@ const sections: LegalSection[] = [
     body: (
       <>
         <ul>
-          <li>to create and run your account, build, preview and publish your site, and provide the co-pilot and integrations you ask for;</li>
+          <li>to create and run your account, build, preview and publish your site, and provide Plinth AI and integrations you ask for;</li>
           <li>to process payments and manage your plan and usage limits;</li>
           <li>to send you essential account emails, such as confirming your email address;</li>
           <li>to keep the Service secure, prevent abuse, and debug problems;</li>
@@ -122,7 +122,7 @@ const sections: LegalSection[] = [
           </table>
         </div>
         <p>
-          When you use the co-pilot, your prompt and the relevant parts of your site are sent to the AI provider that serves the model you selected. Please avoid including sensitive personal data in
+          When you use Plinth AI, your prompt and the relevant parts of your site are sent to the AI provider that serves the model you selected. Please avoid including sensitive personal data in
           prompts. We may also disclose data where required by law, to protect our rights or users&apos; safety, or as part of a transfer of the Service.
         </p>
       </>
@@ -228,7 +228,7 @@ export default function PrivacyPage() {
       summary={
         <>
           <p>
-            <strong>In short:</strong> we collect what we need to build, preview and publish your site: your account details, your site&apos;s content, your co-pilot activity, and billing status.
+            <strong>In short:</strong> we collect what we need to build, preview and publish your site: your account details, your site&apos;s content, your Plinth AI activity, and billing status.
             Your site&apos;s code and content are <strong>public</strong>; your integration API keys are encrypted and never public. Prompts go to AI providers to generate changes. We don&apos;t sell
             your data or use advertising trackers, and you can ask to see, correct or delete your data at any time.
           </p>

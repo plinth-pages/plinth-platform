@@ -41,13 +41,13 @@ export const copilotOutputSchema = z.object({
 export type CopilotOutput = z.infer<typeof copilotOutputSchema>;
 export type CopilotEdit = CopilotOutput["edits"][number];
 
-/** Where the co-pilot may write. Everything else — config, dependencies, the slot manifest, server routes — is off limits. */
+/** Where Plinth AI may write. Everything else — config, dependencies, the slot manifest, server routes — is off limits. */
 const WRITABLE_PREFIXES = ["app/", "components/", "content/", "lib/"];
 const WRITABLE_EXTENSIONS = new Set([".ts", ".tsx", ".css"]);
 const CREATABLE_PREFIXES = ["components/", "content/"];
 const FORBIDDEN_PATHS = [/^app\/api\//, /^middleware\.ts$/, /(^|\/)route\.ts$/];
 
-/** Code the co-pilot must never introduce. Checked on the text it adds, not on the existing file. */
+/** Code Plinth AI must never introduce. Checked on the text it adds, not on the existing file. */
 const FORBIDDEN_CODE: { pattern: RegExp; reason: string }[] = [
   { pattern: /dangerouslySetInnerHTML/, reason: "raw HTML injection" },
   { pattern: /<script\b/i, reason: "script tags" },
@@ -59,7 +59,7 @@ const FORBIDDEN_CODE: { pattern: RegExp; reason: string }[] = [
   { pattern: /@import\s+(url\()?["']?https?:/i, reason: "external stylesheets" },
 ];
 
-/** Lines the codemod engine owns. Their multiset must be identical before and after a co-pilot edit. */
+/** Lines the codemod engine owns. Their multiset must be identical before and after a Plinth AI edit. */
 const PROTECTED_LINE = /<Slot\b|<\/Slot>|plinth:[a-z0-9-]+:(start|end)|plinth:imports:(start|end)/;
 
 export class CopilotEditError extends Error {
@@ -81,7 +81,7 @@ export function writablePath(input: string, action: CopilotEdit["action"]): stri
   }
   const allowedPrefixes = action === "create" ? CREATABLE_PREFIXES : WRITABLE_PREFIXES;
   if (!allowedPrefixes.some((prefix) => path.startsWith(prefix)) || !WRITABLE_EXTENSIONS.has(posix.extname(path)) || FORBIDDEN_PATHS.some((re) => re.test(path))) {
-    throw new CopilotEditError(path, "That file is managed by Plinth and can't be changed by the co-pilot.");
+    throw new CopilotEditError(path, "That file is managed by Plinth and can't be changed by Plinth AI.");
   }
   return path;
 }
@@ -115,7 +115,7 @@ export function applyEdits(edits: CopilotEdit[], read: (path: string) => string 
       if (current !== null) throw new CopilotEditError(path, `${path} already exists.`);
       if (edit.content === undefined) throw new CopilotEditError(path, "A new file needs content.");
       assertSafeAddition(path, edit.content);
-      if (PROTECTED_LINE.test(edit.content)) throw new CopilotEditError(path, "Slots and Plinth markers can't be added by the co-pilot.");
+      if (PROTECTED_LINE.test(edit.content)) throw new CopilotEditError(path, "Slots and Plinth markers can't be added by Plinth AI.");
       next.set(path, edit.content);
       continue;
     }

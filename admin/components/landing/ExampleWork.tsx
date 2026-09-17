@@ -2,7 +2,7 @@ import { ChangeList, Check } from "./Diff";
 
 /**
  * "See exactly what changed": four requests of the kind people actually make, each shown the way the editor shows
- * it — the ask, the reply, the code, and what ran before it went live. The blocked case uses the co-pilot's real
+ * it — the ask, the reply, the code, and what ran before it went live. The blocked case uses Plinth AI's real
  * rules (no script tags, no environment variables in page code).
  */
 export function ExampleWork() {

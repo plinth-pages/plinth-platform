@@ -12,7 +12,7 @@ const sections: LegalSection[] = [
       <>
         <p>
           Plinth (&ldquo;Plinth&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;) is operated by <strong>Sumit Verma</strong>, an individual based in India. These Terms of Service (&ldquo;Terms&rdquo;) are a
-          binding agreement between you and us for your use of plinthpages.me, the Plinth editor, co-pilot, integrations, previews and publishing (together, the &ldquo;Service&rdquo;).
+          binding agreement between you and us for your use of plinthpages.me, the Plinth editor, Plinth AI, integrations, previews and publishing (together, the &ldquo;Service&rdquo;).
         </p>
         <p>
           By creating an account, ticking the consent box, signing in with GitHub, or otherwise using the Service, you agree to these Terms and to our <Link href="/privacy">Privacy Policy</Link>. If you
@@ -77,11 +77,11 @@ const sections: LegalSection[] = [
   },
   {
     id: "ai",
-    title: "The AI co-pilot",
+    title: "Plinth AI",
     body: (
       <>
         <p>
-          The co-pilot uses third-party AI models to turn your requests into code changes. Your prompts and the relevant parts of your site are sent to those providers to produce a response. AI output
+          Plinth AI uses third-party AI models to turn your requests into code changes. Your prompts and the relevant parts of your site are sent to those providers to produce a response. AI output
           can be wrong, incomplete, or similar to content produced for others. Automated checks reduce the risk of broken changes but do not guarantee correctness, security, accessibility or fitness
           for any purpose.
         </p>
@@ -144,7 +144,7 @@ const sections: LegalSection[] = [
     title: "Our intellectual property",
     body: (
       <p>
-        The Service itself — the Plinth platform, editor, co-pilot, checks, branding and documentation — belongs to us and our licensors. These Terms do not transfer any of it to you, other than the
+        The Service itself — the Plinth platform, editor, Plinth AI, checks, branding and documentation — belongs to us and our licensors. These Terms do not transfer any of it to you, other than the
         right to use the Service as described here. Feedback you send us may be used without obligation to you.
       </p>
     ),

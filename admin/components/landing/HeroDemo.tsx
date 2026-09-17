@@ -101,10 +101,10 @@ export function HeroDemo() {
         </div>
 
         <div className="grid md:grid-cols-[340px_minmax(0,1fr)]">
-          {/* Co-pilot */}
+          {/* Plinth AI */}
           <div className="flex min-h-[420px] flex-col gap-3 border-b border-white/[0.06] p-4 md:border-r md:border-b-0">
             <p className="flex items-center gap-2 text-xs font-medium text-stone-300">
-              <Spark /> Co-pilot
+              <Spark /> Plinth AI
             </p>
 
             {stage >= 1 ? <p className="animate-demo-in ml-8 self-end rounded-2xl rounded-br-md bg-white px-3 py-2 text-[13px] leading-snug text-stone-900">{PROMPT}</p> : null}
@@ -221,7 +221,7 @@ const PROJECTS = [
 ];
 
 /**
- * The site the co-pilot is editing: a believable portfolio with real copy. The right-hand card swaps from "Now" to the
+ * The site Plinth AI is editing: a believable portfolio with real copy. The right-hand card swaps from "Now" to the
  * new contact form, so the preview keeps its height and nothing below it jumps.
  */
 function SitePreview({ updated }: { updated: boolean }) {

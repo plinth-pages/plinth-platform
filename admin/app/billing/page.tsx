@@ -84,7 +84,7 @@ function Billing() {
       <main className="mx-auto flex max-w-4xl flex-col gap-10 px-6 py-14">
         <div className="text-center">
           <p className="text-[13px] font-medium tracking-wide text-brand-600 dark:text-brand-300">Plan &amp; billing</p>
-          <h1 className="mt-2 text-4xl font-semibold tracking-[-0.035em] text-balance">{pro ? "You're on Pro" : "Unlock the full co-pilot"}</h1>
+          <h1 className="mt-2 text-4xl font-semibold tracking-[-0.035em] text-balance">{pro ? "You're on Pro" : "Unlock more of Plinth AI"}</h1>
           <p className="mx-auto mt-3 max-w-md text-[15px] text-stone-500 dark:text-stone-400">
             {confirming ? "Confirming your payment…" : pro ? "You're on Pro. Thanks for supporting Plinth." : "You're on the Free plan."}
           </p>

@@ -158,7 +158,7 @@ function Onboarding() {
           <section className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
             <div>
               <h1 className="text-3xl font-semibold tracking-tight">Pick a look</h1>
-              <p className="mt-2 text-stone-600 dark:text-stone-400">A starting point. Ask the co-pilot to change it any time.</p>
+              <p className="mt-2 text-stone-600 dark:text-stone-400">A starting point. Ask Plinth AI to change it any time.</p>
 
               <fieldset className="mt-8">
                 <legend className="text-sm font-medium">Appearance</legend>

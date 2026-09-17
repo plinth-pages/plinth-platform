@@ -41,7 +41,7 @@ interface SiteData {
   usage: CopilotUsage | null;
 }
 
-/** The signed-in home: the site at a glance, a way straight into the co-pilot, and what to do next. */
+/** The signed-in home: the site at a glance, a way straight into Plinth AI, and what to do next. */
 export function Home({ user, welcome }: { user: SessionUser; welcome: boolean }) {
   const [site, setSite] = useState<PortfolioSummary | null | undefined>(undefined);
 
@@ -286,7 +286,7 @@ function PromptCard({ site, className = "" }: { site: PortfolioSummary; classNam
   return (
     <section className={`flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
       <div>
-        <p className="text-sm font-semibold">Ask the co-pilot</p>
+        <p className="text-sm font-semibold">Ask Plinth AI</p>
         <p className="mt-0.5 text-sm text-stone-500">Describe a change. We&apos;ll open the editor with it ready to send.</p>
       </div>
       <form
@@ -375,7 +375,7 @@ function IntegrationsCard({ site, installed, catalogue, className = "" }: { site
 }
 
 const OP_LABELS: Record<string, string> = {
-  copilot: "Co-pilot",
+  copilot: "Plinth AI",
   edit: "Edit",
   install: "Integration added",
   uninstall: "Integration removed",

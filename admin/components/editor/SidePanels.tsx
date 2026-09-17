@@ -228,7 +228,7 @@ function SettingsPanel({
     <div className="flex flex-col gap-6 p-4 text-sm">
       <section className="flex flex-col gap-2">
         <h3 className="text-xs font-medium tracking-wide text-stone-500 uppercase">Change history</h3>
-        {history.length === 0 ? <p className="text-stone-500">No changes yet. Ask the co-pilot or add an integration to get started.</p> : null}
+        {history.length === 0 ? <p className="text-stone-500">No changes yet. Ask Plinth AI or add an integration to get started.</p> : null}
         <ul className="flex flex-col divide-y divide-stone-100 dark:divide-stone-900">
           {history.slice(0, 10).map((operation) => (
             <li key={operation.id} className="flex items-center justify-between gap-3 py-2">
@@ -237,7 +237,7 @@ function SettingsPanel({
                   {operation.summary}
                 </span>
                 <span className="text-xs text-stone-500">
-                  {operation.actor === "copilot" ? "Co-pilot" : "You"} · {new Date(operation.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                  {operation.actor === "copilot" ? "Plinth AI" : "You"} · {new Date(operation.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                 </span>
               </span>
               <OperationBadge status={operation.status} />

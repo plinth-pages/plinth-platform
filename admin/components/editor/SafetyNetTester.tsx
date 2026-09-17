@@ -15,7 +15,7 @@ const NAME = /name: "([^"]*)"/;
 
 /**
  * Development and admin only: submits real edits through the safety net, so its behaviour can be watched in the editor
- * before the codemod engine and the co-pilot exist. Uses the dev-only edit endpoint.
+ * before the codemod engine and Plinth AI exist. Uses the dev-only edit endpoint.
  */
 const SCENARIOS: Scenario[] = [
   {
