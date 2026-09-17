@@ -52,6 +52,7 @@ model User {
   integrationRequests IntegrationRequest[]
   copilotMessages     CopilotMessage[]
   legalRequests       LegalRequest[]
+  promoCodes          PromoCode[]
 
   @@map("users")
 }
@@ -453,4 +454,35 @@ model LegalRequest {
 
   @@index([createdAt])
   @@map("legal_requests")
+}
+
+enum PromoDuration {
+  once
+  repeating
+  forever
+}
+
+/// Discount codes created by an admin for marketing and referrals. Stripe holds the source of truth (coupon +
+/// promotion code) and enforces expiry and redemption limits; this row is the admin's record of what was issued.
+model PromoCode {
+  id                    String        @id @default(cuid())
+  /// What people type, upper-case, e.g. LAUNCH20.
+  code                  String        @unique
+  percentOff            Int           @map("percent_off")
+  duration              PromoDuration
+  /// For a repeating discount: how many monthly payments get it.
+  durationMonths        Int?          @map("duration_months")
+  expiresAt             DateTime?     @map("expires_at")
+  maxRedemptions        Int?          @map("max_redemptions")
+  /// Who or what the code is for, e.g. "Referral: Rahul" or "Launch tweet".
+  note                  String?
+  stripeCouponId        String        @map("stripe_coupon_id")
+  stripePromotionCodeId String        @unique @map("stripe_promotion_code_id")
+  active                Boolean       @default(true)
+  createdById           String?       @map("created_by_id")
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  createdBy User? @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@map("promo_codes")
 }

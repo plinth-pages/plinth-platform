@@ -570,6 +570,41 @@ export interface BillingStatusResponse {
   checkoutAvailable: boolean;
 }
 
+export type PromoDuration = "once" | "repeating" | "forever";
+
+/** What a promo code gives, shown on the billing page before checkout. */
+export interface PromoCodePreview {
+  code: string;
+  percentOff: number;
+  duration: PromoDuration;
+  durationMonths: number | null;
+  expiresAt: string | null;
+}
+
+export interface AdminPromoCode {
+  id: string;
+  code: string;
+  percentOff: number;
+  duration: PromoDuration;
+  durationMonths: number | null;
+  expiresAt: string | null;
+  maxRedemptions: number | null;
+  timesRedeemed: number;
+  note: string | null;
+  status: "active" | "expired" | "used_up" | "inactive";
+  createdAt: string;
+}
+
+export interface CreatePromoCodeRequest {
+  code?: string;
+  percentOff: number;
+  duration: PromoDuration;
+  durationMonths?: number;
+  validForHours?: number;
+  maxRedemptions?: number;
+  note?: string;
+}
+
 /** Ranges the admin overview can show. */
 export type AdminMetricsDays = 7 | 30 | 90 | 365;
 

@@ -6,10 +6,14 @@ import type { Request } from "express";
 import { CurrentUser } from "../auth/roles";
 import { SessionGuard } from "../auth/session.guard";
 import { BillingService } from "./billing.service";
+import { PromoCodes } from "./promo-codes";
 
 @Controller("billing")
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly promos: PromoCodes,
+  ) {}
 
   @Get()
   @UseGuards(SessionGuard)
@@ -21,8 +25,10 @@ export class BillingController {
   @Post("checkout")
   @HttpCode(200)
   @UseGuards(SessionGuard)
-  checkout(@CurrentUser() user: User) {
-    return this.billing.checkout(user);
+  async checkout(@CurrentUser() user: User, @Body() body: { promoCode?: unknown } | undefined) {
+    // A code applied on our page is checked here first, so a bad one is reported before Stripe opens.
+    const promotionId = body?.promoCode ? await this.promos.promotionIdFor(body.promoCode) : undefined;
+    return this.billing.checkout(user, promotionId);
   }
 
   /** Called when the user returns from Checkout: verifies the session with Stripe and applies the plan. */

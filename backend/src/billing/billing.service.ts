@@ -47,7 +47,8 @@ export class BillingService {
     };
   }
 
-  async checkout(user: User): Promise<{ url: string }> {
+  /** `promotionId`: a Stripe promotion code already validated by PromoCodes; otherwise people can enter one at Stripe. */
+  async checkout(user: User, promotionId?: string): Promise<{ url: string }> {
     const stripe = this.requireStripe();
     if (user.plan === "pro") throw new BadRequestException("You're already on Pro.");
     const customer = await this.customerFor(user, stripe);
@@ -68,7 +69,8 @@ export class BillingService {
               price_data: { currency: "usd", unit_amount: PLANS.pro.priceUsd * 100, recurring: { interval: "month" }, product_data: { name: "Plinth Pro" } },
             },
       ],
-      allow_promotion_codes: true,
+      // Stripe accepts either a pre-applied discount or its own code box, not both.
+      ...(promotionId ? { discounts: [{ promotion_code: promotionId }] } : { allow_promotion_codes: true }),
       success_url: `${adminUrl}/billing?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${adminUrl}/billing?checkout=cancelled`,
     });

@@ -8,6 +8,8 @@ import { AiService } from "./ai/ai.service";
 import { AuthModule } from "./auth/auth.module";
 import { BillingController } from "./billing/billing.controller";
 import { BillingService, STRIPE, createStripe } from "./billing/billing.service";
+import { PromoCodes } from "./billing/promo-codes";
+import { PromoCodesController } from "./billing/promo-codes.controller";
 import { CredentialSync, SECRET_ENVIRONMENT } from "./credentials/credential-sync";
 import { CredentialsController } from "./credentials/credentials.controller";
 import { CredentialsService } from "./credentials/credentials.service";
@@ -89,6 +91,7 @@ class RoleModule {
     IntegrationsController,
     CopilotController,
     BillingController,
+    PromoCodesController,
     CredentialsController,
     VisitorCounterController,
     DevEditController,
@@ -108,6 +111,7 @@ class RoleModule {
     vaultProvider,
     CredentialsService,
     BillingService,
+    PromoCodes,
     { provide: STRIPE, inject: [ConfigService], useFactory: createStripe },
     PortfolioEventsHub,
     ...previewApiProviders,
