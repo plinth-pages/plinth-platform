@@ -113,7 +113,7 @@ function SiteHome({ site, user }: { site: PortfolioSummary; user: SessionUser })
   if (!data) return <Skeleton />;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-3">
+    <div className="grid min-w-0 gap-5 lg:grid-cols-3">
       <SiteCard site={site} publish={publish} onPublished={loadPublish} className="lg:col-span-2" />
       <PlanCard user={user} usage={data.usage} />
       <PromptCard site={site} className="lg:col-span-2" />
@@ -154,7 +154,7 @@ function SiteCard({ site, publish, onPublished, className = "" }: { site: Portfo
   }
 
   return (
-    <section className={`overflow-hidden rounded-2xl bg-white ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
+    <section className={`min-w-0 overflow-hidden rounded-2xl bg-white ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
       <div className="relative h-40 overflow-hidden bg-[#07080b]">
         <div aria-hidden className="absolute inset-0 bg-[radial-gradient(70%_90%_at_80%_0%,rgb(76_98_220/0.45),transparent_60%)]" />
         <div aria-hidden className="absolute right-6 bottom-0 hidden h-28 w-80 rounded-t-xl bg-[#f7f7f5] p-4 shadow-[0_-10px_40px_-10px_rgb(0_0_0/0.6)] sm:block">
@@ -229,7 +229,7 @@ function SiteCard({ site, publish, onPublished, className = "" }: { site: Portfo
 function PlanCard({ user, usage }: { user: SessionUser; usage: CopilotUsage | null }) {
   const pro = user.plan === "pro";
   return (
-    <section className="flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
+    <section className="flex min-w-0 flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold">Plan & usage</p>
         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${pro ? "bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300" : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300"}`}>
@@ -284,7 +284,7 @@ function PromptCard({ site, className = "" }: { site: PortfolioSummary; classNam
   const open = (text: string) => router.push(`/portfolios/${site.id}?prompt=${encodeURIComponent(text.trim())}`);
 
   return (
-    <section className={`flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
+    <section className={`flex min-w-0 flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
       <div>
         <p className="text-sm font-semibold">Ask Plinth AI</p>
         <p className="mt-0.5 text-sm text-stone-500">Describe a change. We&apos;ll open the editor with it ready to send.</p>
@@ -331,7 +331,7 @@ function IntegrationsCard({ site, installed, catalogue, className = "" }: { site
     .slice(0, 4);
 
   return (
-    <section className={`flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
+    <section className={`flex min-w-0 flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800 ${className}`}>
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold">Integrations</p>
@@ -353,7 +353,7 @@ function IntegrationsCard({ site, installed, catalogue, className = "" }: { site
       ) : null}
 
       {recommended.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {recommended.map((entry) => (
             <Link
               key={entry.id}
@@ -388,7 +388,7 @@ const OP_LABELS: Record<string, string> = {
 function ActivityCard({ operations }: { operations: OperationSummary[] }) {
   const recent = operations.filter((op) => op.actor !== "system" || op.type === "publish").slice(0, 6);
   return (
-    <section className="flex flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
+    <section className="flex min-w-0 flex-col gap-4 rounded-2xl bg-white p-5 ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
       <p className="text-sm font-semibold">Recent changes</p>
       {recent.length ? (
         <ol className="flex flex-col gap-3">

@@ -6,7 +6,7 @@ export type Change = [" " | "+" | "-", string];
  */
 export function ChangeList({ title, changes, stagger = false, code = false }: { title: string; changes: Change[]; stagger?: boolean; code?: boolean }) {
   return (
-    <div className="overflow-hidden rounded-xl bg-[#08090d] ring-1 ring-white/[0.07]">
+    <div className="min-w-0 overflow-hidden rounded-xl bg-[#08090d] ring-1 ring-white/[0.07]">
       <p className="border-b border-white/[0.06] px-3 py-2 text-[11px] font-medium text-stone-400">{title}</p>
       <ul className={`overflow-x-auto py-1.5 ${code ? "font-mono text-[12px] leading-[1.8] whitespace-pre" : "text-[13px] leading-[1.9]"}`}>
         {changes.map(([mark, text], index) => (

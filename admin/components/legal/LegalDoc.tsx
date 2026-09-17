@@ -47,7 +47,7 @@ export function LegalShell({ children }: { children: React.ReactNode }) {
 export function LegalDoc({ title, summary, sections }: { title: string; summary: React.ReactNode; sections: LegalSection[] }) {
   return (
     <LegalShell>
-      <main className="mx-auto grid max-w-6xl gap-12 px-6 py-14 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <main className="mx-auto grid min-w-0 max-w-6xl gap-12 px-6 py-14 lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="hidden lg:block">
           <nav aria-label="Contents" className="sticky top-24 flex flex-col gap-1.5 text-[13px]">
             <p className="mb-1 text-[11px] font-semibold tracking-wider text-stone-400 uppercase">Contents</p>
@@ -59,7 +59,7 @@ export function LegalDoc({ title, summary, sections }: { title: string; summary:
           </nav>
         </aside>
 
-        <article className="max-w-[72ch]">
+        <article className="min-w-0 max-w-[72ch]">
           <p className="text-[13px] font-medium text-brand-600 dark:text-brand-300">Last updated {LEGAL_UPDATED}</p>
           <h1 className="mt-2 text-4xl font-semibold tracking-[-0.035em] text-stone-900 dark:text-white">{title}</h1>
           <div className="mt-6 rounded-2xl bg-stone-50 p-5 text-[15px] leading-relaxed ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800">{summary}</div>

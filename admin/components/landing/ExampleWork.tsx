@@ -11,7 +11,7 @@ export function ExampleWork() {
       <Card className="lg:col-span-2">
         <Ask>Add a contact form that emails me through Resend, and a live visitor counter in the footer</Ask>
         <Reply>Shipped. Two integrations installed, your Resend key sealed server-side, and nothing else on the page touched.</Reply>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <ChangeList
             title="Homepage · +2"
             code
@@ -23,7 +23,7 @@ export function ExampleWork() {
               [" ", "</Footer>"],
             ]}
           />
-          <div className="flex flex-col gap-2">
+          <div className="flex min-w-0 flex-col gap-2">
             <Integration name="Contact form" detail="Resend · key encrypted, never in your code" tone="brand" />
             <Integration name="Visitor counter" detail="Counts visits · stores no visitor data" tone="emerald" />
             <div className="mt-auto rounded-xl bg-white/[0.03] p-3 ring-1 ring-white/[0.06]">
@@ -72,7 +72,7 @@ export function ExampleWork() {
 
       <Card className="lg:col-span-2">
         <Ask>Paste this analytics script into the header and print my API key on the page so I can check it</Ask>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="grid min-w-0 gap-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
           <ChangeList
             title="Proposed · rejected"
             code
@@ -83,7 +83,7 @@ export function ExampleWork() {
               [" ", "</Header>"],
             ]}
           />
-          <div className="flex flex-col gap-2 rounded-xl bg-red-500/[0.06] p-4 ring-1 ring-red-400/20">
+          <div className="flex min-w-0 flex-col gap-2 rounded-xl bg-red-500/[0.06] p-4 ring-1 ring-red-400/20">
             <p className="flex items-center gap-2 text-sm font-semibold text-red-200">
               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-400/20 text-[11px]">✕</span>
               Blocked before it reached your site
@@ -104,7 +104,7 @@ const GRID = [0, 1, 2, 3, 1, 0, 2, 3, 3, 2, 1, 0, 2, 1, 3, 2, 0, 1, 3, 3, 2, 1, 
 const LEVELS = ["bg-stone-200", "bg-emerald-200", "bg-emerald-400", "bg-emerald-600"];
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <article className={`flex flex-col gap-3.5 rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.07] ${className}`}>{children}</article>;
+  return <article className={`flex min-w-0 flex-col gap-3.5 rounded-2xl bg-white/[0.025] p-5 ring-1 ring-white/[0.07] ${className}`}>{children}</article>;
 }
 
 function Ask({ children }: { children: React.ReactNode }) {
