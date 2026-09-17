@@ -302,7 +302,7 @@ function SetupProgress({ portfolioId, name, theme, avatar }: { portfolioId: stri
 
   useEffect(() => {
     if (!setup?.ready) return;
-    const timer = setTimeout(() => router.replace(`/portfolios/${portfolioId}?welcome=1`), setup.note ? 2_500 : 1_200);
+    const timer = setTimeout(() => router.replace("/dashboard?welcome=1"), setup.note ? 2_500 : 1_200);
     return () => clearTimeout(timer);
   }, [setup?.ready, setup?.note, portfolioId, router]);
 
