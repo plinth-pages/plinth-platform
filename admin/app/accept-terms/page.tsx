@@ -8,7 +8,6 @@ import { BrandMark } from "@/components/ui/Brand";
 import { Button } from "@/components/ui/Button";
 import { ApiError, api } from "@/lib/api";
 
-
 /** Shown once to anyone signed in who hasn't accepted the current Terms and Privacy Policy. */
 export default function AcceptTermsPage() {
   return (
