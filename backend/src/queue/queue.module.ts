@@ -7,7 +7,7 @@ import { PROVISIONING_QUEUE } from "../provisioning/provisioning.constants";
 import { SANDBOX_QUEUE } from "../sandbox/sandbox.constants";
 import { WORKSPACE_QUEUE } from "../workspace/workspace.constants";
 import { PING_QUEUE } from "./queue.constants";
-import { redisConnection } from "./redis-connection";
+import { sharedRedis } from "./redis-connection";
 
 /** Registers queues. Both roles import this: the api enqueues, the worker consumes. */
 @Module({
@@ -15,7 +15,7 @@ import { redisConnection } from "./redis-connection";
     BullModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({
-        connection: redisConnection(config.get("REDIS_URL", { infer: true })),
+        connection: sharedRedis(config.get("REDIS_URL", { infer: true })),
       }),
     }),
     BullModule.registerQueue(

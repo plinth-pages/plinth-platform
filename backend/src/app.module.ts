@@ -128,7 +128,8 @@ export class ApiModule {}
 @Module({
   imports: [QueueModule, GitHubModule],
   providers: [
-    PingProcessor,
+    // Its only callers are the development-only job routes; in production it would just hold a Redis connection.
+    ...(process.env.NODE_ENV === "production" ? [] : [PingProcessor]),
     ProvisioningProcessor,
     Provisioner,
     ProvisioningRecovery,
