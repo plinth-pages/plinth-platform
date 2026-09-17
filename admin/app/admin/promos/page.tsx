@@ -19,8 +19,9 @@ const STATUS: Record<AdminPromoCode["status"], { label: string; tone: string }> 
   inactive: { label: "Switched off", tone: "bg-white/10 text-stone-500" },
 };
 
+// color-scheme makes the browser draw native parts (select menus, number spinners) dark; options get an explicit dark fill.
 const input =
-  "h-10 w-full rounded-lg border-0 bg-white/[0.04] px-3 text-sm text-white ring-1 ring-white/10 placeholder:text-stone-500 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none";
+  "h-10 w-full rounded-lg border-0 bg-white/[0.04] px-3 text-sm text-white ring-1 ring-white/10 [color-scheme:dark] placeholder:text-stone-500 focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:outline-none [&>option]:bg-stone-900 [&>option]:text-white";
 
 /** Issue and track discount codes for launches, partners and referrals. */
 export default function PromoCodesPage() {
