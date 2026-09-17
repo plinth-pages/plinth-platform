@@ -1,6 +1,6 @@
 "use client";
 
-import type { AdminMetricsResponse, OperationStatus } from "@plinth-pages/shared";
+import type { AdminMetricsDays, AdminMetricsResponse, OperationStatus } from "@plinth-pages/shared";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -15,47 +15,73 @@ const OPERATION_TONE: Record<OperationStatus, string> = {
   failed: "bg-red-500",
 };
 
+const RANGES: { days: AdminMetricsDays; short: string; label: string }[] = [
+  { days: 7, short: "7d", label: "Last 7 days" },
+  { days: 30, short: "30d", label: "Last 30 days" },
+  { days: 90, short: "90d", label: "Last 90 days" },
+  { days: 365, short: "1y", label: "Last 12 months" },
+];
+
 /** Haiku on-demand pricing (USD per million tokens), for a rough spend figure. */
 const HAIKU_PRICE = { input: 0.25, output: 1.25 };
 
 export default function AdminOverviewPage() {
+  const [days, setDays] = useState<AdminMetricsDays>(30);
   const [metrics, setMetrics] = useState<AdminMetricsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.adminMetrics().then(setMetrics, (e) => setError(e instanceof Error ? e.message : "Could not load metrics"));
-  }, []);
+    api.adminMetrics(days).then(setMetrics, (e) => setError(e instanceof Error ? e.message : "Could not load metrics"));
+  }, [days]);
 
   if (error) return <p className="text-sm text-red-700">{error}</p>;
   if (!metrics) return <p className="text-sm text-stone-500">Loading…</p>;
 
-  const operations = Object.entries(metrics.operations7d) as [OperationStatus, number][];
+  const operations = Object.entries(metrics.operations) as [OperationStatus, number][];
   const totalOperations = operations.reduce((sum, [, count]) => sum + count, 0);
-  const spend = (metrics.copilot7d.inputTokens * HAIKU_PRICE.input + metrics.copilot7d.outputTokens * HAIKU_PRICE.output) / 1_000_000;
+  const spend = (metrics.ai.inputTokens * HAIKU_PRICE.input + metrics.ai.outputTokens * HAIKU_PRICE.output) / 1_000_000;
+  const range = RANGES.find((r) => r.days === metrics.days)?.label ?? `${metrics.days} days`;
+  const loading = metrics.days !== days;
 
   return (
     <div className="flex max-w-5xl flex-col gap-8">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
-        <p className="mt-1 text-sm text-stone-500">Platform activity. Changes and co-pilot figures cover the last 7 days.</p>
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+          <p className="mt-1 text-sm text-stone-500">Activity over the {range.toLowerCase()}. Users, sites and MRR are all-time.</p>
+        </div>
+        <div role="radiogroup" aria-label="Time range" className={`flex rounded-lg bg-stone-100 p-1 text-sm ring-1 ring-stone-200 dark:bg-stone-900 dark:ring-stone-800 ${loading ? "opacity-60" : ""}`}>
+          {RANGES.map((r) => (
+            <button
+              key={r.days}
+              type="button"
+              role="radio"
+              aria-checked={days === r.days}
+              onClick={() => setDays(r.days)}
+              className={`rounded-md px-3 py-1 font-medium ${days === r.days ? "bg-white text-stone-900 shadow-card dark:bg-stone-800 dark:text-white" : "text-stone-500 hover:text-stone-900 dark:hover:text-white"}`}
+            >
+              {r.short}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="MRR" value={metrics.plans.mrrUsd} prefix="$" note={`${metrics.plans.pro} Pro × $15`} />
-        <Stat label="Pro users" value={metrics.plans.pro} note={`${metrics.users ? Math.round((metrics.plans.pro / metrics.users) * 100) : 0}% of users · ${metrics.plans.upgrades30d} upgrades in 30 days`} />
-        <Stat label="New sign-ups" value={metrics.plans.signups7d} note="Last 7 days" />
-        <Stat label="AI tokens (30 days)" value={metrics.copilot30d.tokens} note={`${metrics.copilot30d.messages.toLocaleString()} co-pilot replies`} />
+        <Stat label="Pro users" value={metrics.plans.pro} note={`${metrics.users ? Math.round((metrics.plans.pro / metrics.users) * 100) : 0}% of users · ${metrics.plans.upgrades} upgrades`} />
+        <Stat label="New sign-ups" value={metrics.plans.signups} note={range} />
+        <Stat label="AI tokens" value={metrics.ai.inputTokens + metrics.ai.outputTokens} note={`${metrics.ai.messages.toLocaleString()} Plinth AI replies · ${range.toLowerCase()}`} />
       </div>
 
-      {metrics.copilot30d.byModel.length ? (
+      {metrics.ai.byModel.length ? (
         <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
-          <h2 className="font-medium">AI usage by model · 30 days</h2>
+          <h2 className="font-medium">AI usage by model · {range.toLowerCase()}</h2>
           <ul className="mt-4 flex flex-col gap-2.5">
-            {metrics.copilot30d.byModel.map((row) => (
+            {metrics.ai.byModel.map((row) => (
               <li key={row.model} className="grid grid-cols-[9rem_minmax(0,1fr)_auto] items-center gap-3 text-sm">
                 <span className="truncate font-mono text-xs">{row.model}</span>
                 <span className="h-2 rounded-full bg-stone-100 dark:bg-stone-800">
-                  <span className="block h-full rounded-full bg-brand-500" style={{ width: `${Math.max(2, (row.tokens / Math.max(1, metrics.copilot30d.byModel[0].tokens)) * 100)}%` }} />
+                  <span className="block h-full rounded-full bg-brand-500" style={{ width: `${Math.max(2, (row.tokens / Math.max(1, metrics.ai.byModel[0].tokens)) * 100)}%` }} />
                 </span>
                 <span className="text-xs text-stone-500 tabular-nums">
                   {compact(row.tokens)} tokens · {row.messages}
@@ -68,14 +94,14 @@ export default function AdminOverviewPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Users" value={metrics.users} note={`${metrics.plans.free} Free · ${metrics.plans.pro} Pro`} />
-        <Stat label="Portfolios" value={metrics.portfolios.total} note={`${metrics.portfolios.ready} ready · ${metrics.portfolios.provisioning} setting up · ${metrics.portfolios.failed} failed`} />
+        <Stat label="Sites" value={metrics.portfolios.total} note={`${metrics.portfolios.ready} ready · ${metrics.portfolios.provisioning} setting up · ${metrics.portfolios.failed} failed`} />
         <Stat label="Previews running" value={metrics.sandboxesRunning} note="Billed by the minute" />
         <Stat label="Integrations installed" value={metrics.integrations.installed} note={`${metrics.integrations.requests} requests`} />
       </div>
 
       <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
         <div className="flex items-baseline justify-between">
-          <h2 className="font-medium">Changes</h2>
+          <h2 className="font-medium">Changes · {range.toLowerCase()}</h2>
           <span className="text-sm text-stone-500 tabular-nums">{totalOperations} total</span>
         </div>
         <div className="mt-4 flex h-2.5 overflow-hidden rounded-full bg-stone-100 dark:bg-stone-800">
@@ -100,21 +126,21 @@ export default function AdminOverviewPage() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
-          <h2 className="font-medium">Co-pilot</h2>
+          <h2 className="font-medium">Plinth AI · {range.toLowerCase()}</h2>
           <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-            <Figure label="Messages" value={metrics.copilot7d.messages.toLocaleString()} />
-            <Figure label="Tokens in / out" value={`${compact(metrics.copilot7d.inputTokens)} / ${compact(metrics.copilot7d.outputTokens)}`} />
+            <Figure label="Replies" value={metrics.ai.messages.toLocaleString()} />
+            <Figure label="Tokens in / out" value={`${compact(metrics.ai.inputTokens)} / ${compact(metrics.ai.outputTokens)}`} />
             <Figure label="Est. spend" value={`$${spend.toFixed(2)}`} />
           </dl>
         </section>
         <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
-          <h2 className="font-medium">Publishing</h2>
+          <h2 className="font-medium">Publishing · {range.toLowerCase()}</h2>
           <dl className="mt-4 grid grid-cols-3 gap-3 text-sm">
-            <Figure label="Deployed" value={String(metrics.deployments7d.ready)} />
-            <Figure label="Failed" value={String(metrics.deployments7d.failed)} />
+            <Figure label="Deployed" value={String(metrics.deployments.ready)} />
+            <Figure label="Failed" value={String(metrics.deployments.failed)} />
             <Figure
               label="Success rate"
-              value={metrics.deployments7d.ready + metrics.deployments7d.failed ? `${Math.round((metrics.deployments7d.ready / (metrics.deployments7d.ready + metrics.deployments7d.failed)) * 100)}%` : "—"}
+              value={metrics.deployments.ready + metrics.deployments.failed ? `${Math.round((metrics.deployments.ready / (metrics.deployments.ready + metrics.deployments.failed)) * 100)}%` : "—"}
             />
           </dl>
         </section>

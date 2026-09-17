@@ -566,14 +566,18 @@ export interface BillingStatusResponse {
   checkoutAvailable: boolean;
 }
 
+/** Ranges the admin overview can show. */
+export type AdminMetricsDays = 7 | 30 | 90 | 365;
+
 export interface AdminMetricsResponse {
-  plans: { free: number; pro: number; mrrUsd: number; upgrades30d: number; signups7d: number };
-  copilot30d: { messages: number; tokens: number; byModel: { model: string; messages: number; tokens: number }[] };
+  /** Every activity figure below covers this many days; totals (users, sites, MRR) are all-time. */
+  days: AdminMetricsDays;
+  plans: { free: number; pro: number; mrrUsd: number; upgrades: number; signups: number };
+  ai: { messages: number; inputTokens: number; outputTokens: number; byModel: { model: string; messages: number; tokens: number }[] };
   users: number;
   portfolios: { total: number; ready: number; provisioning: number; failed: number };
   sandboxesRunning: number;
-  operations7d: Record<OperationStatus, number>;
-  deployments7d: { ready: number; failed: number };
-  copilot7d: { messages: number; inputTokens: number; outputTokens: number };
+  operations: Record<OperationStatus, number>;
+  deployments: { ready: number; failed: number };
   integrations: { installed: number; requests: number };
 }

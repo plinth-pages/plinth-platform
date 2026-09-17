@@ -2,6 +2,7 @@ import type {
   AdminIntegrationRequestsResponse,
   ConnectCredentialsRequest,
   PortfolioCredentialsResponse,
+  AdminMetricsDays,
   AdminMetricsResponse,
   BillingStatusResponse,
   CopilotMessagesResponse,
@@ -146,7 +147,7 @@ export const api = {
   checkout: () => request<{ url: string }>("/billing/checkout", { method: "POST" }),
   confirmCheckout: (sessionId: string) => request<BillingStatusResponse>("/billing/confirm", { method: "POST", body: JSON.stringify({ sessionId }) }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
-  adminMetrics: () => request<AdminMetricsResponse>("/admin/metrics"),
+  adminMetrics: (days: AdminMetricsDays = 30) => request<AdminMetricsResponse>(`/admin/metrics?days=${days}`),
   copilotModels: () => request<CopilotModelsResponse>("/copilot/models"),
   copilotMessages: (id: string) => request<CopilotMessagesResponse>(`/portfolios/${id}/copilot/messages`),
   /** Queues the request; the reply arrives with the change's events. */
