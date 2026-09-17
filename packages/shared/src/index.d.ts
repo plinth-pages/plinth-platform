@@ -608,6 +608,35 @@ export interface CreatePromoCodeRequest {
 /** Ranges the admin overview can show. */
 export type AdminMetricsDays = 7 | 30 | 90 | 365;
 
+export interface AdminUserSummary {
+  id: string;
+  name: string | null;
+  email: string | null;
+  githubLogin: string;
+  signedUpWith: "github" | "email";
+  plan: PlanId;
+  role: UserRole;
+  subscriptionStatus: string | null;
+  renewsAt: string | null;
+  cancelsAtPeriodEnd: boolean;
+  /** Set while an admin has blocked the account. */
+  suspendedAt: string | null;
+  suspendedReason: string | null;
+  portfolios: number;
+  termsAcceptedAt: string | null;
+  createdAt: string;
+}
+
+export interface AdminUsersResponse {
+  users: AdminUserSummary[];
+  /** Matching the current filters. */
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Across everyone, whatever the filters. */
+  totals: { all: number; pro: number; suspended: number };
+}
+
 export interface AdminMetricsResponse {
   /** Every activity figure below covers this many days; totals (users, sites, MRR) are all-time. */
   days: AdminMetricsDays;

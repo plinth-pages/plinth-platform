@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Post, Query, Req, Res, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { User } from "@prisma/client";
 import type { MeResponse } from "@plinth-pages/shared";
@@ -23,11 +23,23 @@ export class AuthController {
     private readonly supabase: SupabaseAuth,
   ) {}
 
+  /** Blocked accounts can't start a session, whichever way they sign in. */
+  private assertAllowed(user: User) {
+    if (user.suspendedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: "account_suspended",
+        message: user.suspendedReason ? `Your account is suspended: ${user.suspendedReason}` : "Your account is suspended. Contact support if you think this is a mistake.",
+      });
+    }
+  }
+
   /** Signs the new account in, or — when Supabase requires confirmation — reports that a link was emailed. */
   @Post("register")
   async register(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const outcome = await this.supabase.register(body);
     if (outcome.kind === "confirm_email") return { confirmEmail: outcome.email };
+    this.assertAllowed(outcome.user);
     res.cookie(SESSION_COOKIE, await this.auth.signSession(outcome.user), this.cookieOptions(SESSION_TTL_SECONDS));
     return { user: this.auth.toSessionUser(outcome.user), next: "/onboarding" };
   }
@@ -37,6 +49,7 @@ export class AuthController {
   @HttpCode(200)
   async confirm(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const user = await this.supabase.confirm(body);
+    this.assertAllowed(user);
     res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
     return { user: this.auth.toSessionUser(user), next: "/start" };
   }
@@ -51,6 +64,7 @@ export class AuthController {
   @HttpCode(200)
   async login(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
     const user = await this.supabase.login(body);
+    this.assertAllowed(user);
     res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
     return { user: this.auth.toSessionUser(user), next: "/start" };
   }
@@ -115,6 +129,7 @@ export class AuthController {
 
     try {
       let user = await this.auth.signInWithCode(code);
+      if (user.suspendedAt) return fail("Your account is suspended. Contact support if you think this is a mistake.");
       if (acceptedTerms) user = await this.auth.acceptTerms(user.id);
       res.cookie(SESSION_COOKIE, await this.auth.signSession(user), this.cookieOptions(SESSION_TTL_SECONDS));
       res.redirect(`${adminUrl}/start`);

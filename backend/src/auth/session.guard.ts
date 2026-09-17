@@ -19,6 +19,13 @@ export class SessionGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
     const user = await this.auth.userFromSession(request.cookies?.[SESSION_COOKIE]);
     if (!user) throw new UnauthorizedException("Sign in required");
+    if (user.suspendedAt) {
+      throw new ForbiddenException({
+        statusCode: 403,
+        code: "account_suspended",
+        message: user.suspendedReason ? `Your account is suspended: ${user.suspendedReason}` : "Your account is suspended. Contact support if you think this is a mistake.",
+      });
+    }
     request.user = user;
 
     const exempt = this.reflector.getAllAndOverride<boolean | undefined>(ALLOW_WITHOUT_TERMS_KEY, [context.getHandler(), context.getClass()]);

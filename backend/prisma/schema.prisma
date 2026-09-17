@@ -45,6 +45,9 @@ model User {
   /// Version of the Terms and Privacy Policy the user accepted, and when. Null until they accept.
   termsVersion           String?   @map("terms_version")
   termsAcceptedAt        DateTime? @map("terms_accepted_at")
+  /// Set by an admin to block access; sign-in and every signed-in route refuse while it is set.
+  suspendedAt            DateTime? @map("suspended_at")
+  suspendedReason        String?   @map("suspended_reason")
   createdAt              DateTime  @default(now()) @map("created_at")
   updatedAt              DateTime  @updatedAt @map("updated_at")
 
