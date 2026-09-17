@@ -96,8 +96,8 @@ function Billing() {
             price="$0"
             current={!pro}
             features={[
-              `${billing.limits.free.dailyMessages} co-pilot messages a day`,
-              `${compact(billing.limits.free.monthlyTokens)} AI tokens a month`,
+              `${compact(billing.limits.free.dailyTokens)} AI tokens a day, ${compact(billing.limits.free.monthlyTokens)} a month`,
+              `Requests up to ${billing.limits.free.maxRequestChars.toLocaleString("en")} characters`,
               "Fast model (GPT-OSS 120B)",
               "Integrations, preview and publishing",
             ]}
@@ -112,8 +112,8 @@ function Billing() {
             highlight
             current={pro}
             features={[
-              `${billing.limits.pro.dailyMessages} co-pilot messages a day`,
-              `${compact(billing.limits.pro.monthlyTokens)} AI tokens a month`,
+              `${compact(billing.limits.pro.dailyTokens)} AI tokens a day, ${compact(billing.limits.pro.monthlyTokens)} a month`,
+              `Requests up to ${billing.limits.pro.maxRequestChars.toLocaleString("en")} characters`,
               "Premium models: Claude and GPT-4o",
               "Everything in Free",
             ]}

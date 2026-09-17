@@ -79,8 +79,10 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
   const pending = messages?.some((message) => message.role === "user" && message.operation && ACTIVE.includes(message.operation.status) && !messages.some((reply) => reply.role === "assistant" && reply.operation?.id === message.operation?.id));
   const activeStatus = operations.find((operation) => operation.type === "copilot" && ACTIVE.includes(operation.status))?.status;
   const busy = sending || Boolean(activeStatus);
-  const outOfMessages = usage ? usage.used >= usage.limit || usage.tokensUsed >= usage.tokenLimit : false;
+  const outOfMessages = usage ? usage.dailyTokensUsed >= usage.dailyTokenLimit || usage.tokensUsed >= usage.tokenLimit : false;
+  const dailyShare = usage ? Math.min(1, usage.dailyTokensUsed / usage.dailyTokenLimit) : 0;
   const tokenShare = usage ? Math.min(1, usage.tokensUsed / usage.tokenLimit) : 0;
+  const maxChars = usage?.maxRequestChars ?? 1_500;
 
   async function send(text: string) {
     const message = text.trim();
@@ -90,7 +92,6 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
       const response = await api.sendCopilotMessage(portfolioId, { message, model });
       setDraft("");
       setMessages((current) => [...(current ?? []), response.message]);
-      setUsage((current) => current && { ...current, used: current.used + 1 });
     } catch (error) {
       if (error instanceof ApiError && error.body?.code === "PREMIUM_REQUIRED") toast(PREMIUM, "premium");
       else toast(error instanceof Error ? error.message : "Your message wasn't sent", "error");
@@ -103,14 +104,14 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
     <aside className="hidden min-h-0 flex-col border-r border-stone-200 bg-white lg:flex dark:border-stone-800 dark:bg-stone-950">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-stone-200 px-4 dark:border-stone-800">
         <SparkIcon className="h-4 w-4 text-brand-600 dark:text-brand-400" />
-        <span className="text-sm font-semibold">Co-pilot</span>
+        <span className="text-sm font-semibold">Plinth AI</span>
         {usage ? (
-          <span className="ml-auto flex items-center gap-2 text-[11px] text-stone-500 tabular-nums" title={`${usage.used} of ${usage.limit} messages today · ${Math.round(tokenShare * 100)}% of this month's allowance`}>
+          <span className="ml-auto flex items-center gap-2 text-[11px] text-stone-500 tabular-nums" title={`${Math.round(dailyShare * 100)}% of today's allowance · ${Math.round(tokenShare * 100)}% of this month's`}>
             {usage.plan === "pro" ? <span className="rounded bg-brand-50 px-1 font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">PRO</span> : null}
             <span className="h-1.5 w-12 overflow-hidden rounded-full bg-stone-200 dark:bg-stone-800">
-              <span className={`block h-full rounded-full ${tokenShare > 0.9 ? "bg-red-500" : "bg-brand-500"}`} style={{ width: `${Math.max(4, tokenShare * 100)}%` }} />
+              <span className={`block h-full rounded-full ${dailyShare > 0.9 ? "bg-red-500" : "bg-brand-500"}`} style={{ width: `${Math.max(4, dailyShare * 100)}%` }} />
             </span>
-            {Math.max(0, usage.limit - usage.used)} left today
+            {Math.round((1 - dailyShare) * 100)}% left today
           </span>
         ) : null}
       </div>
@@ -168,7 +169,7 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
               }
             }}
             rows={3}
-            maxLength={2000}
+            maxLength={maxChars}
             disabled={!live || outOfMessages}
             placeholder={!live ? "Your preview is starting…" : outOfMessages ? "You've reached your co-pilot limit" : "Describe a change…"}
             aria-label="Message the co-pilot"

@@ -238,11 +238,12 @@ function PlanCard({ user, usage }: { user: SessionUser; usage: CopilotUsage | nu
       </div>
       {usage ? (
         <div className="flex flex-col gap-4">
-          <Meter label="Co-pilot messages today" used={usage.used} limit={usage.limit} />
-          <Meter label="AI tokens this month" used={usage.tokensUsed} limit={usage.tokenLimit} compact />
+          <Meter label="Plinth AI today" used={usage.dailyTokensUsed} limit={usage.dailyTokenLimit} compact />
+          <Meter label="Plinth AI this month" used={usage.tokensUsed} limit={usage.tokenLimit} compact />
+          <p className="text-xs text-stone-500">Measured in tokens — bigger requests use more. Up to {usage.maxRequestChars.toLocaleString("en")} characters per request.</p>
         </div>
       ) : (
-        <p className="text-sm text-stone-500">Usage appears after your first co-pilot message.</p>
+        <p className="text-sm text-stone-500">Usage appears after your first Plinth AI request.</p>
       )}
       <div className="mt-auto">
         {pro ? (

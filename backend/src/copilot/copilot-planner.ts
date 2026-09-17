@@ -93,10 +93,11 @@ export class CopilotPlanner {
       const budget = model?.contextChars ?? 11_000;
       result = await attempt(budget).catch((error) => (tooLarge(error) ? attempt(Math.floor(budget / 2)) : Promise.reject(error)));
     } catch (error) {
-      const text =
-        error instanceof AiProviderError && error.retryable
-          ? "The co-pilot is busy right now. Please try again in a moment."
-          : "The co-pilot isn't available right now. Please try again later.";
+      const text = tooLarge(error)
+        ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro."
+        : error instanceof AiProviderError && error.retryable
+          ? "Plinth AI is busy right now. Please try again in a moment."
+          : "Plinth AI isn't available right now. Please try again later.";
       this.logger.warn(`Co-pilot call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
       await this.reply(operation, message.userId, input.model, { content: text });
       throw new OperationAborted(text);

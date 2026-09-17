@@ -5,7 +5,6 @@ import { viewablePath } from "../workspace/workspace-policy";
 
 export const MAX_EDITS = 8;
 export const MAX_INTEGRATION_ACTIONS = 3;
-export const MAX_REQUEST_CHARS = 2_000;
 
 const propValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
 

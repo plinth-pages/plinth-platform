@@ -142,12 +142,24 @@ describe("plan limits in the co-pilot", () => {
     await expect(service.send(pro, portfolio.id, { message: "hi" })).resolves.toBeDefined();
   });
 
-  it("blocks after the daily message limit on Free", async () => {
+  it("blocks once today's token allowance is used, however few requests that took", async () => {
     const free = await user();
     const portfolio = await portfolioFor(free);
-    await prisma.copilotMessage.createMany({
-      data: Array.from({ length: PLANS.free.limits.dailyMessages }, () => ({ portfolioId: portfolio.id, userId: free.id, role: "user" as const, content: "x" })),
+    await prisma.copilotMessage.create({
+      data: { portfolioId: portfolio.id, userId: free.id, role: "assistant", content: "done", inputTokens: PLANS.free.limits.dailyTokens, outputTokens: 0 },
     });
+    const listed = await service.list(free, portfolio.id);
+    expect(listed.usage).toMatchObject({ dailyTokensUsed: PLANS.free.limits.dailyTokens, dailyTokenLimit: PLANS.free.limits.dailyTokens });
     await expect(service.send(free, portfolio.id, { message: "hi" })).rejects.toMatchObject({ response: { code: "DAILY_LIMIT" } });
+  });
+
+  it("refuses a request larger than the plan allows, and Pro accepts more", async () => {
+    const free = await user();
+    const portfolio = await portfolioFor(free);
+    const long = "x".repeat(PLANS.free.limits.maxRequestChars + 1);
+    await expect(service.send(free, portfolio.id, { message: long })).rejects.toMatchObject({ response: { code: "REQUEST_TOO_LARGE" } });
+    const pro = await prisma.user.update({ where: { id: free.id }, data: { plan: "pro" } });
+    await expect(service.send(pro, portfolio.id, { message: long })).resolves.toBeDefined();
+    await expect(service.send(pro, portfolio.id, { message: "x".repeat(PLANS.pro.limits.maxRequestChars + 1) })).rejects.toBeDefined();
   });
 });

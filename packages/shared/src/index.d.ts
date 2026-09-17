@@ -539,18 +539,22 @@ export interface SendCopilotMessageResponse {
 
 export type PlanId = "free" | "pro";
 
+/** Plinth AI is limited by the work requests take (tokens), not by how many are sent. */
 export interface CopilotUsage {
   plan: PlanId;
-  /** Messages in the last 24 hours. */
-  used: number;
-  limit: number;
+  /** Tokens in the last 24 hours. */
+  dailyTokensUsed: number;
+  dailyTokenLimit: number;
   /** Tokens in the last 30 days. */
   tokensUsed: number;
   tokenLimit: number;
+  /** Longest request the plan accepts, in characters. */
+  maxRequestChars: number;
 }
 
 export interface PlanLimits {
-  dailyMessages: number;
+  maxRequestChars: number;
+  dailyTokens: number;
   monthlyTokens: number;
   premiumModels: boolean;
 }

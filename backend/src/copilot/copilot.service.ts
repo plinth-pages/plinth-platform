@@ -1,14 +1,13 @@
 import { BadRequestException, ConflictException, ForbiddenException, HttpException, HttpStatus, Injectable, NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { CopilotMessage, Operation, User } from "@prisma/client";
-import type { CopilotChanges, CopilotMessageSummary, CopilotMessagesResponse, OperationFailure, SendCopilotMessageResponse } from "@plinth-pages/shared";
+import type { CopilotChanges, CopilotMessageSummary, CopilotMessagesResponse, CopilotUsage, OperationFailure, SendCopilotMessageResponse } from "@plinth-pages/shared";
 import { z } from "zod";
 import { AiService, DEFAULT_MODEL_ID } from "../ai/ai.service";
 import type { Env } from "../config/env";
 import { OperationsService } from "../operations/operations.service";
 import { PrismaService } from "../prisma/prisma.service";
-import { MAX_REQUEST_CHARS } from "./copilot-plan";
-import { PLANS } from "../billing/plans";
+import { MAX_REQUEST_CHARS, PLANS } from "../billing/plans";
 
 export const PREMIUM_REQUIRED = "This model is part of Pro. Upgrade to use it.";
 const DAY_MS = 24 * 60 * 60_000;
@@ -58,16 +57,26 @@ export class CopilotService {
     }
 
     const usage = await this.usage(user);
-    const upgrade = user.plan === "free" ? " Upgrade to Pro for much higher limits." : "";
-    if (usage.tokensUsed >= usage.tokenLimit) {
-      throw new HttpException({ statusCode: 429, code: "TOKEN_LIMIT", message: `You've used this month's co-pilot allowance.${upgrade || " It refreshes over the next 30 days."}` }, HttpStatus.TOO_MANY_REQUESTS);
+    const upgrade = user.plan === "free" ? " Upgrade to Pro for much more room." : "";
+    if (parsed.data.message.length > usage.maxRequestChars) {
+      throw new HttpException(
+        {
+          statusCode: 413,
+          code: "REQUEST_TOO_LARGE",
+          message: `That request is longer than your plan allows (${usage.maxRequestChars.toLocaleString("en")} characters). Split it into smaller steps.${upgrade}`,
+        },
+        HttpStatus.PAYLOAD_TOO_LARGE,
+      );
     }
-    if (usage.used >= usage.limit) {
-      throw new HttpException({ statusCode: 429, code: "DAILY_LIMIT", message: `You've used all ${usage.limit} co-pilot messages for today.${upgrade || " They reset over the next 24 hours."}` }, HttpStatus.TOO_MANY_REQUESTS);
+    if (usage.tokensUsed >= usage.tokenLimit) {
+      throw new HttpException({ statusCode: 429, code: "TOKEN_LIMIT", message: `You've used this month's Plinth AI allowance.${upgrade || " It refreshes over the next 30 days."}` }, HttpStatus.TOO_MANY_REQUESTS);
+    }
+    if (usage.dailyTokensUsed >= usage.dailyTokenLimit) {
+      throw new HttpException({ statusCode: 429, code: "DAILY_LIMIT", message: `You've used today's Plinth AI allowance.${upgrade || " It refreshes over the next 24 hours."}` }, HttpStatus.TOO_MANY_REQUESTS);
     }
     // One request at a time per portfolio keeps the conversation in order and the preview from queueing up edits.
     const busy = await this.prisma.operation.count({ where: { portfolioId, type: "copilot", status: { in: [...ACTIVE] } } });
-    if (busy) throw new ConflictException("The co-pilot is still working on your last message.");
+    if (busy) throw new ConflictException("Plinth AI is still working on your last request.");
 
     const message = await this.prisma.copilotMessage.create({
       data: { portfolioId, userId: user.id, role: "user", content: parsed.data.message, model: model.id },
@@ -78,19 +87,24 @@ export class CopilotService {
     return { message: toMessage(linked, undefined, operation.status), operation };
   }
 
-  /** Messages in the last 24 hours and tokens in the last 30 days, against the user's plan. */
-  private async usage(user: User) {
+  /** Tokens used in the last 24 hours and the last 30 days, against the user's plan. */
+  private async usage(user: User): Promise<CopilotUsage> {
     const limits = PLANS[user.plan].limits;
-    const [used, tokens] = await Promise.all([
-      this.prisma.copilotMessage.count({ where: { userId: user.id, role: "user", createdAt: { gte: new Date(Date.now() - DAY_MS) } } }),
-      this.prisma.copilotMessage.aggregate({ where: { userId: user.id, role: "assistant", createdAt: { gte: new Date(Date.now() - 30 * DAY_MS) } }, _sum: { inputTokens: true, outputTokens: true } }),
-    ]);
+    const tokensSince = async (ms: number) => {
+      const sum = await this.prisma.copilotMessage.aggregate({
+        where: { userId: user.id, role: "assistant", createdAt: { gte: new Date(Date.now() - ms) } },
+        _sum: { inputTokens: true, outputTokens: true },
+      });
+      return (sum._sum.inputTokens ?? 0) + (sum._sum.outputTokens ?? 0);
+    };
+    const [today, month] = await Promise.all([tokensSince(DAY_MS), tokensSince(30 * DAY_MS)]);
     return {
       plan: user.plan,
-      used,
-      limit: limits.dailyMessages,
-      tokensUsed: (tokens._sum.inputTokens ?? 0) + (tokens._sum.outputTokens ?? 0),
+      dailyTokensUsed: today,
+      dailyTokenLimit: limits.dailyTokens,
+      tokensUsed: month,
       tokenLimit: limits.monthlyTokens,
+      maxRequestChars: limits.maxRequestChars,
     };
   }
 
