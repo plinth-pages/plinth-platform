@@ -4,16 +4,34 @@ import { AiProviderError, type AiProvider, type AiRequest, type AiResult } from 
 /** The part of the SDK client this provider uses; tests pass a fake. */
 export type OpenAIChat = Pick<OpenAI["chat"]["completions"], "create">;
 
-/** OpenAI through the official SDK, with a forced function call for structured output. */
+export interface OpenAICompatibleOptions {
+  /** Provider id used in model routes, e.g. "openrouter". Defaults to "openai". */
+  id?: string;
+  /** Human name for errors and logs. */
+  name?: string;
+  /** API root, e.g. https://openrouter.ai/api/v1. Unset means the SDK's default (OpenAI, or OPENAI_BASE_URL). */
+  baseURL?: string;
+  /** Extra headers some services ask for (OpenRouter's app attribution, for example). */
+  headers?: Record<string, string>;
+}
+
+/**
+ * OpenAI — and any OpenAI-compatible service (OpenRouter, NVIDIA, AgentRouter…) — through the official SDK, with a
+ * forced function call for structured output.
+ */
 export class OpenAIProvider implements AiProvider {
-  readonly id = "openai" as const;
+  readonly id: string;
+  private readonly name: string;
   private chat: OpenAIChat | null;
 
   constructor(
     private readonly apiKey: string | undefined,
     chat?: OpenAIChat,
+    private readonly options: OpenAICompatibleOptions = {},
   ) {
     this.chat = chat ?? null;
+    this.id = options.id ?? "openai";
+    this.name = options.name ?? "OpenAI";
   }
 
   configured(): boolean {
@@ -21,10 +39,15 @@ export class OpenAIProvider implements AiProvider {
   }
 
   async generate(request: AiRequest): Promise<AiResult> {
-    if (!this.configured()) throw new AiProviderError(this.id, "OpenAI isn't configured.", false, "NOT_CONFIGURED");
+    if (!this.configured()) throw new AiProviderError(this.id, `${this.name} isn't configured.`, false, "NOT_CONFIGURED");
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const sdk = require("openai") as typeof import("openai");
-    this.chat ??= new sdk.default({ apiKey: this.apiKey, maxRetries: 2 }).chat.completions;
+    this.chat ??= new sdk.default({
+      apiKey: this.apiKey,
+      maxRetries: 1,
+      ...(this.options.baseURL ? { baseURL: this.options.baseURL } : {}),
+      ...(this.options.headers ? { defaultHeaders: this.options.headers } : {}),
+    }).chat.completions;
 
     let response;
     try {

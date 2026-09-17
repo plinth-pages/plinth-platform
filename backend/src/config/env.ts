@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const url = z.string().url();
 
+function isJsonArray(value: string): boolean {
+  try {
+    return Array.isArray(JSON.parse(value));
+  } catch {
+    return false;
+  }
+}
+
 const API_ONLY = ["SESSION_SECRET", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"] as const;
 const WORKER_ONLY = ["GITHUB_APP_ID", "GITHUB_APP_PRIVATE_KEY", "E2B_API_KEY"] as const;
 
@@ -78,6 +86,17 @@ const envSchema = z
     AWS_SECRET_ACCESS_KEY: z.string().optional(),
     GEMINI_API_KEY: z.string().optional(),
     GROQ_API_KEY: z.string().optional(),
+    /** OpenRouter (openrouter.ai): one key for many vendors' models, billed from prepaid credit. */
+    OPENROUTER_API_KEY: z.string().optional(),
+    /** NVIDIA API catalog (build.nvidia.com): hosted open models, used as the free tier's fallback. */
+    NVIDIA_API_KEY: z.string().optional(),
+    /** AgentRouter: a third-party shared-credit pool. Only models that name it in AI_MODELS use it. */
+    AGENTROUTER_API_KEY: z.string().optional(),
+    AGENTROUTER_BASE_URL: z.string().url().default("https://agentrouter.org/v1"),
+    /** JSON array editing or extending the model list — see applyModelOverrides in src/ai/ai-models.ts. */
+    AI_MODELS: z.string().optional().refine((value) => value === undefined || isJsonArray(value), "Must be a JSON array"),
+    /** JSON array of extra OpenAI-compatible services: [{"id","baseUrl","apiKeyEnv"}]. */
+    AI_PROVIDERS: z.string().optional().refine((value) => value === undefined || isJsonArray(value), "Must be a JSON array"),
     ANTHROPIC_API_KEY: z.string().optional(),
     OPENAI_API_KEY: z.string().optional(),
     // Billing (Phase 14). Without a price id, checkout creates the $15/month Pro price inline.

@@ -1,9 +1,10 @@
-import { Inject, Injectable, Optional } from "@nestjs/common";
+import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { CopilotModelSummary } from "@plinth-pages/shared";
+import { z } from "zod";
 import type { Env } from "../config/env";
-import { buildModels, DEFAULT_MODEL_ID, type ModelDefinition } from "./ai-models";
-import { AiProviderError, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
+import { buildModels, DEFAULT_MODEL_ID, routesOf, type ModelDefinition, type ModelRoute } from "./ai-models";
+import { AiProviderError, affordableTokens, tooLarge, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
 import { AnthropicProvider } from "./anthropic.provider";
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
@@ -15,12 +16,39 @@ export { buildModels, DEFAULT_GROQ_MODEL, DEFAULT_MODEL_ID, type ModelDefinition
 /** Lets tests swap vendors for a scripted provider. */
 export const AI_PROVIDERS = Symbol("AI_PROVIDERS");
 
-/** One line per vendor. A provider without credentials reports `configured() === false` and its models are unavailable. */
+/** At most this many model/route calls for one request, so a bad day at every vendor can't stall a request for minutes. */
+const MAX_CALLS = 5;
+
+const extraProvidersSchema = z.array(
+  z.object({
+    id: z.string().regex(/^[a-z0-9-]+$/),
+    name: z.string().optional(),
+    baseUrl: z.string().url(),
+    /** Name of the environment variable holding the key — the key itself never goes in AI_PROVIDERS. */
+    apiKeyEnv: z.string().regex(/^[A-Z0-9_]+$/),
+    headers: z.record(z.string()).optional(),
+  }),
+);
+
+/** One line per vendor. A provider without credentials reports `configured() === false` and its routes are skipped. */
 export function createProviders(config: ConfigService<Env, true>): AiProvider[] {
-  return [
+  const providers: AiProvider[] = [
     new GroqProvider(config.get("GROQ_API_KEY", { infer: true })),
     new AnthropicProvider(config.get("ANTHROPIC_API_KEY", { infer: true })),
     new OpenAIProvider(config.get("OPENAI_API_KEY", { infer: true })),
+    new OpenAIProvider(config.get("OPENROUTER_API_KEY", { infer: true }), undefined, {
+      id: "openrouter",
+      name: "OpenRouter",
+      baseURL: "https://openrouter.ai/api/v1",
+      headers: { "HTTP-Referer": config.get("ADMIN_URL", { infer: true }), "X-Title": "Plinth" },
+    }),
+    new OpenAIProvider(config.get("NVIDIA_API_KEY", { infer: true }), undefined, { id: "nvidia", name: "NVIDIA", baseURL: "https://integrate.api.nvidia.com/v1" }),
+    // A third-party pool: only used by models that name it in AI_MODELS.
+    new OpenAIProvider(config.get("AGENTROUTER_API_KEY", { infer: true }), undefined, {
+      id: "agentrouter",
+      name: "AgentRouter",
+      baseURL: config.get("AGENTROUTER_BASE_URL", { infer: true }),
+    }),
     new BedrockProvider({
       region: config.get("AWS_REGION", { infer: true }),
       accessKeyId: config.get("AWS_ACCESS_KEY_ID", { infer: true }),
@@ -28,23 +56,45 @@ export function createProviders(config: ConfigService<Env, true>): AiProvider[] 
     }),
     new GeminiProvider(config.get("GEMINI_API_KEY", { infer: true })),
   ];
+  const extra = config.get("AI_PROVIDERS", { infer: true });
+  if (extra) {
+    for (const entry of extraProvidersSchema.parse(JSON.parse(extra))) {
+      providers.push(new OpenAIProvider(process.env[entry.apiKeyEnv], undefined, { id: entry.id, name: entry.name ?? entry.id, baseURL: entry.baseUrl, headers: entry.headers }));
+    }
+  }
+  return providers;
+}
+
+/** What a caller builds for a given model: the prompt sized to `contextChars`. The service sets the model and reply size. */
+export type RequestBuilder = (model: ModelDefinition, contextChars: number) => Omit<AiRequest, "providerModel" | "maxTokens">;
+
+export interface GenerateResult extends AiResult {
+  /** The model that actually answered — a fallback when `fellBack` is true. */
+  model: ModelDefinition;
+  provider: AiProviderId;
+  fellBack: boolean;
 }
 
 @Injectable()
 export class AiService {
+  private readonly logger = new Logger(AiService.name);
   private readonly providers: Map<AiProviderId, AiProvider>;
   readonly models: ModelDefinition[];
 
   constructor(config: ConfigService<Env, true>, @Optional() @Inject(AI_PROVIDERS) providers?: AiProvider[]) {
     this.providers = new Map((providers ?? createProviders(config)).map((provider) => [provider.id, provider]));
-    this.models = buildModels({ groqModel: config.get("GROQ_MODEL", { infer: true }) });
+    this.models = buildModels({ groqModel: config.get("GROQ_MODEL", { infer: true }), overrides: config.get("AI_MODELS", { infer: true }) });
   }
 
   findModel(id: string): ModelDefinition | undefined {
     return this.models.find((model) => model.id === id);
   }
 
-  /** What the model selector shows for a plan: Pro models are locked on Free, and unavailable until their vendor is configured. */
+  private reachable(model: ModelDefinition): boolean {
+    return routesOf(model).some((route) => this.providers.get(route.provider)?.configured());
+  }
+
+  /** What the model selector shows for a plan: Pro models are locked on Free, and unavailable until a route is configured. */
   catalogue(plan: "free" | "pro" = "free"): CopilotModelSummary[] {
     return this.models
       .filter((model) => !model.hidden)
@@ -54,17 +104,64 @@ export class AiService {
         badge: model.badge,
         tier: model.tier,
         locked: model.tier === "pro" && plan !== "pro",
-        available: (model.tier === "free" || plan === "pro") && Boolean(this.providers.get(model.provider)?.configured()),
+        available: (model.tier === "free" || plan === "pro") && this.reachable(model),
         default: model.id === DEFAULT_MODEL_ID,
       }));
   }
 
-  async generate(modelId: string, request: Omit<AiRequest, "providerModel">): Promise<AiResult & { model: ModelDefinition }> {
-    const model = this.findModel(modelId);
-    if (!model) throw new AiProviderError("groq", `Unknown model ${modelId}`, false, "UNKNOWN_MODEL");
-    const provider = this.providers.get(model.provider);
-    if (!provider?.configured()) throw new AiProviderError(model.provider, `${model.label} isn't available right now.`, false, "NOT_CONFIGURED");
-    const result = await provider.generate({ ...request, providerModel: model.providerModel });
-    return { ...result, model };
+  /**
+   * Answers with the requested model if any of its routes works, otherwise with its fallbacks in order. Each call is
+   * sized for the model making it; a "too large" answer is retried with half the context, and a low-credit refusal
+   * with the reply size the account can afford, before moving on.
+   */
+  async generate(modelId: string, build: RequestBuilder | Omit<AiRequest, "providerModel">): Promise<GenerateResult> {
+    const requested = this.findModel(modelId);
+    if (!requested) throw new AiProviderError("plinth", `Unknown model ${modelId}`, false, "UNKNOWN_MODEL");
+    const builder: RequestBuilder = typeof build === "function" ? build : () => build;
+    const fixedMaxTokens = typeof build === "function" ? undefined : build.maxTokens;
+
+    const chain = [requested];
+    for (const id of requested.fallbacks ?? []) {
+      const model = this.findModel(id);
+      if (model && !chain.includes(model)) chain.push(model);
+    }
+
+    let calls = 0;
+    let lastError: unknown = null;
+    for (const [modelIndex, model] of chain.entries()) {
+      for (const [routeIndex, route] of routesOf(model).entries()) {
+        const provider = this.providers.get(route.provider);
+        if (!provider?.configured()) {
+          lastError ??= new AiProviderError(route.provider, `${model.label} isn't available right now.`, false, "NOT_CONFIGURED");
+          continue;
+        }
+        if (calls >= MAX_CALLS) break;
+        calls += 1;
+        try {
+          const result = await this.call(provider, route, model, builder, fixedMaxTokens);
+          const fellBack = modelIndex > 0 || routeIndex > 0;
+          if (fellBack) this.logger.warn(`Answered ${modelId} with ${model.id} via ${route.provider}`);
+          return { ...result, model, provider: route.provider, fellBack };
+        } catch (error) {
+          if (!(error instanceof AiProviderError)) throw error;
+          lastError = error;
+          this.logger.warn(`${model.id} via ${route.provider} failed (${error.code ?? "error"}): ${error.message.slice(0, 200)}`);
+        }
+      }
+    }
+    throw lastError ?? new AiProviderError("plinth", `${requested.label} isn't available right now.`, false, "NOT_CONFIGURED");
+  }
+
+  private async call(provider: AiProvider, route: ModelRoute, model: ModelDefinition, build: RequestBuilder, fixedMaxTokens?: number): Promise<AiResult> {
+    const maxTokens = fixedMaxTokens ?? model.maxOutputTokens;
+    const once = (contextChars: number, tokens: number) => provider.generate({ ...build(model, contextChars), providerModel: route.providerModel, maxTokens: tokens });
+    try {
+      return await once(model.contextChars, maxTokens);
+    } catch (error) {
+      if (tooLarge(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
+      const affordable = affordableTokens(error);
+      if (affordable && affordable < maxTokens) return once(model.contextChars, affordable);
+      throw error;
+    }
   }
 }

@@ -2,7 +2,11 @@
  * The seam every AI vendor plugs into. The co-pilot never talks to a vendor SDK directly: it asks for one structured
  * result (a tool call validated against a JSON schema) and gets back plain data plus token usage.
  */
-export type AiProviderId = "groq" | "anthropic" | "bedrock" | "gemini" | "openai";
+/**
+ * Built in: groq, anthropic, openai, bedrock, gemini, and the OpenAI-compatible openrouter, nvidia and agentrouter.
+ * More OpenAI-compatible services can be added from configuration (AI_PROVIDERS), so the id is an open string.
+ */
+export type AiProviderId = string;
 
 export interface AiMessage {
   role: "user" | "assistant";
@@ -60,4 +64,20 @@ export class AiProviderError extends Error {
     super(message);
     this.name = "AiProviderError";
   }
+}
+
+/** The vendor said the request was over its size limit for a single call. */
+export function tooLarge(error: unknown): boolean {
+  return error instanceof AiProviderError && (error.code === "413" || /too large|context length|maximum context|reduce your message/i.test(error.message));
+}
+
+/**
+ * A pay-as-you-go account (OpenRouter, for example) can refuse a request because the reply it *might* produce costs
+ * more than the remaining credit, and says how much it can afford. Below a useful size, retrying isn't worth it.
+ */
+export function affordableTokens(error: unknown): number | null {
+  if (!(error instanceof AiProviderError) || (error.code !== "402" && !/afford|credits/i.test(error.message))) return null;
+  const match = /can only afford (\d+)/i.exec(error.message);
+  const tokens = match ? Number(match[1]) - 50 : 0;
+  return tokens >= 800 ? tokens : null;
 }

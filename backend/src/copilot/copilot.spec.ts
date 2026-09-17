@@ -5,7 +5,8 @@ import { GeminiProvider } from "../ai/gemini.provider";
 import { GroqProvider, type GroqChat } from "../ai/groq.provider";
 import { applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
-import { affordableTokens, parseContext } from "./copilot-planner";
+import { parseContext } from "./copilot-planner";
+import { affordableTokens } from "../ai/ai-provider";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn } from "./copilot-prompt";
 
 const files: Record<string, string> = {
