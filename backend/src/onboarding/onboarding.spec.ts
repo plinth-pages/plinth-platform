@@ -100,7 +100,7 @@ describe("setupProgress", () => {
     const skipped = setupProgress(portfolio("ready"), sandbox("running"), op("rejected"));
     expect(skipped).toMatchObject({ ready: true, retry: null });
     expect(skipped.steps[3].state).toBe("skipped");
-    expect(skipped.note).toMatch(/co-pilot/);
+    expect(skipped.note).toMatch(/Plinth AI/);
   });
 });
 
