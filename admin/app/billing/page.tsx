@@ -8,6 +8,7 @@ import { AppHeader } from "@/components/AppHeader";
 import { Button, ArrowRight } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
+import { RupeeCheckout } from "./RupeeCheckout";
 
 export default function BillingPage() {
   return (
@@ -170,12 +171,19 @@ function Billing() {
                 {billing.renewsAt ? (
                   <p className="text-sm text-stone-600 dark:text-stone-400">
                     {billing.cancelsAtPeriodEnd ? "Ends" : "Renews"} on {new Date(billing.renewsAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                    {billing.paymentProvider === "razorpay" ? " · paid month, nothing auto-renews" : ""}
                     {billing.status === "past_due" ? " · payment is being retried" : ""}
                   </p>
                 ) : null}
-                <Button onClick={() => void go(api.billingPortal)} disabled={busy} variant="secondary" size="lg" full>
-                  Manage subscription
-                </Button>
+                {billing.paymentProvider === "razorpay" ? (
+                  billing.rupeesAvailable ? (
+                    <RupeeCheckout user={user} billing={billing} promoCode={promo?.code} onPaid={() => void load()} />
+                  ) : null
+                ) : (
+                  <Button onClick={() => void go(api.billingPortal)} disabled={busy} variant="secondary" size="lg" full>
+                    Manage subscription
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -191,6 +199,14 @@ function Billing() {
                 {busy ? "Opening checkout…" : confirming ? "Confirming…" : "Upgrade to Pro"}
                 {!busy && !confirming ? <ArrowRight /> : null}
               </Button>
+              {billing.rupeesAvailable ? (
+                <>
+                  <p className="flex items-center gap-3 text-xs text-stone-400">
+                    <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" /> or <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
+                  </p>
+                  <RupeeCheckout user={user} billing={billing} promoCode={promo?.code} onPaid={() => void load()} />
+                </>
+              ) : null}
               </div>
             )}
           </PlanCard>

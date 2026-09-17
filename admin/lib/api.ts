@@ -8,6 +8,8 @@ import type {
   AdminUsersResponse,
   CreatePromoCodeRequest,
   PromoCodePreview,
+  RazorpayOrderResponse,
+  RazorpayVerifyResponse,
   AdminMetricsResponse,
   BillingStatusResponse,
   CopilotMessagesResponse,
@@ -151,6 +153,9 @@ export const api = {
   uninstallIntegration: (id: string, integrationId: string) =>
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
   billingStatus: () => request<BillingStatusResponse>("/billing"),
+  razorpayOrder: (promoCode?: string) => request<RazorpayOrderResponse>("/billing/razorpay/order", { method: "POST", body: JSON.stringify(promoCode ? { promoCode } : {}) }),
+  verifyRazorpay: (payload: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
+    request<RazorpayVerifyResponse>("/billing/razorpay/verify", { method: "POST", body: JSON.stringify(payload) }),
   previewPromo: (code: string) => request<PromoCodePreview>(`/billing/promo?code=${encodeURIComponent(code)}`),
   adminPromoCodes: () => request<{ codes: AdminPromoCode[] }>("/admin/promo-codes"),
   createPromoCode: (body: CreatePromoCodeRequest) => request<{ code: AdminPromoCode }>("/admin/promo-codes", { method: "POST", body: JSON.stringify(body) }),
