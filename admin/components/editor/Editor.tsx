@@ -82,6 +82,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
   const [device, setDevice] = useState<Device>("desktop");
   const [panel, setPanel] = useState<SidePanel>("integrations");
   const [codeTarget, setCodeTarget] = useState<CodeTarget | null>(null);
+  const [initialPrompt, setInitialPrompt] = useState("");
 
   const toast = useToast();
 
@@ -92,6 +93,13 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
       toast("Your portfolio is ready. Ask the co-pilot for anything you'd like to change.", "success");
       const url = new URL(window.location.href);
       url.searchParams.delete("welcome");
+      window.history.replaceState(null, "", url);
+    }
+    const prompt = params.get("prompt");
+    if (prompt) {
+      setInitialPrompt(prompt.slice(0, 2000));
+      const url = new URL(window.location.href);
+      url.searchParams.delete("prompt");
       window.history.replaceState(null, "", url);
     }
     const file = params.get("file");
@@ -172,7 +180,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
           panel === "integrations" ? "grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[340px_minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[340px_minmax(0,1fr)_320px]"
         }`}
       >
-        <CopilotChat portfolioId={portfolio.id} operations={operations.operations} live={phase === "live"} />
+        <CopilotChat portfolioId={portfolio.id} operations={operations.operations} live={phase === "live"} initialDraft={initialPrompt} />
 
         <main className="flex min-h-0 flex-col">
           {isAdmin ? (

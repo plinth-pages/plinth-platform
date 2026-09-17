@@ -30,13 +30,17 @@ function areaName(path: string) {
  * The co-pilot: describe a change, and it's made in your preview after it passes the same checks as every other
  * change. Replies arrive through the operation's events, so the chat never blocks on the model.
  */
-export function CopilotChat({ portfolioId, operations, live }: { portfolioId: string; operations: OperationSummary[]; live: boolean }) {
+export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }: { portfolioId: string; operations: OperationSummary[]; live: boolean; initialDraft?: string }) {
   const toast = useToast();
   const [messages, setMessages] = useState<CopilotMessageSummary[] | null>(null);
   const [usage, setUsage] = useState<CopilotUsage | null>(null);
   const [models, setModels] = useState<CopilotModelSummary[]>([]);
   const [model, setModel] = useState<string>("free");
   const [draft, setDraft] = useState("");
+  // A request typed on Home arrives here ready to send; the person still presses send.
+  useEffect(() => {
+    if (initialDraft) setDraft(initialDraft);
+  }, [initialDraft]);
   const [sending, setSending] = useState(false);
   const list = useRef<HTMLDivElement>(null);
 
