@@ -73,12 +73,14 @@ export class AdminController {
   async metrics(@Query("days") daysParam?: string): Promise<AdminMetricsResponse> {
     const days = ([7, 30, 90, 365] as const).find((d) => String(d) === daysParam) ?? 30;
     const since = new Date(Date.now() - days * 24 * 60 * 60_000);
-    const [plans, signups, upgrades, ai, aiByModel] = await Promise.all([
+    const [plans, signups, upgrades, ai, aiByModel, aiByProvider, fallbacks] = await Promise.all([
       this.prisma.user.groupBy({ by: ["plan"], _count: { _all: true } }),
       this.prisma.user.count({ where: { createdAt: { gte: since } } }),
       this.prisma.billingEvent.count({ where: { type: "checkout.session.completed", receivedAt: { gte: since } } }),
       this.prisma.copilotMessage.aggregate({ where: { role: "assistant", createdAt: { gte: since } }, _count: { _all: true }, _sum: { inputTokens: true, outputTokens: true } }),
       this.prisma.copilotMessage.groupBy({ by: ["model"], where: { role: "assistant", createdAt: { gte: since } }, _count: { _all: true }, _sum: { inputTokens: true, outputTokens: true } }),
+      this.prisma.copilotMessage.groupBy({ by: ["provider"], where: { role: "assistant", createdAt: { gte: since } }, _count: { _all: true }, _sum: { inputTokens: true, outputTokens: true } }),
+      this.prisma.copilotMessage.count({ where: { role: "assistant", fellBack: true, createdAt: { gte: since } } }),
     ]);
     const byPlan = Object.fromEntries(plans.map((row) => [row.plan, row._count._all]));
     const [users, portfolios, sandboxesRunning, operations, deployments, installed, requests] = await Promise.all([
@@ -115,6 +117,10 @@ export class AdminController {
         byModel: aiByModel
           .map((row) => ({ model: row.model ?? "unknown", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
           .sort((a, b) => b.tokens - a.tokens),
+        byProvider: aiByProvider
+          .map((row) => ({ provider: row.provider ?? "unrecorded", messages: row._count._all, tokens: (row._sum.inputTokens ?? 0) + (row._sum.outputTokens ?? 0) }))
+          .sort((a, b) => b.tokens - a.tokens),
+        fallbacks,
       },
     };
   }

@@ -612,7 +612,16 @@ export interface AdminMetricsResponse {
   /** Every activity figure below covers this many days; totals (users, sites, MRR) are all-time. */
   days: AdminMetricsDays;
   plans: { free: number; pro: number; mrrUsd: number; upgrades: number; signups: number };
-  ai: { messages: number; inputTokens: number; outputTokens: number; byModel: { model: string; messages: number; tokens: number }[] };
+  ai: {
+    messages: number;
+    inputTokens: number;
+    outputTokens: number;
+    byModel: { model: string; messages: number; tokens: number }[];
+    /** Which service answered: groq, openrouter, nvidia… */
+    byProvider: { provider: string; messages: number; tokens: number }[];
+    /** Replies that came from a backup route or model because the first choice failed. */
+    fallbacks: number;
+  };
   users: number;
   portfolios: { total: number; ready: number; provisioning: number; failed: number };
   sandboxesRunning: number;

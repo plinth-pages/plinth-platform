@@ -73,6 +73,29 @@ export default function AdminOverviewPage() {
         <Stat label="AI tokens" value={metrics.ai.inputTokens + metrics.ai.outputTokens} note={`${metrics.ai.messages.toLocaleString()} Plinth AI replies · ${range.toLowerCase()}`} />
       </div>
 
+      {metrics.ai.byProvider.length ? (
+        <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="font-medium">AI providers · {range.toLowerCase()}</h2>
+            <span className={`text-sm tabular-nums ${metrics.ai.fallbacks ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}`}>
+              {metrics.ai.fallbacks} fallback{metrics.ai.fallbacks === 1 ? "" : "s"}
+              {metrics.ai.messages ? ` · ${Math.round((metrics.ai.fallbacks / metrics.ai.messages) * 100)}% of replies` : ""}
+            </span>
+          </div>
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {metrics.ai.byProvider.map((row) => (
+              <li key={row.provider} className="rounded-lg bg-stone-50 px-3 py-2 text-sm ring-1 ring-stone-200 dark:bg-stone-950 dark:ring-stone-800">
+                <span className="font-medium">{row.provider}</span>
+                <span className="ml-2 text-xs text-stone-500 tabular-nums">
+                  {row.messages} replies · {compact(row.tokens)} tokens
+                </span>
+              </li>
+            ))}
+          </ul>
+          {metrics.ai.fallbacks ? <p className="mt-3 text-xs text-stone-500">Fallbacks usually mean a provider is out of credit or rate limited — check its dashboard.</p> : null}
+        </section>
+      ) : null}
+
       {metrics.ai.byModel.length ? (
         <section className="rounded-2xl bg-white p-5 shadow-card ring-1 ring-stone-200/80 dark:bg-stone-900 dark:ring-stone-800">
           <h2 className="font-medium">AI usage by model · {range.toLowerCase()}</h2>
