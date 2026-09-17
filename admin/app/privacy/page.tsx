@@ -14,7 +14,10 @@ const PROVIDERS: [string, string][] = [
   ["Redis Cloud", "Short-lived job queue data"],
   ["Resend", "Account emails, such as email confirmation"],
   ["Stripe", "Payments and subscriptions (Stripe holds your card details; we never see them)"],
-  ["AI providers (such as Groq, Anthropic, OpenAI, Google and Amazon Web Services)", "Generating Plinth AI responses from your prompts and the relevant parts of your site"],
+  [
+    "AI providers (Groq, NVIDIA, OpenRouter, AgentRouter, Anthropic, OpenAI, Google and Amazon Web Services)",
+    "Generating Plinth AI responses from your prompts and the relevant parts of your site. OpenRouter and AgentRouter pass requests on to the model's own vendor.",
+  ],
 ];
 
 const sections: LegalSection[] = [
