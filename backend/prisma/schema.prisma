@@ -342,6 +342,9 @@ model CopilotMessage {
   inputTokens  Int?        @map("input_tokens")
   outputTokens Int?        @map("output_tokens")
   latencyMs    Int?        @map("latency_ms")
+  /// Assistant messages: the provider that answered, and whether a fallback route or model did.
+  provider     String?
+  fellBack     Boolean     @default(false) @map("fell_back")
   createdAt    DateTime    @default(now()) @map("created_at")
 
   portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)

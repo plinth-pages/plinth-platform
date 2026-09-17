@@ -2,8 +2,8 @@ import { Injectable, Logger } from "@nestjs/common";
 import type { CopilotChanges, OperationFailure } from "@plinth-pages/shared";
 import type { Operation, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { AiProviderError } from "../ai/ai-provider";
-import { AiService } from "../ai/ai.service";
+import { AiProviderError, tooLarge } from "../ai/ai-provider";
+import { AiService, type RequestBuilder } from "../ai/ai.service";
 import { CatalogueService } from "../catalogue/catalogue.service";
 import type { FollowUp, Plan } from "../operations/integration-planner";
 import { OperationAborted } from "../operations/operation-errors";
@@ -19,22 +19,8 @@ const HISTORY_MESSAGES = 4;
 /** Earlier messages are context, not content to re-edit; long ones are cut short to save tokens. */
 const HISTORY_CHARS = 600;
 
-/** The vendor said the request was over its size or rate limit for a single call. */
-function tooLarge(error: unknown) {
-  return error instanceof AiProviderError && (error.code === "413" || /too large|context length|maximum context|reduce your message/i.test(error.message));
-}
 const AI_TIMEOUT_MS = 90_000;
 
-/**
- * A pay-as-you-go account (OpenRouter, for example) can refuse a request because the reply it *might* produce costs
- * more than the remaining credit, and says how much it can afford. Below a useful size, retrying isn't worth it.
- */
-export function affordableTokens(error: unknown): number | null {
-  if (!(error instanceof AiProviderError) || (error.code !== "402" && !/afford|credits/i.test(error.message))) return null;
-  const match = /can only afford (\d+)/i.exec(error.message);
-  const tokens = match ? Number(match[1]) - 50 : 0;
-  return tokens >= 800 ? tokens : null;
-}
 
 /** Runs one context read (the `context` script in the staging tree). Supplied by the runner. */
 export type ContextReader = () => Promise<{ files: ContextFile[]; truncated: boolean }>;
@@ -83,34 +69,24 @@ export class CopilotPlanner {
       this.prisma.installedIntegration.findMany({ where: { portfolioId: operation.portfolioId }, select: { integrationId: true, slot: true } }),
     ]);
 
-    const model = this.ai.findModel(input.model);
     const placed = installed.map((row) => ({ id: row.integrationId, slot: row.slot }));
     const previous = history.reverse().map((entry) => ({ role: entry.role, text: entry.content.length > HISTORY_CHARS ? `${entry.content.slice(0, HISTORY_CHARS)}…` : entry.content }));
-    const attempt = (budget: number, maxTokens = model?.maxOutputTokens ?? 1_500) => {
-      const selected = selectContext(context.files, message.content, budget);
-      return this.ai.generate(input.model, {
+    // Built per attempt: a fallback model gets context sized for itself, and each call its own timeout.
+    const build: RequestBuilder = (_model, contextChars) => {
+      const selected = selectContext(context.files, message.content, contextChars);
+      return {
         system: SYSTEM_PROMPT,
         messages: [...previous, { role: "user" as const, text: buildUserTurn(message.content, selected.included, available, placed, selected.omitted) }],
         tool: SUBMIT_CHANGES_TOOL,
-        maxTokens,
         temperature: 0.2,
         signal: AbortSignal.timeout(AI_TIMEOUT_MS),
-      });
+      };
     };
 
     const started = Date.now();
     let result: Awaited<ReturnType<AiService["generate"]>>;
     try {
-      const budget = model?.contextChars ?? 11_000;
-      result = await attempt(budget).catch((error) => {
-        if (tooLarge(error)) return attempt(Math.floor(budget / 2));
-        const affordable = affordableTokens(error);
-        if (affordable) {
-          this.logger.warn(`${input.model}: provider allows only ${affordable} output tokens; retrying with that limit`);
-          return attempt(budget, affordable);
-        }
-        return Promise.reject(error);
-      });
+      result = await this.ai.generate(input.model, build);
     } catch (error) {
       const text = tooLarge(error)
         ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro."
@@ -121,18 +97,20 @@ export class CopilotPlanner {
       await this.reply(operation, message.userId, input.model, { content: text });
       throw new OperationAborted(text);
     }
-    const usage = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, latencyMs: Date.now() - started };
+    // Tokens and the answering model are recorded against what actually ran, so usage and admin stats stay true.
+    const answeredBy = result.model.id;
+    const usage = { inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, latencyMs: Date.now() - started, provider: result.provider, fellBack: result.fellBack };
 
     const parsed = copilotOutputSchema.safeParse(result.output);
     if (!parsed.success) {
       const content = "I couldn't work out a safe change for that. Could you describe it differently?";
-      await this.reply(operation, message.userId, input.model, { content, ...usage });
+      await this.reply(operation, message.userId, answeredBy, { content, ...usage });
       return { kind: "reject", failures: [{ source: "copilot", message: "Plinth AI's answer wasn't a valid change." }] };
     }
     const output = parsed.data;
 
     if (output.refused) {
-      await this.reply(operation, message.userId, input.model, { content: output.reply, refused: true, ...usage });
+      await this.reply(operation, message.userId, answeredBy, { content: output.reply, refused: true, ...usage });
       return { kind: "noop", message: output.reply };
     }
 
@@ -146,12 +124,12 @@ export class CopilotPlanner {
     } catch (error) {
       if (!(error instanceof CopilotEditError)) throw error;
       const content = `${output.reply}\n\nI couldn't apply that safely: ${error.message}`;
-      await this.reply(operation, message.userId, input.model, { content, ...usage });
+      await this.reply(operation, message.userId, answeredBy, { content, ...usage });
       return { kind: "reject", failures: [{ source: "copilot", file: error.path, message: error.message } satisfies OperationFailure] };
     }
 
     const changes: CopilotChanges = { files: files.map((file) => file.path), integrations: followUps.map((followUp) => followUp.summary) };
-    await this.reply(operation, message.userId, input.model, { content: [output.reply, ...notes].join("\n\n"), changes, ...usage });
+    await this.reply(operation, message.userId, answeredBy, { content: [output.reply, ...notes].join("\n\n"), changes, ...usage });
 
     if (output.title) {
       operation.summary = output.title.slice(0, 120);
@@ -208,7 +186,7 @@ export class CopilotPlanner {
     operation: Operation,
     userId: string,
     model: string,
-    data: { content: string; refused?: boolean; changes?: CopilotChanges; inputTokens?: number; outputTokens?: number; latencyMs?: number },
+    data: { content: string; refused?: boolean; changes?: CopilotChanges; inputTokens?: number; outputTokens?: number; latencyMs?: number; provider?: string; fellBack?: boolean },
   ) {
     const message = { ...data, changes: data.changes as unknown as Prisma.InputJsonValue | undefined };
     return this.prisma.copilotMessage.create({
