@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
+import { Alerts } from "../observability/alerts";
 import { ConfigService } from "@nestjs/config";
 import type { CopilotModelSummary } from "@plinth-pages/shared";
 import { z } from "zod";
@@ -81,7 +82,11 @@ export class AiService {
   private readonly providers: Map<AiProviderId, AiProvider>;
   readonly models: ModelDefinition[];
 
-  constructor(config: ConfigService<Env, true>, @Optional() @Inject(AI_PROVIDERS) providers?: AiProvider[]) {
+  constructor(
+    config: ConfigService<Env, true>,
+    @Optional() @Inject(AI_PROVIDERS) providers?: AiProvider[],
+    @Optional() private readonly alerts?: Alerts,
+  ) {
     this.providers = new Map((providers ?? createProviders(config)).map((provider) => [provider.id, provider]));
     this.models = buildModels({ groqModel: config.get("GROQ_MODEL", { infer: true }), overrides: config.get("AI_MODELS", { infer: true }) });
   }
@@ -146,6 +151,16 @@ export class AiService {
           if (!(error instanceof AiProviderError)) throw error;
           lastError = error;
           this.logger.warn(`${model.id} via ${route.provider} failed (${error.code ?? "error"}): ${error.message.slice(0, 200)}`);
+          // Out of credit (402) or throttled (429) needs a person to act, even if a fallback answered this request.
+          if (error.code === "402" || error.code === "429") {
+            this.alerts?.send({
+              title: error.code === "402" ? "AI provider out of credit" : "AI provider is rate limiting us",
+              error,
+              level: "warning",
+              dedupeKey: `ai:${route.provider}:${error.code}`,
+              fields: { provider: route.provider, model: model.id, requested: modelId },
+            });
+          }
         }
       }
     }

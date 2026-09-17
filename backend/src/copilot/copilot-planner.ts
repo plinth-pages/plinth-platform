@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger, Optional } from "@nestjs/common";
 import type { CopilotChanges, OperationFailure } from "@plinth-pages/shared";
 import type { Operation, Prisma } from "@prisma/client";
 import { z } from "zod";
@@ -7,6 +7,7 @@ import { AiService, type RequestBuilder } from "../ai/ai.service";
 import { CatalogueService } from "../catalogue/catalogue.service";
 import type { FollowUp, Plan } from "../operations/integration-planner";
 import { OperationAborted } from "../operations/operation-errors";
+import { Alerts } from "../observability/alerts";
 import { PrismaService } from "../prisma/prisma.service";
 import { CopilotEditError, applyEdits, copilotOutputSchema, type CopilotOutput } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
@@ -51,6 +52,7 @@ export class CopilotPlanner {
     private readonly prisma: PrismaService,
     private readonly ai: AiService,
     private readonly catalogue: CatalogueService,
+    @Optional() private readonly alerts?: Alerts,
   ) {}
 
   async plan(operation: Operation, readContext: ContextReader): Promise<Plan> {
@@ -94,6 +96,19 @@ export class CopilotPlanner {
           ? "Plinth AI is busy right now. Please try again in a moment."
           : "Plinth AI isn't available right now. Please try again later.";
       this.logger.warn(`Plinth AI call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
+      this.alerts?.send({
+        title: "Plinth AI couldn't answer a request",
+        error,
+        dedupeKey: `copilot:${error instanceof AiProviderError ? `${error.provider}:${error.code ?? "error"}` : "unknown"}`,
+        fields: {
+          provider: error instanceof AiProviderError ? error.provider : "unknown",
+          code: error instanceof AiProviderError ? error.code : null,
+          model: input.model,
+          user: message.userId,
+          portfolio: operation.portfolioId,
+          operation: operation.id,
+        },
+      });
       await this.reply(operation, message.userId, input.model, { content: text });
       throw new OperationAborted(text);
     }

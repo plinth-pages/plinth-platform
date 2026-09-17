@@ -125,6 +125,8 @@ const envSchema = z
       .string()
       .regex(/^[a-z0-9-]+$/, "Must be a lowercase header name")
       .optional(),
+    /** Incoming webhook for a Slack channel; critical failures are posted there. Unset means no alerts. */
+    SLACK_WEBHOOK_URL: z.string().url().optional(),
     /** Public address of this API, for integrations that call it from a visitor's browser (Visitor Counter). */
     PUBLIC_API_URL: z.string().url().default("http://localhost:4000"),
   })

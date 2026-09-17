@@ -2,6 +2,7 @@ import { getQueueToken } from "@nestjs/bullmq";
 import { DynamicModule, Global, Module } from "@nestjs/common";
 import type { Queue } from "bullmq";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { AlertsModule } from "./observability/alerts";
 import { AdminController } from "./admin/admin.controller";
 import { AdminUsersController } from "./admin/admin-users.controller";
 import { LegalController } from "./legal/legal.controller";
@@ -184,6 +185,7 @@ export class AppModule {
           validate: validateEnv,
           ignoreEnvFile: process.env.NODE_ENV === "test",
         }),
+        AlertsModule,
         RoleModule.forRole(role),
         PrismaModule,
         role === "api" ? ApiModule : WorkerModule,

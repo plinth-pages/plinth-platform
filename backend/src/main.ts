@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { existsSync } from "fs";
 import { AppModule } from "./app.module";
 import { validateEnv, type Env } from "./config/env";
+import { Alerts } from "./observability/alerts";
 import { describeRedis } from "./queue/redis-connection";
 import { resolveRole } from "./config/role";
 
@@ -24,6 +25,7 @@ async function bootstrap() {
       abortOnError: false,
     });
     worker.enableShutdownHooks();
+    watchForCrashes(worker.get(Alerts), role);
     Logger.log(`Worker started (pid ${process.pid})`, "Bootstrap");
     return;
   }
@@ -37,9 +39,27 @@ async function bootstrap() {
   app.enableCors({ origin: config.get("ADMIN_URL", { infer: true }), credentials: true });
   app.enableShutdownHooks();
 
+  watchForCrashes(app.get(Alerts), role);
+
   const port = config.get("PORT", { infer: true });
   await app.listen(port);
   Logger.log(`API listening on :${port} (pid ${process.pid})`, "Bootstrap");
+}
+
+/**
+ * A crash is the one failure logs alone hide, because the process is gone a moment later. Report it, give the alert a
+ * moment to leave, then let the host restart us.
+ */
+function watchForCrashes(alerts: Alerts, role: string) {
+  process.on("unhandledRejection", (reason) => {
+    Logger.error(`Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`, "Bootstrap");
+    alerts.send({ title: `Unhandled rejection in the ${role}`, error: reason, dedupeKey: `crash:${role}:rejection` });
+  });
+  process.on("uncaughtException", (error) => {
+    Logger.error(`Uncaught exception: ${error.message}`, "Bootstrap");
+    alerts.send({ title: `Uncaught exception in the ${role} — restarting`, error, dedupeKey: `crash:${role}:exception` });
+    setTimeout(() => process.exit(1), 2_000).unref();
+  });
 }
 
 bootstrap().catch((error: unknown) => {
