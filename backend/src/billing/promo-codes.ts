@@ -144,7 +144,7 @@ export class PromoCodes {
     const expired = promotion.expires_at !== null && promotion.expires_at * 1000 <= Date.now();
     const usedUp = promotion.max_redemptions !== null && promotion.times_redeemed >= promotion.max_redemptions;
     if (!promotion.active || expired || usedUp) {
-      throw new BadRequestException({ statusCode: 400, code: "PROMO_EXPIRED", message: usedUp ? "That promo code has been fully used." : "That promo code has expired." });
+      throw new BadRequestException({ statusCode: 400, code: "PROMO_EXPIRED", message: usedUp ? "That promo code has been fully used." : expired ? "That promo code has expired." : "That promo code is no longer active." });
     }
     return promotion;
   }
