@@ -4,6 +4,8 @@ import type {
   PortfolioCredentialsResponse,
   AdminMetricsDays,
   AdminPromoCode,
+  AdminUserSummary,
+  AdminUsersResponse,
   CreatePromoCodeRequest,
   PromoCodePreview,
   AdminMetricsResponse,
@@ -74,6 +76,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
     // Signed in but hasn't accepted the current Terms: every signed-in call says so until they do.
+    if (response.status === 403 && body?.code === "account_suspended" && typeof window !== "undefined" && window.location.pathname !== "/suspended") {
+      window.location.assign("/suspended");
+    }
     if (response.status === 403 && body?.code === "terms_required" && typeof window !== "undefined" && window.location.pathname !== "/accept-terms") {
       window.location.assign(`/accept-terms?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
     }
@@ -154,6 +159,15 @@ export const api = {
   checkout: (promoCode?: string) => request<{ url: string }>("/billing/checkout", { method: "POST", body: JSON.stringify(promoCode ? { promoCode } : {}) }),
   confirmCheckout: (sessionId: string) => request<BillingStatusResponse>("/billing/confirm", { method: "POST", body: JSON.stringify({ sessionId }) }),
   billingPortal: () => request<{ url: string }>("/billing/portal", { method: "POST" }),
+  adminUsers: (params: { q?: string; plan?: string; role?: string; status?: string; page?: number }) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined && value !== "").map(([key, value]) => [key, String(value)]));
+    return request<AdminUsersResponse>(`/admin/users?${query.toString()}`);
+  },
+  adminUsersCsvUrl: `${API_URL}/admin/users/export.csv`,
+  setUserPlan: (id: string, plan: "free" | "pro") => request<{ user: AdminUserSummary }>(`/admin/users/${id}/plan`, { method: "POST", body: JSON.stringify({ plan }) }),
+  setUserRole: (id: string, role: "user" | "admin") => request<{ user: AdminUserSummary }>(`/admin/users/${id}/role`, { method: "POST", body: JSON.stringify({ role }) }),
+  setUserSuspended: (id: string, suspended: boolean, reason?: string) =>
+    request<{ user: AdminUserSummary }>(`/admin/users/${id}/suspend`, { method: "POST", body: JSON.stringify({ suspended, reason }) }),
   adminMetrics: (days: AdminMetricsDays = 30) => request<AdminMetricsResponse>(`/admin/metrics?days=${days}`),
   copilotModels: () => request<CopilotModelsResponse>("/copilot/models"),
   copilotMessages: (id: string) => request<CopilotMessagesResponse>(`/portfolios/${id}/copilot/messages`),
