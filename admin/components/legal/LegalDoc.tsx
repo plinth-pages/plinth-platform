@@ -30,14 +30,14 @@ export function LegalShell({ children }: { children: React.ReactNode }) {
       {children}
 
       <footer className="border-t border-stone-200 dark:border-stone-800">
-        <div className="mx-auto flex max-w-6xl flex-col gap-2 px-6 py-8 text-sm text-stone-500 sm:flex-row sm:justify-between">
-          <span>© {new Date().getFullYear()} Plinth · Operated by Sumit Verma, India</span>
-          <span className="flex gap-5">
-            <Link href="/about">About</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/privacy/request">Privacy requests</Link>
-          </span>
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-6 py-8 text-sm text-stone-500 sm:flex-row sm:items-center sm:justify-between">
+          <span>© {new Date().getFullYear()} Plinth</span>
+          <nav className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+            <Link href="/about" className="hover:text-stone-900 dark:hover:text-white">About</Link>
+            <Link href="/terms" className="hover:text-stone-900 dark:hover:text-white">Terms</Link>
+            <Link href="/privacy" className="hover:text-stone-900 dark:hover:text-white">Privacy</Link>
+            <Link href="/privacy/request" className="hover:text-stone-900 dark:hover:text-white">Contact</Link>
+          </nav>
         </div>
       </footer>
     </div>
