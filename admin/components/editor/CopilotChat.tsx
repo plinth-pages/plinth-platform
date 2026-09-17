@@ -42,6 +42,8 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
     if (initialDraft) setDraft(initialDraft);
   }, [initialDraft]);
   const [sending, setSending] = useState(false);
+  // Shown the moment Send is pressed, before the server answers, so the chat leads and the preview follows.
+  const [outgoing, setOutgoing] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
@@ -74,7 +76,7 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
 
   useEffect(() => {
     list.current?.scrollTo({ top: list.current.scrollHeight, behavior: "smooth" });
-  }, [messages?.length, sending]);
+  }, [messages?.length, sending, outgoing]);
 
   const pending = messages?.some((message) => message.role === "user" && message.operation && ACTIVE.includes(message.operation.status) && !messages.some((reply) => reply.role === "assistant" && reply.operation?.id === message.operation?.id));
   const activeStatus = operations.find((operation) => operation.type === "copilot" && ACTIVE.includes(operation.status))?.status;
@@ -88,14 +90,19 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
     const message = text.trim();
     if (!message || busy) return;
     setSending(true);
+    setOutgoing(message);
+    setDraft("");
     try {
       const response = await api.sendCopilotMessage(portfolioId, { message, model });
-      setDraft("");
-      setMessages((current) => [...(current ?? []), response.message]);
+      // A refresh triggered by the new operation may already have brought this message in.
+      setMessages((current) => (current?.some((m) => m.id === response.message.id) ? current : [...(current ?? []), response.message]));
     } catch (error) {
+      // Nothing was sent: give the text back so it isn't lost.
+      setDraft((current) => current || message);
       if (error instanceof ApiError && error.body?.code === "PREMIUM_REQUIRED") toast(PREMIUM, "premium");
       else toast(error instanceof Error ? error.message : "Your message wasn't sent", "error");
     } finally {
+      setOutgoing(null);
       setSending(false);
     }
   }
@@ -122,13 +129,18 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
             <div className="h-10 w-3/4 animate-pulse rounded-2xl bg-stone-100 motion-reduce:animate-none dark:bg-stone-900" />
             <div className="ml-auto h-8 w-1/2 animate-pulse rounded-2xl bg-stone-100 motion-reduce:animate-none dark:bg-stone-900" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !outgoing ? (
           <Welcome onPick={(text) => setDraft(text)} />
         ) : (
           <ol className="flex flex-col gap-3">
             {messages.map((message) => (
               <Message key={message.id} message={message} />
             ))}
+            {outgoing && !messages.some((m) => m.role === "user" && m.content === outgoing && Date.now() - Date.parse(m.createdAt) < 120_000) ? (
+              <li className="animate-toast-in ml-8 self-end rounded-2xl rounded-br-md bg-stone-900 px-3.5 py-2 text-sm whitespace-pre-wrap text-white opacity-80 dark:bg-stone-100 dark:text-stone-900" aria-live="polite">
+                {outgoing}
+              </li>
+            ) : null}
             {pending || sending ? (
               <li className="flex items-center gap-2 text-xs text-stone-500" role="status">
                 <span className="flex gap-1" aria-hidden>
