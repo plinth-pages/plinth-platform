@@ -79,6 +79,16 @@ export function AppHeader({ user }: { user: SessionUser }) {
                   <p className="truncate text-xs text-stone-500">@{user.githubLogin}</p>
                 </div>
                 <div className="my-1 h-px bg-stone-100 dark:bg-stone-800" />
+                <Link role="menuitem" href="/dashboard" onClick={() => setOpen(false)} className="block rounded-lg px-2.5 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
+                  Home
+                </Link>
+                <Link role="menuitem" href="/billing" onClick={() => setOpen(false)} className="block rounded-lg px-2.5 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
+                  Plan &amp; billing
+                </Link>
+                <Link role="menuitem" href="/" onClick={() => setOpen(false)} className="flex items-center justify-between rounded-lg px-2.5 py-2 text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
+                  Plinth website <span aria-hidden className="text-stone-400">↗</span>
+                </Link>
+                <div className="my-1 h-px bg-stone-100 dark:bg-stone-800" />
                 <button role="menuitem" onClick={() => void signOut()} className="w-full rounded-lg px-2.5 py-2 text-left text-sm hover:bg-stone-100 dark:hover:bg-stone-800">
                   Sign out
                 </button>
