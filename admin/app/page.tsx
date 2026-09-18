@@ -189,13 +189,14 @@ export default function LandingPage() {
         <section id="pricing" className="mx-auto max-w-4xl scroll-mt-20 px-6 pb-24 md:pb-28">
           <SectionHeading eyebrow="Pricing" title="Start free. Upgrade when you're ready." />
           <div className="mt-14 grid gap-4 md:grid-cols-2">
-            <PriceCard name="Free" price="$0" note="Everything you need to launch." features={["60K AI tokens a day, 300K a month", "Fast AI model", "Integrations & publishing", "Full safety net on every change"]} cta={<Link href="/login" className={buttonClass({ variant: "glass", size: "lg", full: true })}>Start free</Link>} />
+            <PriceCard name="Free" price="₹0" note="Everything you need to launch." features={["60K AI tokens a day, 300K a month", "Fast AI model", "Integrations & publishing", "Full safety net on every change"]} cta={<Link href="/login" className={buttonClass({ variant: "glass", size: "lg", full: true })}>Start free</Link>} />
             <PriceCard
               name="Pro"
-              price="$15"
+              price="₹1,200"
               note="For people who keep iterating."
               highlight
               features={["1M AI tokens a day, 5M a month", "Claude and GPT-4o", "Longer, multi-part requests", "Everything in Free"]}
+              footnote="Paid once per month — nothing auto-renews. A year is ₹12,000."
               cta={
                 <Link href="/login" className={buttonClass({ variant: "brand", size: "lg", full: true })}>
                   Get Pro <ArrowRight />
@@ -267,7 +268,23 @@ function Tile({ title, body, children }: { title: string; body: string; children
   );
 }
 
-function PriceCard({ name, price, note, features, cta, highlight = false }: { name: string; price: string; note: string; features: string[]; cta: React.ReactNode; highlight?: boolean }) {
+function PriceCard({
+  name,
+  price,
+  note,
+  footnote,
+  features,
+  cta,
+  highlight = false,
+}: {
+  name: string;
+  price: string;
+  note: string;
+  footnote?: string;
+  features: string[];
+  cta: React.ReactNode;
+  highlight?: boolean;
+}) {
   return (
     <div className={`relative flex flex-col rounded-2xl p-8 ${highlight ? "bg-gradient-to-b from-brand-500/[0.12] to-transparent ring-1 ring-brand-400/40" : "bg-white/[0.025] ring-1 ring-white/[0.07]"}`}>
       {highlight ? <span className="absolute top-8 right-8 rounded-full bg-brand-500/15 px-2.5 py-0.5 text-xs font-medium text-brand-200 ring-1 ring-brand-400/30">Most popular</span> : null}
@@ -277,6 +294,7 @@ function PriceCard({ name, price, note, features, cta, highlight = false }: { na
         <span className="text-5xl font-semibold tracking-tight text-white">{price}</span>
         <span className="text-stone-500"> / month</span>
       </p>
+      {footnote ? <p className="mt-2 text-[13px] text-stone-500">{footnote}</p> : null}
       <ul className="mt-8 flex flex-col gap-3 text-[15px] text-stone-300">
         {features.map((feature) => (
           <li key={feature} className="flex items-center gap-3">

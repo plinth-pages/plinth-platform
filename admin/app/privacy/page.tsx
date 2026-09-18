@@ -13,7 +13,8 @@ const PROVIDERS: [string, string][] = [
   ["Cloudflare", "DNS and delivery of preview pages"],
   ["Redis Cloud", "Short-lived job queue data"],
   ["Resend", "Account emails, such as email confirmation"],
-  ["Stripe", "Payments and subscriptions (Stripe holds your card details; we never see them)"],
+  ["Razorpay", "Payments for Pro (Razorpay collects and holds your payment details; we never see them)"],
+  ["Stripe", "Card subscriptions taken before passes existed (Stripe holds those card details; we never see them)"],
   [
     "AI providers (Groq, NVIDIA, OpenRouter, AgentRouter, Anthropic, OpenAI, Google and Amazon Web Services)",
     "Generating Plinth AI responses from your prompts and the relevant parts of your site. OpenRouter and AgentRouter pass requests on to the model's own vendor.",
@@ -54,7 +55,8 @@ const sections: LegalSection[] = [
             <strong>Integration secrets:</strong> API keys you add for integrations. They are encrypted with AES-256-GCM and are only ever delivered to your own site&apos;s server-side environment.
           </li>
           <li>
-            <strong>Billing:</strong> your plan, subscription status and Stripe customer reference. Card details are collected and held by Stripe, not by us.
+            <strong>Billing:</strong> your plan, when it ends, and a record of each payment — its amount, its status and the payment provider&apos;s own order and payment references. Card, UPI
+            and bank details are collected and held by the payment provider, not by us.
           </li>
           <li>
             <strong>Consent and requests:</strong> which version of our Terms and this policy you accepted and when, and any privacy or legal requests you send us.

@@ -129,12 +129,18 @@ const sections: LegalSection[] = [
     body: (
       <>
         <p>
-          The Free plan is provided with usage limits that we may change. Paid plans (currently <strong>Pro at US$15 per month</strong>) are billed in advance through Stripe and renew automatically
-          each month until cancelled. Prices exclude taxes unless stated; you are responsible for applicable taxes.
+          The Free plan is provided with usage limits that we may change. Pro is bought as a <strong>pass</strong>: a single payment, taken through Razorpay, that gives you Pro for a fixed number of
+          days shown on the billing page before you pay. Nothing renews automatically, no card is stored for future payments, and there is no subscription to cancel. Prices exclude taxes unless
+          stated; you are responsible for applicable taxes.
         </p>
         <p>
-          You can cancel at any time from the billing page; your plan stays active until the end of the current billing period. Except where the law requires otherwise, payments are non-refundable
-          and we do not provide refunds for partial periods. We will give you reasonable notice before changing the price of a paid plan, and the change applies from your next billing period.
+          When a pass ends, the account simply returns to the Free plan with its limits — your sites, code and content are untouched. Buying another pass while one is running adds its days to the
+          end of the one you have. Except where the law requires otherwise, payments are non-refundable, including for time left unused on a pass. We may change the price of a pass at any time; the
+          new price applies only to passes bought after the change.
+        </p>
+        <p>
+          A small number of accounts still hold a monthly card subscription taken through Stripe before passes existed. Those renew automatically until cancelled from the billing page, and the plan
+          stays active until the end of the period already paid for.
         </p>
       </>
     ),
@@ -240,8 +246,8 @@ export default function TermsPage() {
         <>
           <p>
             <strong>In short:</strong> Plinth builds and publishes a website for you with the help of AI. Your site&apos;s code and content are stored in a <strong>public</strong> repository and your
-            published site is public, so only add what you are happy for anyone to see. You own your content, you review what the AI produces, and you use the Service lawfully. Pro is billed monthly
-            through Stripe and can be cancelled any time. Users under 18 need a parent or guardian&apos;s consent.
+            published site is public, so only add what you are happy for anyone to see. You own your content, you review what the AI produces, and you use the Service lawfully. Pro is paid for once per
+            pass through Razorpay and never renews on its own. Users under 18 need a parent or guardian&apos;s consent.
           </p>
           <p className="mt-2 text-[13px] text-stone-500">This summary is for convenience; the full Terms below apply.</p>
         </>

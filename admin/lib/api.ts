@@ -153,7 +153,8 @@ export const api = {
   uninstallIntegration: (id: string, integrationId: string) =>
     request<OperationResponse>(`/portfolios/${id}/integrations/${encodeURIComponent(integrationId)}`, { method: "DELETE" }),
   billingStatus: () => request<BillingStatusResponse>("/billing"),
-  razorpayOrder: (promoCode?: string) => request<RazorpayOrderResponse>("/billing/razorpay/order", { method: "POST", body: JSON.stringify(promoCode ? { promoCode } : {}) }),
+  razorpayOrder: (passId: string, promoCode?: string) =>
+    request<RazorpayOrderResponse>("/billing/razorpay/order", { method: "POST", body: JSON.stringify({ passId, ...(promoCode ? { promoCode } : {}) }) }),
   verifyRazorpay: (payload: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     request<RazorpayVerifyResponse>("/billing/razorpay/verify", { method: "POST", body: JSON.stringify(payload) }),
   previewPromo: (code: string) => request<PromoCodePreview>(`/billing/promo?code=${encodeURIComponent(code)}`),

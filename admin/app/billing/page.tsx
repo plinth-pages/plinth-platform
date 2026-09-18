@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import type { BillingStatusResponse, PromoCodePreview, SessionUser } from "@plinth-pages/shared";
+import type { BillingPass, BillingStatusResponse, PromoCodePreview, SessionUser } from "@plinth-pages/shared";
 import { useRouter } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/AppHeader";
-import { Button, ArrowRight } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { ApiError, api } from "@/lib/api";
-import { RupeeCheckout } from "./RupeeCheckout";
+import { PassCheckout, money, perMonth } from "./PassCheckout";
 
 export default function BillingPage() {
   return (
@@ -23,10 +23,7 @@ const compact = (n: number) => Intl.NumberFormat("en", { notation: "compact" }).
 /** A code from a shared link survives the trip through sign-in until the person reaches this page. */
 const PROMO_KEY = "plinth_promo";
 
-function describePromo(promo: PromoCodePreview): string {
-  const length = promo.duration === "forever" ? "every month" : promo.duration === "repeating" ? `for ${promo.durationMonths} months` : "on your first month";
-  return `${promo.percentOff}% off ${length}`;
-}
+const describePromo = (promo: PromoCodePreview) => `${promo.percentOff}% off your next payment`;
 
 function Billing() {
   const router = useRouter();
@@ -36,6 +33,7 @@ function Billing() {
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [promo, setPromo] = useState<PromoCodePreview | null>(null);
+  const [passId, setPassId] = useState<string | null>(null);
 
   const applyPromo = useCallback(
     async (code: string, quiet = false) => {
@@ -123,7 +121,12 @@ function Billing() {
 
   if (!user || !billing) return <main className="min-h-screen" aria-busy="true" />;
   const pro = billing.plan === "pro";
-  const discounted = promo && !pro ? Math.round(billing.priceUsd * (100 - promo.percentOff)) / 100 : null;
+  // Only a live card subscription blocks passes; someone whose old subscription has ended buys passes like anyone else.
+  const onStripe = pro && billing.paymentProvider === "stripe";
+  const buyable = billing.passesAvailable && billing.passes.length > 0 && !onStripe;
+  const pass: BillingPass | null = billing.passes.find((option) => option.id === passId) ?? billing.passes[0] ?? null;
+  const currency = pass?.currency ?? "INR";
+  const discounted = pass && promo ? Math.max(100, Math.round((pass.amount * (100 - promo.percentOff)) / 100)) : null;
 
   return (
     <div className="min-h-screen">
@@ -140,7 +143,8 @@ function Billing() {
         <div className="grid gap-4 md:grid-cols-2">
           <PlanCard
             name="Free"
-            price="$0"
+            price={money(0, currency)}
+            unit="forever"
             current={!pro}
             features={[
               `${compact(billing.limits.free.dailyTokens)} AI tokens a day, ${compact(billing.limits.free.monthlyTokens)} a month`,
@@ -155,8 +159,10 @@ function Billing() {
           </PlanCard>
           <PlanCard
             name="Pro"
-            price={`$${billing.priceUsd}`}
-            discountedPrice={discounted === null ? undefined : `$${discounted % 1 ? discounted.toFixed(2) : discounted}`}
+            price={pass ? money(pass.amount, currency) : "—"}
+            discountedPrice={discounted === null || !pass ? undefined : money(discounted, currency)}
+            unit={pass ? `for ${pass.label}` : ""}
+            note={pass && pass.months > 1 ? `${perMonth(pass)} a month` : null}
             highlight
             current={pro}
             features={[
@@ -166,56 +172,44 @@ function Billing() {
               "Everything in Free",
             ]}
           >
-            {pro ? (
-              <div className="flex flex-col gap-2">
-                {billing.renewsAt ? (
-                  <p className="text-sm text-stone-600 dark:text-stone-400">
-                    {billing.cancelsAtPeriodEnd ? "Ends" : "Renews"} on {new Date(billing.renewsAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
-                    {billing.paymentProvider === "razorpay" ? " · paid month, nothing auto-renews" : ""}
-                    {billing.status === "past_due" ? " · payment is being retried" : ""}
-                  </p>
-                ) : null}
-                {billing.paymentProvider === "razorpay" ? (
-                  billing.rupeesAvailable ? (
-                    <RupeeCheckout user={user} billing={billing} promoCode={promo?.code} onPaid={() => void load()} />
-                  ) : null
-                ) : (
-                  <Button onClick={() => void go(api.billingPortal)} disabled={busy} variant="secondary" size="lg" full>
-                    Manage subscription
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-              <PromoField promo={promo} onApply={(code) => applyPromo(code)} onRemove={removePromo} />
-              <Button
-                onClick={() => void go(() => api.checkout(promo?.code))}
-                disabled={busy || confirming || !billing.checkoutAvailable}
-                title={billing.checkoutAvailable ? undefined : "Billing isn't set up on this server yet"}
-                variant="brand"
-                size="lg"
-                full
-              >
-                {busy ? "Opening checkout…" : confirming ? "Confirming…" : "Upgrade to Pro"}
-                {!busy && !confirming ? <ArrowRight /> : null}
-              </Button>
-              {billing.rupeesAvailable ? (
-                <>
-                  <p className="flex items-center gap-3 text-xs text-stone-400">
-                    <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" /> or <span className="h-px flex-1 bg-stone-200 dark:bg-stone-800" />
-                  </p>
-                  <RupeeCheckout user={user} billing={billing} promoCode={promo?.code} onPaid={() => void load()} />
-                </>
+            <div className="flex flex-col gap-3">
+              {pro && billing.renewsAt ? (
+                <p className="text-sm text-stone-600 dark:text-stone-400">
+                  {onStripe && !billing.cancelsAtPeriodEnd ? "Renews" : "Ends"} on {new Date(billing.renewsAt).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
+                  {onStripe ? "" : " · nothing auto-renews"}
+                  {billing.status === "past_due" ? " · payment is being retried" : ""}
+                </p>
               ) : null}
-              </div>
-            )}
+              {buyable ? (
+                <>
+                  <PromoField promo={promo} onApply={(code) => applyPromo(code)} onRemove={removePromo} />
+                  <PassCheckout
+                    user={user}
+                    passes={billing.passes}
+                    value={pass!.id}
+                    onChange={setPassId}
+                    promoCode={promo?.code}
+                    onPaid={() => void load()}
+                    action={pro ? "Add time" : "Get Pro"}
+                  />
+                </>
+              ) : onStripe ? (
+                <Button onClick={() => void go(api.billingPortal)} disabled={busy || !billing.checkoutAvailable} variant="secondary" size="lg" full>
+                  Manage subscription
+                </Button>
+              ) : (
+                <Button disabled variant="secondary" size="lg" full title="Payments aren't set up on this server yet">
+                  Payments unavailable
+                </Button>
+              )}
+            </div>
           </PlanCard>
         </div>
         <p className="text-center text-[13px] text-stone-500">
-          Subscriptions renew monthly until cancelled and are covered by our{" "}
-          <Link href="/terms#plans" className="underline underline-offset-2">Terms</Link>.{" "}
+          Pro is a single payment for a fixed stretch of time — nothing renews on its own, and there&apos;s no card kept on file. Buy more time whenever you want; what you&apos;ve
+          already paid for stays yours. Covered by our <Link href="/terms#plans" className="underline underline-offset-2">Terms</Link>.
         </p>
-        <p className="text-center text-[13px] text-stone-500">Payments are handled securely by Stripe. Cancel any time; Pro stays active until the end of the period you&apos;ve paid for.</p>
+        <p className="text-center text-[13px] text-stone-500">Payments are handled securely by Razorpay, who collect the payment details — Plinth never sees your card.</p>
       </main>
     </div>
   );
@@ -281,6 +275,8 @@ function PlanCard({
   name,
   price,
   discountedPrice,
+  unit,
+  note,
   features,
   current,
   highlight,
@@ -289,6 +285,8 @@ function PlanCard({
   name: string;
   price: string;
   discountedPrice?: string;
+  unit: string;
+  note?: string | null;
   features: string[];
   current: boolean;
   highlight?: boolean;
@@ -314,8 +312,9 @@ function PlanCard({
             ) : (
               <span className="text-5xl font-semibold tracking-[-0.04em]">{price}</span>
             )}
-            <span className="text-sm text-stone-500"> / month</span>
+            <span className="text-sm text-stone-500"> {unit}</span>
           </p>
+          {note ? <p className="mt-1 text-[13px] text-stone-500">{note}</p> : null}
         </div>
         {current ? (
           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-600/15 dark:bg-emerald-950 dark:text-emerald-300">Current plan</span>
