@@ -18,7 +18,7 @@ const sendBody = z.object({
   model: z.string().max(64).optional(),
 });
 
-/** Api side of the co-pilot: records the message and queues a `copilot` operation. The worker talks to the model. */
+/** Api side of Plinth AI: records the message and queues a `copilot` operation. The worker talks to the model. */
 @Injectable()
 export class CopilotService {
   constructor(

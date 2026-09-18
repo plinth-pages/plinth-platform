@@ -3,7 +3,7 @@ import { z } from "zod";
 import { MAX_FILE_BYTES } from "../operations/operations.constants";
 import { viewablePath } from "../workspace/workspace-policy";
 
-export const MAX_EDITS = 8;
+export const MAX_EDITS = 14;
 export const MAX_INTEGRATION_ACTIONS = 3;
 
 const propValue = z.union([z.string().max(500), z.number().finite(), z.boolean()]);
