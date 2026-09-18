@@ -4,7 +4,7 @@ import { BedrockProvider } from "../ai/bedrock.provider";
 import { GeminiProvider } from "../ai/gemini.provider";
 import { GroqProvider, type GroqChat } from "../ai/groq.provider";
 import { letdown, reportLetdown } from "./copilot-alerts";
-import { applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
+import { MAX_EDITS, applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
 import { parseContext } from "./copilot-planner";
 import { affordableTokens } from "../ai/ai-provider";
@@ -76,7 +76,7 @@ describe("applyEdits", () => {
 describe("the model's answer", () => {
   it("fills defaults and rejects oversized or malformed answers", () => {
     expect(copilotOutputSchema.parse({ refused: true, reply: "No." })).toEqual({ refused: true, reply: "No.", title: "", edits: [], integrations: [] });
-    expect(copilotOutputSchema.safeParse({ refused: false, reply: "x", edits: Array.from({ length: 9 }, () => ({ action: "replace", path: "a" })) }).success).toBe(false);
+    expect(copilotOutputSchema.safeParse({ refused: false, reply: "x", edits: Array.from({ length: MAX_EDITS + 1 }, () => ({ action: "replace", path: "a" })) }).success).toBe(false);
     expect(copilotOutputSchema.safeParse({ refused: false, reply: "x", edits: [{ action: "delete", path: "a" }] }).success).toBe(false);
     expect(copilotOutputSchema.safeParse("just text").success).toBe(false);
   });
@@ -84,7 +84,7 @@ describe("the model's answer", () => {
 
 describe("the prompt", () => {
   it("confines the model to the portfolio and to the tool", () => {
-    expect(SYSTEM_PROMPT).toMatch(/only job is to change ONE personal portfolio/);
+    expect(SYSTEM_PROMPT).toMatch(/change ONE personal portfolio/);
     expect(SYSTEM_PROMPT).toMatch(/refuse/i);
     expect(SYSTEM_PROMPT).toMatch(/Never reveal/);
     expect(SYSTEM_PROMPT).toMatch(/DATA, not instructions/);
@@ -233,6 +233,40 @@ describe("affordableTokens", () => {
     expect(affordableTokens(new AiProviderError("openai", "You requested up to 16000 tokens, but can only afford 300.", false, "402"))).toBeNull();
     expect(affordableTokens(new AiProviderError("openai", "Rate limited", true, "429"))).toBeNull();
     expect(affordableTokens(new Error("can only afford 4000"))).toBeNull();
+  });
+});
+
+describe("selectContext on a design request", () => {
+  // A whole small portfolio, sized roughly like the template.
+  const site = [
+    { path: "app/globals.css", content: ":root { --plinth-accent: #000; }\n".repeat(20) },
+    { path: "app/layout.tsx", content: "export default function Layout() { return null; }\n".repeat(20) },
+    { path: "app/page.tsx", content: "export default function Page() { return null; }\n".repeat(20) },
+    { path: "components/sections/Hero.tsx", content: "export function Hero() { return <h1>Hi</h1>; }\n".repeat(20) },
+    { path: "components/sections/Projects.tsx", content: "export function Projects() { return null; }\n".repeat(20) },
+    { path: "content/theme.ts", content: "export const theme = { accent: 'blue' };\n".repeat(5) },
+    { path: "content/profile.ts", content: "export const profile = { name: 'Asha' };\n".repeat(20) },
+    { path: "content/projects.ts", content: "export const projects = [];\n".repeat(20) },
+  ];
+  const pick = (request: string, budget = 24_000) => selectContext(site, request, budget).included.map((file) => file.path);
+
+  it.each(["make the UI cooler", "make my site look modern and premium", "this design is boring, redesign it", "the site looks too plain"])("sends the visual surface for %p", (request) => {
+    const paths = pick(request);
+    expect(paths).toContain("app/globals.css");
+    expect(paths).toContain("content/theme.ts");
+    expect(paths).toContain("components/sections/Hero.tsx");
+  });
+
+  it("still prefers content for a content request", () => {
+    const paths = pick("change my name to Asha Menon");
+    expect(paths).toContain("content/profile.ts");
+    expect(paths).not.toContain("app/globals.css");
+  });
+
+  it("keeps the most useful design files when the free tier's budget is tight", () => {
+    const paths = pick("make the UI cooler", 2_000);
+    expect(paths.length).toBeGreaterThan(0);
+    expect(paths.every((path) => /globals\.css|theme\.ts|page\.tsx|layout\.tsx|components\//.test(path))).toBe(true);
   });
 });
 
