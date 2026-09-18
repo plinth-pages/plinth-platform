@@ -566,14 +566,29 @@ export interface BillingStatusResponse {
   cancelsAtPeriodEnd: boolean;
   priceUsd: number;
   limits: Record<PlanId, PlanLimits>;
-  /** Stripe is configured on this server. */
+  /** Stripe is configured on this server — only legacy subscriptions still use it. */
   checkoutAvailable: boolean;
-  /** Razorpay (rupees) is configured on this server. */
-  rupeesAvailable: boolean;
-  /** Price for 30 days of Pro in paise, when paying in rupees. */
-  rupeesPricePaise: number;
+  /** Pro can be bought on this server. */
+  passesAvailable: boolean;
+  /** The passes Pro can be bought as, cheapest first-listed first. */
+  passes: BillingPass[];
   /** Which side is paying for the current plan: "stripe", "razorpay", or null on Free. */
   paymentProvider: string | null;
+}
+
+/** A single payment that buys a stretch of Pro. Nothing auto-renews, so there is no card on file and nothing to cancel. */
+export interface BillingPass {
+  id: string;
+  /** How it reads on the button, e.g. "12 months". */
+  label: string;
+  days: number;
+  months: number;
+  /** In the currency's smallest unit: paise for INR, cents for USD. */
+  amount: number;
+  currency: string;
+  /** How much cheaper per month than the shortest pass, when it's worth saying. */
+  savingsPercent: number | null;
+  recommended: boolean;
 }
 
 export type PromoDuration = "once" | "repeating" | "forever";
@@ -621,8 +636,10 @@ export interface RazorpayOrderResponse {
   amount: number;
   currency: string;
   keyId: string;
-  /** Days of Pro this payment buys. */
+  /** Days of Pro this payment buys, and which pass that was. */
   days: number;
+  passId: string;
+  passLabel: string;
   promo: { code: string; percentOff: number } | null;
 }
 

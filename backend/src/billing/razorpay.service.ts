@@ -1,21 +1,26 @@
 import { BadRequestException, Inject, Injectable, Logger, Optional, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import type { PromoCode, User } from "@prisma/client";
-import type { RazorpayOrderResponse, RazorpayVerifyResponse } from "@plinth-pages/shared";
+import type { BillingPass, RazorpayOrderResponse, RazorpayVerifyResponse } from "@plinth-pages/shared";
 import { createHmac, timingSafeEqual } from "crypto";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
-import { CODE_PATTERN } from "./promo-codes";
+import { DAY_MS, passById, paymentsConfigured, proPasses } from "./passes";
+import { PromoCodes } from "./promo-codes";
 
 /** Lets tests answer for Razorpay without the network. */
 export const RAZORPAY_FETCH = Symbol("RAZORPAY_FETCH");
 
 const API = "https://api.razorpay.com/v1";
 /** Razorpay's own floor, and ours: a smaller order is a mistake somewhere. */
-const MIN_PAISE = 100;
-const PRO_DAYS = 30;
+const MIN_AMOUNT = 100;
 const TIMEOUT_MS = 15_000;
+
+const orderBody = z.object({
+  passId: z.string().trim().max(24).optional(),
+  promoCode: z.string().trim().max(30).optional(),
+});
 
 const verifyBody = z.object({
   razorpay_order_id: z.string().min(5).max(64),
@@ -24,10 +29,11 @@ const verifyBody = z.object({
 });
 
 /**
- * Pro paid in rupees, through Razorpay Standard Checkout: the browser opens Razorpay's modal for an order created
- * here, and Pro is granted only once the returned signature is verified with the key secret — which never leaves the
- * server. Each order buys 30 days rather than a recurring charge, so nothing is auto-debited; Stripe stays the
- * recurring option for everyone else.
+ * How Pro is bought, through Razorpay Standard Checkout: the browser opens Razorpay's modal for an order created here,
+ * and Pro is granted only once the returned signature is verified with the key secret — which never leaves the server.
+ * Every purchase is a pass: one payment for a stretch of days (see `passes.ts`), so nothing is auto-debited, there is
+ * no card kept on file and there is no subscription to cancel. Stripe remains only for accounts that subscribed there
+ * before this became the way to pay.
  */
 @Injectable()
 export class RazorpayService {
@@ -37,74 +43,69 @@ export class RazorpayService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
+    private readonly promos: PromoCodes,
     @Optional() @Inject(RAZORPAY_FETCH) fetchImpl?: typeof fetch,
   ) {
     this.fetchImpl = fetchImpl ?? fetch;
   }
 
   get configured(): boolean {
-    return Boolean(this.config.get("RAZORPAY_KEY_ID", { infer: true }) && this.config.get("RAZORPAY_KEY_SECRET", { infer: true }));
+    return paymentsConfigured(this.config);
   }
 
-  /** The price in paise, after any promo code the user applied. */
-  private async priceFor(code: string | undefined): Promise<{ amount: number; promo: PromoCode | null }> {
-    const listPrice = this.config.get("RAZORPAY_PRO_PRICE_PAISE", { infer: true });
-    if (!code) return { amount: listPrice, promo: null };
+  /** What Pro can be bought as, for the billing page. */
+  get passes(): BillingPass[] {
+    return proPasses(this.config);
+  }
 
-    const promo = await this.promoFor(code);
-    const amount = Math.max(MIN_PAISE, Math.round((listPrice * (100 - promo.percentOff)) / 100));
+  /** What to charge for a pass, after any promo code. Razorpay has no view of our codes, so the discount comes off the amount. */
+  private async priceFor(pass: BillingPass, code: string | undefined): Promise<{ amount: number; promo: PromoCode | null }> {
+    if (!code) return { amount: pass.amount, promo: null };
+
+    const promo = await this.promos.findUsable(code);
+    const amount = Math.max(MIN_AMOUNT, Math.round((pass.amount * (100 - promo.percentOff)) / 100));
     return { amount, promo };
   }
 
-  /** Promo codes live in our own table; Razorpay has no view of them, so the discount is applied to the amount. */
-  private async promoFor(rawCode: string): Promise<PromoCode> {
-    const code = rawCode.trim().toUpperCase();
-    const invalid = new BadRequestException({ statusCode: 400, code: "PROMO_INVALID", message: "That promo code isn't valid." });
-    if (!CODE_PATTERN.test(code)) throw invalid;
-
-    const promo = await this.prisma.promoCode.findUnique({ where: { code } });
-    if (!promo) throw invalid;
-    if (!promo.active || (promo.expiresAt && promo.expiresAt <= new Date())) {
-      throw new BadRequestException({ statusCode: 400, code: "PROMO_EXPIRED", message: "That promo code is no longer available." });
-    }
-    if (promo.maxRedemptions !== null) {
-      const used = await this.prisma.paymentOrder.count({ where: { promoCode: code, status: "paid" } });
-      if (used >= promo.maxRedemptions) throw new BadRequestException({ statusCode: 400, code: "PROMO_EXPIRED", message: "That promo code has been fully used." });
-    }
-    return promo;
-  }
-
   /** Step 1: create the order Razorpay's modal will collect payment for. */
-  async createOrder(user: User, rawPromoCode?: unknown): Promise<RazorpayOrderResponse> {
+  async createOrder(user: User, body?: unknown): Promise<RazorpayOrderResponse> {
     this.assertConfigured();
-    if (user.plan === "pro" && user.paymentProvider === "stripe") throw new BadRequestException("You already have a Stripe subscription. Manage it from the billing page.");
+    if (user.plan === "pro" && user.paymentProvider === "stripe" && user.subscriptionStatus !== "canceled") {
+      throw new BadRequestException("You already have a card subscription. Cancel it from the billing page first, then buy a pass.");
+    }
 
-    const promoCode = typeof rawPromoCode === "string" && rawPromoCode.trim() ? rawPromoCode : undefined;
-    const { amount, promo } = await this.priceFor(promoCode);
-    const currency = "INR";
+    const parsed = orderBody.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException("We couldn't read that request. Please try again.");
+    const pass = passById(this.config, parsed.data.passId);
+    if (!pass) throw new BadRequestException({ statusCode: 400, code: "PASS_UNKNOWN", message: "That option isn't available." });
+
+    const promoCode = parsed.data.promoCode || undefined;
+    const { amount, promo } = await this.priceFor(pass, promoCode);
     // Razorpay caps the receipt at 40 characters; the row id is ours to trace the payment by.
     const receipt = `plinth_${Date.now().toString(36)}_${user.id.slice(-8)}`.slice(0, 40);
 
     const created = await this.call("/orders", {
       amount,
-      currency,
+      currency: pass.currency,
       receipt,
-      notes: { userId: user.id, plan: "pro", days: String(PRO_DAYS), ...(promo ? { promoCode: promo.code } : {}) },
+      notes: { userId: user.id, plan: "pro", pass: pass.id, days: String(pass.days), ...(promo ? { promoCode: promo.code } : {}) },
     });
     const orderId = String(created.id ?? "");
     if (!orderId) throw new ServiceUnavailableException("Razorpay didn't return an order.");
 
     await this.prisma.paymentOrder.create({
-      data: { userId: user.id, providerOrderId: orderId, amount, currency, days: PRO_DAYS, promoCode: promo?.code ?? null },
+      data: { userId: user.id, providerOrderId: orderId, amount, currency: pass.currency, days: pass.days, promoCode: promo?.code ?? null },
     });
-    this.logger.log(`Created Razorpay order ${orderId} for ${user.id} (${amount} paise${promo ? `, ${promo.code}` : ""})`);
+    this.logger.log(`Created Razorpay order ${orderId} for ${user.id} (${pass.id}, ${amount} ${pass.currency}${promo ? `, ${promo.code}` : ""})`);
 
     return {
       orderId,
       amount,
-      currency,
+      currency: pass.currency,
       keyId: this.config.get("RAZORPAY_KEY_ID", { infer: true })!,
-      days: PRO_DAYS,
+      days: pass.days,
+      passId: pass.id,
+      passLabel: pass.label,
       promo: promo ? { code: promo.code, percentOff: promo.percentOff } : null,
     };
   }
@@ -132,7 +133,7 @@ export class RazorpayService {
     if (order.status === "paid") return { plan: "pro", renewsAt: user.planRenewsAt?.toISOString() ?? null, alreadyApplied: true };
 
     const from = user.plan === "pro" && user.planRenewsAt && user.planRenewsAt > new Date() ? user.planRenewsAt : new Date();
-    const renewsAt = new Date(from.getTime() + order.days * 24 * 60 * 60_000);
+    const renewsAt = new Date(from.getTime() + order.days * DAY_MS);
     await this.prisma.$transaction([
       this.prisma.paymentOrder.update({ where: { id: order.id }, data: { status: "paid", providerPaymentId: paymentId, paidAt: new Date() } }),
       this.prisma.user.update({
@@ -176,11 +177,11 @@ export class RazorpayService {
   }
 
   private assertConfigured() {
-    if (!this.configured) throw new ServiceUnavailableException("Paying in rupees isn't set up on this server yet.");
+    if (!this.configured) throw new ServiceUnavailableException("Payments aren't set up on this server yet.");
   }
 }
 
-/** Pro bought with Razorpay simply ends; nothing is auto-debited, so an expired plan drops to Free on next use. */
+/** A pass simply ends; nothing is auto-debited, so an expired plan drops to Free on next use. */
 export function razorpayPlanExpired(user: Pick<User, "plan" | "paymentProvider" | "planRenewsAt">): boolean {
   return user.plan === "pro" && user.paymentProvider === "razorpay" && Boolean(user.planRenewsAt && user.planRenewsAt <= new Date());
 }

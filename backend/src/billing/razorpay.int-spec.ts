@@ -4,6 +4,7 @@ import type { User } from "@prisma/client";
 import { createHmac } from "crypto";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
+import { PromoCodes } from "./promo-codes";
 import { RazorpayService, razorpayPlanExpired } from "./razorpay.service";
 
 process.loadEnvFile(".env");
@@ -12,14 +13,20 @@ jest.setTimeout(30_000);
 const KEY_ID = "rzp_test_fake";
 const KEY_SECRET = "fake-secret";
 const PRICE = 120_000;
+const YEAR_PRICE = 1_200_000;
 
 const prisma = new PrismaService();
 const createdUsers: string[] = [];
 const createdCodes: string[] = [];
 
 const config = {
-  get: (key: string) => ({ RAZORPAY_KEY_ID: KEY_ID, RAZORPAY_KEY_SECRET: KEY_SECRET, RAZORPAY_PRO_PRICE_PAISE: PRICE })[key],
+  get: (key: string) =>
+    ({ RAZORPAY_KEY_ID: KEY_ID, RAZORPAY_KEY_SECRET: KEY_SECRET, RAZORPAY_PRO_PRICE_PAISE: PRICE, RAZORPAY_PRO_YEAR_PRICE_PAISE: YEAR_PRICE, RAZORPAY_CURRENCY: "INR" })[
+      key
+    ],
 } as unknown as ConfigService<Env, true>;
+
+const service = (fetchImpl?: typeof fetch, configOverride: ConfigService<Env, true> = config) => new RazorpayService(prisma, configOverride, new PromoCodes(prisma), fetchImpl);
 
 /** Razorpay's orders endpoint: records what we sent and answers with an order id. */
 function fakeRazorpay({ fail = false } = {}) {
@@ -51,11 +58,11 @@ afterAll(async () => {
 
 it("creates an order in paise and grants 30 days of Pro once the signature checks out", async () => {
   const { fetchImpl, orders } = fakeRazorpay();
-  const razorpay = new RazorpayService(prisma, config, fetchImpl);
+  const razorpay = service(fetchImpl);
   const buyer = await user();
 
   const order = await razorpay.createOrder(buyer);
-  expect(order).toMatchObject({ amount: PRICE, currency: "INR", keyId: KEY_ID, days: 30, promo: null });
+  expect(order).toMatchObject({ amount: PRICE, currency: "INR", keyId: KEY_ID, days: 30, passId: "monthly", promo: null });
   expect(orders[0]).toMatchObject({ url: "https://api.razorpay.com/v1/orders", amount: PRICE, currency: "INR", notes: { userId: buyer.id, plan: "pro" } });
   expect(String(orders[0].receipt).length).toBeLessThanOrEqual(40);
   // The key secret is sent to Razorpay as basic auth, and nowhere else.
@@ -79,7 +86,7 @@ it("creates an order in paise and grants 30 days of Pro once the signature check
 
 it("refuses a forged signature, an unknown order, and someone else's order — and never grants Pro", async () => {
   const { fetchImpl } = fakeRazorpay();
-  const razorpay = new RazorpayService(prisma, config, fetchImpl);
+  const razorpay = service(fetchImpl);
   const buyer = await user();
   const stranger = await user();
   const order = await razorpay.createOrder(buyer);
@@ -98,23 +105,44 @@ it("refuses a forged signature, an unknown order, and someone else's order — a
 
 it("takes a promo code off the amount, and reports a bad key or missing setup clearly", async () => {
   const { fetchImpl, orders } = fakeRazorpay();
-  const razorpay = new RazorpayService(prisma, config, fetchImpl);
+  const razorpay = service(fetchImpl);
   const buyer = await user();
   const code = `RZP${Date.now().toString().slice(-6)}`;
   createdCodes.push(code);
   await prisma.promoCode.create({ data: { code, percentOff: 25, duration: "once", stripeCouponId: "co_x", stripePromotionCodeId: `promo_${code}` } });
 
-  const order = await razorpay.createOrder(buyer, code.toLowerCase());
+  const order = await razorpay.createOrder(buyer, { promoCode: code.toLowerCase() });
   expect(order).toMatchObject({ amount: PRICE * 0.75, promo: { code, percentOff: 25 } });
   expect(orders[0]).toMatchObject({ notes: { promoCode: code } });
-  await expect(razorpay.createOrder(buyer, "NOSUCHCODE")).rejects.toMatchObject({ response: { code: "PROMO_INVALID" } });
+  await expect(razorpay.createOrder(buyer, { promoCode: "NOSUCHCODE" })).rejects.toMatchObject({ response: { code: "PROMO_INVALID" } });
 
-  const refused = new RazorpayService(prisma, config, fakeRazorpay({ fail: true }).fetchImpl);
+  const refused = service(fakeRazorpay({ fail: true }).fetchImpl);
   await expect(refused.createOrder(buyer)).rejects.toThrow(/aren't set up correctly/);
 
-  const unset = new RazorpayService(prisma, { get: () => undefined } as unknown as ConfigService<Env, true>);
+  const unset = service(undefined, { get: () => undefined } as unknown as ConfigService<Env, true>);
   expect(unset.configured).toBe(false);
-  await expect(unset.createOrder(buyer)).rejects.toThrow(/isn't set up/);
+  await expect(unset.createOrder(buyer)).rejects.toThrow(/aren't set up on this server/);
+});
+
+it("sells a year as one payment, and refuses a pass that isn't on offer", async () => {
+  const { fetchImpl, orders } = fakeRazorpay();
+  const razorpay = service(fetchImpl);
+  const buyer = await user();
+
+  expect(razorpay.passes).toMatchObject([
+    { id: "monthly", days: 30, amount: PRICE, currency: "INR", months: 1, savingsPercent: null, recommended: false },
+    { id: "yearly", days: 365, amount: YEAR_PRICE, currency: "INR", months: 12, savingsPercent: 18, recommended: true },
+  ]);
+
+  const order = await razorpay.createOrder(buyer, { passId: "yearly" });
+  expect(order).toMatchObject({ amount: YEAR_PRICE, currency: "INR", days: 365, passId: "yearly", passLabel: "12 months" });
+  expect(orders[0]).toMatchObject({ amount: YEAR_PRICE, notes: { pass: "yearly", days: "365" } });
+
+  const paymentId = "pay_year1";
+  const result = await razorpay.verify(buyer, { razorpay_order_id: order.orderId, razorpay_payment_id: paymentId, razorpay_signature: sign(order.orderId, paymentId) });
+  expect(Date.parse(result.renewsAt!) - Date.now()).toBeGreaterThan(364 * 24 * 60 * 60_000);
+
+  await expect(razorpay.createOrder(buyer, { passId: "decade" })).rejects.toMatchObject({ response: { code: "PASS_UNKNOWN" } });
 });
 
 it("treats a lapsed paid month as Free", () => {

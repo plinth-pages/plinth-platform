@@ -5,6 +5,7 @@ import type { BillingStatusResponse } from "@plinth-pages/shared";
 import Stripe from "stripe";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
+import { proPasses, paymentsConfigured } from "./passes";
 import { PLANS, PRO_STATUSES } from "./plans";
 
 /** The Stripe client, or null when STRIPE_SECRET_KEY isn't set. Tests pass a fake. */
@@ -44,8 +45,8 @@ export class BillingService {
       priceUsd: PLANS.pro.priceUsd,
       limits: { free: PLANS.free.limits, pro: PLANS.pro.limits },
       checkoutAvailable: this.configured,
-      rupeesAvailable: Boolean(this.config.get("RAZORPAY_KEY_ID", { infer: true }) && this.config.get("RAZORPAY_KEY_SECRET", { infer: true })),
-      rupeesPricePaise: this.config.get("RAZORPAY_PRO_PRICE_PAISE", { infer: true }),
+      passesAvailable: paymentsConfigured(this.config),
+      passes: proPasses(this.config),
       paymentProvider: user.paymentProvider,
     };
   }

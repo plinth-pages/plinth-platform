@@ -45,8 +45,8 @@ export class BillingController {
   @Post("razorpay/order")
   @HttpCode(200)
   @UseGuards(SessionGuard)
-  createRazorpayOrder(@CurrentUser() user: User, @Body() body: { promoCode?: unknown } | undefined) {
-    return this.razorpay.createOrder(user, body?.promoCode);
+  createRazorpayOrder(@CurrentUser() user: User, @Body() body: unknown) {
+    return this.razorpay.createOrder(user, body);
   }
 
   /** Razorpay step 3: check the signature, then grant Pro. */

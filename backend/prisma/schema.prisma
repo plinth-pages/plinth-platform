@@ -485,8 +485,9 @@ model PromoCode {
   maxRedemptions        Int?          @map("max_redemptions")
   /// Who or what the code is for, e.g. "Referral: Rahul" or "Launch tweet".
   note                  String?
-  stripeCouponId        String        @map("stripe_coupon_id")
-  stripePromotionCodeId String        @unique @map("stripe_promotion_code_id")
+  /// Set only when Stripe is configured: the same code mirrored there for the legacy subscription checkout.
+  stripeCouponId        String?       @map("stripe_coupon_id")
+  stripePromotionCodeId String?       @unique @map("stripe_promotion_code_id")
   active                Boolean       @default(true)
   createdById           String?       @map("created_by_id")
   createdAt             DateTime      @default(now()) @map("created_at")
