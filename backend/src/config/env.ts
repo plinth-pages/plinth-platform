@@ -154,6 +154,15 @@ const envSchema = z
         });
       }
     }
+    // This one has a default, so a missing value never reached the check above — and every Visitor Counter installed
+    // while it was missing had "http://localhost:4000" compiled into a stranger's browser, where it silently fails.
+    if (env.NODE_ENV === "production" && /^https?:\/\/(localhost|127\.0\.0\.1)/.test(env.PUBLIC_API_URL)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["PUBLIC_API_URL"],
+        message: "Required in production: the public address of this API, e.g. https://api.example.com. Installed integrations call it from a visitor's browser, where localhost is the visitor's own machine.",
+      });
+    }
   });
 
 function requiredMessage(role: "api" | "worker", key: string): string {
