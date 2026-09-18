@@ -10,6 +10,7 @@ import { OperationAborted } from "../operations/operation-errors";
 import { Alerts } from "../observability/alerts";
 import { PrismaService } from "../prisma/prisma.service";
 import { CopilotEditError, applyEdits, copilotOutputSchema, type CopilotOutput } from "./copilot-plan";
+import { reportLetdown, type LetdownContext } from "./copilot-alerts";
 import { selectContext } from "./copilot-context";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn, type ContextFile } from "./copilot-prompt";
 
@@ -85,6 +86,9 @@ export class CopilotPlanner {
       };
     };
 
+    // One description of this request, reused by every let-down alert below.
+    const letdown: LetdownContext = { request: message.content, model: input.model, userId: message.userId, portfolioId: operation.portfolioId, operationId: operation.id };
+
     const started = Date.now();
     let result: Awaited<ReturnType<AiService["generate"]>>;
     try {
@@ -119,12 +123,14 @@ export class CopilotPlanner {
     const parsed = copilotOutputSchema.safeParse(result.output);
     if (!parsed.success) {
       const content = "I couldn't work out a safe change for that. Could you describe it differently?";
+      reportLetdown(this.alerts, "invalid", "Plinth AI's answer wasn't usable", { ...letdown, model: answeredBy, provider: result.provider, reply: content });
       await this.reply(operation, message.userId, answeredBy, { content, ...usage });
       return { kind: "reject", failures: [{ source: "copilot", message: "Plinth AI's answer wasn't a valid change." }] };
     }
     const output = parsed.data;
 
     if (output.refused) {
+      reportLetdown(this.alerts, "refused", "Plinth AI refused a request", { ...letdown, model: answeredBy, provider: result.provider, reply: output.reply });
       await this.reply(operation, message.userId, answeredBy, { content: output.reply, refused: true, ...usage });
       return { kind: "noop", message: output.reply };
     }
@@ -139,6 +145,7 @@ export class CopilotPlanner {
     } catch (error) {
       if (!(error instanceof CopilotEditError)) throw error;
       const content = `${output.reply}\n\nI couldn't apply that safely: ${error.message}`;
+      reportLetdown(this.alerts, "edit", "Plinth AI's edit couldn't be applied", { ...letdown, model: answeredBy, provider: result.provider, reply: output.reply }, { file: error.path, problem: error.message });
       await this.reply(operation, message.userId, answeredBy, { content, ...usage });
       return { kind: "reject", failures: [{ source: "copilot", file: error.path, message: error.message } satisfies OperationFailure] };
     }

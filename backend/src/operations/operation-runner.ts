@@ -12,6 +12,8 @@ import { SANDBOX_WAKER, type SandboxWaker } from "../sandbox/sandbox-waker";
 import { parseBuildOutput, parsePlinthCheck, parseTscOutput, reported, sections } from "./check-output";
 import { CopilotPlanner, copilotInputSchema, parseContext } from "../copilot/copilot-planner";
 import { CONTEXT_DIRECTORIES, MAX_CONTEXT_BYTES } from "../copilot/copilot-plan";
+import { clip, requestKey } from "../copilot/copilot-alerts";
+import { Alerts } from "../observability/alerts";
 import { commitSubject, editInputSchema } from "./edit-input";
 import { OperationAborted } from "./operation-errors";
 import { SECRET_ENVIRONMENT, type SecretEnvironment } from "../credentials/credential-sync";
@@ -91,6 +93,7 @@ export class OperationRunner {
     private readonly copilot: CopilotPlanner,
     @Inject(FOLLOW_UPS) private readonly followUps: FollowUpQueue,
     @Optional() @Inject(SECRET_ENVIRONMENT) private readonly secrets: SecretEnvironment | null = null,
+    @Optional() private readonly alerts?: Alerts,
   ) {}
 
   async drain(portfolioId: string): Promise<DrainOutcome> {
@@ -403,10 +406,46 @@ export class OperationRunner {
   ) {
     // 7. Reject: the worktree is thrown away; the live tree and the preview never saw the change.
     await this.discard(externalId);
+    await this.reportRejection(operation, failures);
     await this.finish(operation, "rejected", began, {
       checkMs,
       diff,
       checkOutput: failures as unknown as Prisma.InputJsonValue,
+    });
+  }
+
+  /**
+   * A rejection is the safety net working — but from the user's side it is a change that never arrived, and nothing
+   * else reports it. Best-effort: the request that caused it is worth far more than the failure text, so look it up
+   * when this was a Plinth AI change, and never let the lookup break the rejection itself.
+   */
+  private async reportRejection(operation: Operation, failures: OperationFailure[]) {
+    if (!this.alerts?.configured) return;
+    let request: string | null = null;
+    try {
+      const messageId = (operation.input as { messageId?: unknown } | null)?.messageId;
+      if (typeof messageId === "string") {
+        const message = await this.prisma.copilotMessage.findUnique({ where: { id: messageId }, select: { content: true } });
+        request = message?.content ?? null;
+      }
+    } catch {
+      // The alert is worth sending without it.
+    }
+    const first = failures[0];
+    this.alerts.send({
+      title: "A change was rejected by the safety net",
+      level: "warning",
+      dedupeKey: `operation:rejected:${first?.source ?? "unknown"}:${requestKey(request ?? operation.summary)}`,
+      fields: {
+        request: request ? clip(request, 300) : null,
+        change: operation.summary,
+        type: operation.type,
+        failed: first?.source ?? null,
+        problem: first ? clip(first.message, 300) : null,
+        file: first?.file ?? null,
+        portfolio: operation.portfolioId,
+        operation: operation.id,
+      },
     });
   }
 

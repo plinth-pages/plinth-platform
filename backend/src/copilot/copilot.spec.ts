@@ -3,6 +3,7 @@ import { AiService, buildModels } from "../ai/ai.service";
 import { BedrockProvider } from "../ai/bedrock.provider";
 import { GeminiProvider } from "../ai/gemini.provider";
 import { GroqProvider, type GroqChat } from "../ai/groq.provider";
+import { letdown, reportLetdown } from "./copilot-alerts";
 import { applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
 import { parseContext } from "./copilot-planner";
@@ -232,5 +233,32 @@ describe("affordableTokens", () => {
     expect(affordableTokens(new AiProviderError("openai", "You requested up to 16000 tokens, but can only afford 300.", false, "402"))).toBeNull();
     expect(affordableTokens(new AiProviderError("openai", "Rate limited", true, "429"))).toBeNull();
     expect(affordableTokens(new Error("can only afford 4000"))).toBeNull();
+  });
+});
+
+describe("let-down alerts", () => {
+  const context = { request: "Make my portfolio look modern and premium", model: "free", provider: "groq", userId: "u1", portfolioId: "p1", operationId: "o1" };
+
+  it("carries what the user asked for, not just what broke", () => {
+    const alert = letdown("refused", "Plinth AI refused a request", { ...context, reply: "I can only edit this portfolio." });
+    expect(alert.level).toBe("warning");
+    expect(alert.fields).toMatchObject({ request: context.request, reply: "I can only edit this portfolio.", model: "free", provider: "groq", user: "u1", portfolio: "p1" });
+  });
+
+  it("separates different requests but collapses the same one retried", () => {
+    const first = letdown("refused", "t", context);
+    const again = letdown("refused", "t", { ...context, request: "  make MY portfolio   look Modern and premium " });
+    const other = letdown("refused", "t", { ...context, request: "Add a blog" });
+    expect(again.dedupeKey).toBe(first.dedupeKey);
+    expect(other.dedupeKey).not.toBe(first.dedupeKey);
+  });
+
+  it("keeps a long request short enough for Slack", () => {
+    const long = letdown("refused", "t", { ...context, request: "x".repeat(900) });
+    expect(String(long.fields?.request)).toHaveLength(301);
+  });
+
+  it("reports nothing when alerting isn't configured", () => {
+    expect(() => reportLetdown(undefined, "refused", "t", context)).not.toThrow();
   });
 });
