@@ -57,6 +57,14 @@ export class BillingController {
     return this.razorpay.verify(user, body);
   }
 
+  /** Razorpay → Plinth: the safety net for a browser that never came back. Signed over the raw body, no session. */
+  @Post("razorpay/webhook")
+  @HttpCode(200)
+  async razorpayWebhook(@Req() req: RawBodyRequest<Request>, @Headers("x-razorpay-signature") signature: string | undefined) {
+    const { event, applied } = await this.razorpay.handleWebhook(req.rawBody, signature);
+    return { received: true, event, applied };
+  }
+
   @Post("portal")
   @HttpCode(200)
   @UseGuards(SessionGuard)

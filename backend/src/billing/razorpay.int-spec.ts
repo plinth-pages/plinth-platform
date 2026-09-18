@@ -12,6 +12,7 @@ jest.setTimeout(30_000);
 
 const KEY_ID = "rzp_test_fake";
 const KEY_SECRET = "fake-secret";
+const WEBHOOK_SECRET = "fake-webhook-secret";
 const PRICE = 120_000;
 const YEAR_PRICE = 1_200_000;
 
@@ -21,12 +22,24 @@ const createdCodes: string[] = [];
 
 const config = {
   get: (key: string) =>
-    ({ RAZORPAY_KEY_ID: KEY_ID, RAZORPAY_KEY_SECRET: KEY_SECRET, RAZORPAY_PRO_PRICE_PAISE: PRICE, RAZORPAY_PRO_YEAR_PRICE_PAISE: YEAR_PRICE, RAZORPAY_CURRENCY: "INR" })[
-      key
-    ],
+    ({
+      RAZORPAY_KEY_ID: KEY_ID,
+      RAZORPAY_KEY_SECRET: KEY_SECRET,
+      RAZORPAY_WEBHOOK_SECRET: WEBHOOK_SECRET,
+      RAZORPAY_PRO_PRICE_PAISE: PRICE,
+      RAZORPAY_PRO_YEAR_PRICE_PAISE: YEAR_PRICE,
+      RAZORPAY_CURRENCY: "INR",
+    })[key],
 } as unknown as ConfigService<Env, true>;
 
-const service = (fetchImpl?: typeof fetch, configOverride: ConfigService<Env, true> = config) => new RazorpayService(prisma, configOverride, new PromoCodes(prisma), fetchImpl);
+const service = (fetchImpl?: typeof fetch, configOverride: ConfigService<Env, true> = config) =>
+  new RazorpayService(prisma, configOverride, new PromoCodes(prisma), null, fetchImpl);
+
+/** What Razorpay posts when a payment is captured, signed the way Razorpay signs it. */
+function webhook(event: string, entity: Record<string, unknown>, secret = WEBHOOK_SECRET) {
+  const body = Buffer.from(JSON.stringify({ event, payload: { payment: { entity } } }));
+  return { body, signature: createHmac("sha256", secret).update(body).digest("hex") };
+}
 
 /** Razorpay's orders endpoint: records what we sent and answers with an order id. */
 function fakeRazorpay({ fail = false } = {}) {
@@ -143,6 +156,53 @@ it("sells a year as one payment, and refuses a pass that isn't on offer", async 
   expect(Date.parse(result.renewsAt!) - Date.now()).toBeGreaterThan(364 * 24 * 60 * 60_000);
 
   await expect(razorpay.createOrder(buyer, { passId: "decade" })).rejects.toMatchObject({ response: { code: "PASS_UNKNOWN" } });
+});
+
+it("grants Pro from the webhook when the browser never comes back, and only once", async () => {
+  const { fetchImpl } = fakeRazorpay();
+  const razorpay = service(fetchImpl);
+  const buyer = await user();
+  const order = await razorpay.createOrder(buyer);
+
+  // The tab is closed: nothing calls verify, and Razorpay posts the capture instead.
+  const captured = webhook("payment.captured", { id: "pay_hook1", order_id: order.orderId, amount: order.amount, status: "captured" });
+  await expect(razorpay.handleWebhook(captured.body, captured.signature)).resolves.toMatchObject({ event: "payment.captured", applied: true });
+
+  const paid = await prisma.user.findUnique({ where: { id: buyer.id } });
+  expect(paid).toMatchObject({ plan: "pro", paymentProvider: "razorpay" });
+  expect(Date.parse(paid!.planRenewsAt!.toISOString()) - Date.now()).toBeGreaterThan(29 * 24 * 60 * 60_000);
+  expect(await prisma.paymentOrder.findUnique({ where: { providerOrderId: order.orderId } })).toMatchObject({ status: "paid", providerPaymentId: "pay_hook1" });
+
+  // Razorpay retries, and the user reopens the page: neither may buy a second month.
+  await expect(razorpay.handleWebhook(captured.body, captured.signature)).resolves.toMatchObject({ applied: false });
+  const replayed = await razorpay.verify(paid!, { razorpay_order_id: order.orderId, razorpay_payment_id: "pay_hook1", razorpay_signature: sign(order.orderId, "pay_hook1") });
+  expect(replayed).toMatchObject({ alreadyApplied: true, renewsAt: paid!.planRenewsAt!.toISOString() });
+  expect(await prisma.user.findUnique({ where: { id: buyer.id } })).toMatchObject({ planRenewsAt: paid!.planRenewsAt });
+});
+
+it("refuses an unsigned or forged webhook, and ignores one it can't settle", async () => {
+  const { fetchImpl } = fakeRazorpay();
+  const razorpay = service(fetchImpl);
+  const buyer = await user();
+  const order = await razorpay.createOrder(buyer);
+
+  const forged = webhook("payment.captured", { id: "pay_x", order_id: order.orderId, amount: order.amount }, "not-the-secret");
+  await expect(razorpay.handleWebhook(forged.body, forged.signature)).rejects.toMatchObject({ status: 401 });
+  await expect(razorpay.handleWebhook(forged.body, undefined)).rejects.toMatchObject({ status: 401 });
+
+  // Signed, but nothing to do: a different event, an order that isn't ours, or less money than the pass costs.
+  const other = webhook("payment.failed", { id: "pay_y", order_id: order.orderId, amount: order.amount });
+  await expect(razorpay.handleWebhook(other.body, other.signature)).resolves.toMatchObject({ event: "payment.failed", applied: false });
+  const stranger = webhook("payment.captured", { id: "pay_z", order_id: "order_not_ours", amount: 120_000 });
+  await expect(razorpay.handleWebhook(stranger.body, stranger.signature)).resolves.toMatchObject({ applied: false });
+  const short = webhook("payment.captured", { id: "pay_s", order_id: order.orderId, amount: order.amount - 1 });
+  await expect(razorpay.handleWebhook(short.body, short.signature)).resolves.toMatchObject({ applied: false });
+
+  expect(await prisma.user.findUnique({ where: { id: buyer.id } })).toMatchObject({ plan: "free", paymentProvider: null });
+
+  const unset = service(fetchImpl, { get: (key: string) => (key === "RAZORPAY_WEBHOOK_SECRET" ? undefined : "x") } as unknown as ConfigService<Env, true>);
+  const signed = webhook("payment.captured", { id: "pay_q", order_id: order.orderId });
+  await expect(unset.handleWebhook(signed.body, signed.signature)).rejects.toThrow(/webhooks aren't set up/);
 });
 
 it("treats a lapsed paid month as Free", () => {

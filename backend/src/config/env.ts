@@ -107,6 +107,8 @@ const envSchema = z
     RAZORPAY_PRO_PRICE_PAISE: z.coerce.number().int().min(100).default(120_000),
     /** The twelve-month pass. 1200000 = ₹12,000, so a year costs ten months. */
     RAZORPAY_PRO_YEAR_PRICE_PAISE: z.coerce.number().int().min(100).default(1_200_000),
+    /** Signs the webhook Razorpay posts to /v1/billing/razorpay/webhook. Set it to the secret you typed in the Razorpay dashboard. */
+    RAZORPAY_WEBHOOK_SECRET: z.string().optional(),
     /** The currency Razorpay charges in. Anything other than INR needs that currency enabled on the Razorpay account. */
     RAZORPAY_CURRENCY: z.string().length(3).toUpperCase().default("INR"),
     /** Replaces the passes above entirely: [{"id","label","days","amount"}], amount in the smallest unit. */
