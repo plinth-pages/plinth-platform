@@ -40,6 +40,13 @@ describe("validateEnv", () => {
     expect(validateEnv(worker).ORCHESTRATOR_ROLE).toBe("worker");
   });
 
+  it("refuses to boot in production while integrations would call localhost from a visitor's browser", () => {
+    expect(() => validateEnv({ ...api, NODE_ENV: "production" })).toThrow(/PUBLIC_API_URL: Required in production/);
+    expect(validateEnv({ ...api, NODE_ENV: "production", PUBLIC_API_URL: "https://api.example.com" }).PUBLIC_API_URL).toBe("https://api.example.com");
+    // Development is left alone: localhost is correct there.
+    expect(validateEnv(api).PUBLIC_API_URL).toBe("http://localhost:4000");
+  });
+
   it("accepts an api without App credentials", () => {
     expect(validateEnv(api).ORCHESTRATOR_ROLE).toBe("api");
   });

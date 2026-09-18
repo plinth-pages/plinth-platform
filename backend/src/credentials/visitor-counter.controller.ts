@@ -1,7 +1,8 @@
-import { Controller, Get, HttpCode, NotFoundException, Param, Post, Req, Res } from "@nestjs/common";
+import { Controller, Get, HttpCode, NotFoundException, Optional, Param, Post, Req, Res } from "@nestjs/common";
 import { HttpException, HttpStatus } from "@nestjs/common";
 import { createHash } from "crypto";
 import type { Request, Response } from "express";
+import { Alerts } from "../observability/alerts";
 import { PrismaService } from "../prisma/prisma.service";
 
 const SITE_ID = /^[a-z0-9]{20,40}$/;
@@ -20,7 +21,10 @@ export class VisitorCounterController {
   private readonly rate = new Map<string, { minute: number; hits: number }>();
   private readonly enabled = new Map<string, { value: boolean; until: number }>();
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly alerts?: Alerts,
+  ) {}
 
   @Get(":siteId")
   async read(@Param("siteId") siteId: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
@@ -77,8 +81,28 @@ export class VisitorCounterController {
     const cached = this.enabled.get(siteId);
     if (cached && cached.until > Date.now()) return cached.value;
     const value = (await this.prisma.installedIntegration.count({ where: { portfolioId: siteId, integrationId: "visitor-counter" } })) > 0;
+    // A published site asking for a count we refuse to give means its owner sees nothing where they installed a
+    // counter — and the component hides itself, so nobody would ever hear about it.
+    if (!value) await this.reportOrphan(siteId);
     this.enabled.set(siteId, { value, until: Date.now() + 5 * 60_000 });
     if (this.enabled.size > 10_000) this.enabled.clear();
     return value;
+  }
+
+  /** Only worth reporting for a site we actually host — a random or stale id is just noise. */
+  private async reportOrphan(siteId: string): Promise<void> {
+    if (!this.alerts?.configured) return;
+    const portfolio = await this.prisma.portfolio.findUnique({ where: { id: siteId }, select: { slug: true } });
+    if (!portfolio) return;
+    this.alerts.send({
+      title: "A published site is asking for a visitor count it can't have",
+      level: "warning",
+      dedupeKey: `counter:orphan:${siteId}`,
+      fields: {
+        portfolio: siteId,
+        site: portfolio.slug,
+        problem: "The site renders the Visitor Counter but has no installed_integration row, so the counter hides itself and the owner sees nothing.",
+      },
+    });
   }
 }
