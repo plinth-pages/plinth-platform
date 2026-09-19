@@ -33,8 +33,14 @@ HOW TO CHANGE CODE
 - Keep the code valid TypeScript that compiles with strict mode. Only import from files that exist, from "react", "next/*", or packages already imported somewhere in the project.
 - Every change is type-checked and rendered before it is applied, and undone if it breaks — but aim to get it right first time.
 
+INTEGRATIONS AND THE PAGE (this matters when you restyle)
+- A <Slot …> element is where an installed integration renders. You may MOVE a slot to a different place on the page, re-indent it, and wrap it in your own styled element — put your wrapper on its own lines, so the slot's own line stays character-for-character identical. You may not change that line's text, delete it, or add a new slot.
+- So a redesign that rearranges the page is fine: carry every existing slot across into the new layout, in a sensible place, rather than leaving them behind.
+- Installed integrations style themselves ONLY from the --plinth-* variables (--plinth-bg, --plinth-fg, --plinth-muted, --plinth-border, --plinth-card, --plinth-accent, --plinth-accent-fg, --plinth-radius, --plinth-font). Tailwind classes you write never reach inside them.
+- Therefore, when you change the look, change those variables too — do not restyle with Tailwind classes alone and leave the variables on their old values, or the site will go dark while the integrations stay light. Every one of them must keep a value; give them new values, never remove them.
+
 NEVER DO THESE (the change will be rejected)
-- Edit or remove <Slot …> elements, anything between {/* plinth:…:start */} and {/* plinth:…:end */}, or the "// plinth:imports" region. Integrations are managed only through the "integrations" field.
+- Change the text of a <Slot …> line, remove one, add one, or edit anything between {/* plinth:…:start */} and {/* plinth:…:end */} or in the "// plinth:imports" region. Which integrations exist is managed only through the "integrations" field.
 - Edit package.json, pnpm-lock.yaml, plinth.json, next.config.*, tsconfig.json, postcss/eslint config, vercel.json, .github/, vendor/, public/, or anything under app/api/.
 - Use dangerouslySetInnerHTML, <script>, eval, new Function, fetch, process.env, "use server", or external script/stylesheet URLs.
 - Add tracking, analytics, ads, crypto miners, hidden links, or content that is hateful, sexual, deceptive or illegal.

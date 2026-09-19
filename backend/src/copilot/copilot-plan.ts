@@ -62,6 +62,18 @@ const FORBIDDEN_CODE: { pattern: RegExp; reason: string }[] = [
 /** Lines the codemod engine owns. Their multiset must be identical before and after a Plinth AI edit. */
 const PROTECTED_LINE = /<Slot\b|<\/Slot>|plinth:[a-z0-9-]+:(start|end)|plinth:imports:(start|end)/;
 
+/**
+ * Installed integrations style themselves with inline styles that read the `--plinth-*` variables and nothing else —
+ * Tailwind classes in the portfolio never reach inside them. So the set of variables is a contract: a redesign that
+ * drops or renames one leaves every integration falling back to its hardcoded light-mode defaults, which on a dark
+ * site means invisible text. Restyling them is encouraged; removing them is not.
+ */
+const THEME_TOKEN = /--plinth-[a-z-]+(?=\s*:)/g;
+
+function themeTokens(source: string): Set<string> {
+  return new Set(source.match(THEME_TOKEN) ?? []);
+}
+
 export class CopilotEditError extends Error {
   constructor(
     readonly path: string,
@@ -130,6 +142,10 @@ export function applyEdits(edits: CopilotEdit[], read: (path: string) => string 
     const updated = current.slice(0, first) + edit.replace + current.slice(first + edit.search.length);
     if (protectedLines(updated) !== protectedLines(current)) {
       throw new CopilotEditError(path, "Slots and integrations are managed by Plinth and can't be edited directly.");
+    }
+    const dropped = [...themeTokens(current)].filter((token) => !themeTokens(updated).has(token));
+    if (dropped.length) {
+      throw new CopilotEditError(path, `${dropped.join(", ")} must keep a value — installed integrations read those to match your colours. Give them new values instead of removing them.`);
     }
     if (Buffer.byteLength(updated) > MAX_FILE_BYTES) throw new CopilotEditError(path, "The file would be too large.");
     next.set(path, updated);
