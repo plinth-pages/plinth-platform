@@ -7,6 +7,17 @@ export { addImport, removeImport, type Changed } from "./imports";
 export { insertElement, insertProvider, removeBlock, listBlocks, type Block } from "./slots";
 export { renderElement, renderProps, type PropValue } from "./props";
 export {
+  SLOTS_VERSION,
+  insertSlotAfter,
+  migrateSlots,
+  missingSlots,
+  needsSlotMigration,
+  readSlotsVersion,
+  slotDescription,
+  type SlotMigration,
+  type SlotName,
+} from "./migrate";
+export {
   PORTFOLIO_FILES,
   installIntegration,
   moveIntegration,

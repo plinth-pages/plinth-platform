@@ -1502,7 +1502,7 @@ packages:
       '@plinth-pages/core': ^0.1.0
 
   '@plinth-pages/core@file:vendor/plinth-pages-core-0.1.0.tgz':
-    resolution: {integrity: sha512-JUFG9NUFRE7A4QEFApl3aWeB/lKMLNiXPpaPPKF2Gmoc52ZjudsMJQr+mYdh7pbYItol5VESb4wkyXD7RTc29Q==, tarball: file:vendor/plinth-pages-core-0.1.0.tgz}
+    resolution: {integrity: sha512-ckyBgBxlYZy0QSm27ie7alK+h1SrdPrPbToSOuugMUIuQwZp6Ey6jFhp0ndYexdZqhH+ErUVZNLRbfnkL7Gm+A==, tarball: file:vendor/plinth-pages-core-0.1.0.tgz}
     version: 0.1.0
     peerDependencies:
       react: '>=18'
