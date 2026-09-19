@@ -76,13 +76,24 @@ describe("AiService routing", () => {
   });
 
   it("keeps Pro working on the shared pool alone, when no direct vendor key is set", async () => {
-    const agentrouter = scripted("agentrouter", [OK]);
-    const service = new AiService(config(), [agentrouter.provider]);
-    for (const id of ["claude-3-5-sonnet", "gpt-4o"]) {
+    const service = new AiService(config(), [scripted("agentrouter", [OK, OK]).provider]);
+    for (const id of ["claude-opus-5", "deepseek-v4"]) {
       expect(service.catalogue("pro").find((model) => model.id === id)).toMatchObject({ available: true, locked: false });
     }
-    // It is the last route, so it answers by falling back — never ahead of a direct key.
-    await expect(service.generate("claude-3-5-sonnet", build)).resolves.toMatchObject({ provider: "agentrouter", fellBack: true });
+    // Opus is the same model whichever route serves it, so the shared pool answers under its own id.
+    await expect(service.generate("claude-opus-5", build)).resolves.toMatchObject({ model: { id: "claude-opus-5" }, provider: "agentrouter" });
+    // Sonnet has no shared-pool route, so it reaches Opus as a fallback — and is recorded as Opus, not as itself.
+    await expect(service.generate("claude-3-5-sonnet", build)).resolves.toMatchObject({ model: { id: "claude-opus-5" }, fellBack: true });
+  });
+
+  it("never lets one model answer under another's name", () => {
+    for (const model of buildModels()) {
+      for (const route of model.alternates ?? []) {
+        // An alternate is the same model somewhere else. A different model belongs in fallbacks, where the reply is
+        // recorded against the model that actually wrote it.
+        expect(route.providerModel).toContain(model.providerModel.split("/").pop()!.replace(/-latest$/, ""));
+      }
+    }
   });
 });
 
