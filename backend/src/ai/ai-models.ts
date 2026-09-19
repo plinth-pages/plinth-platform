@@ -59,15 +59,30 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
     // Free: Groq first; NVIDIA's hosted Llama takes over when Groq is rate limited or down.
     { id: "free", label: GROQ_LABELS[groqModel] ?? groqModel, badge: "Free", provider: "groq", providerModel: groqModel, tier: "free", fallbacks: ["nvidia-llama-3.3-70b"], ...BUDGET.freeTier },
     { id: "nvidia-llama-3.3-70b", label: "Llama 3.3 70B", badge: "Free", provider: "nvidia", providerModel: "meta/llama-3.3-70b-instruct", tier: "free", hidden: true, fallbacks: [], ...BUDGET.openFree },
-    // Pro: direct vendor keys first, OpenRouter as the second route. The id stays "claude-3-5-sonnet" so earlier messages keep resolving.
-    { id: "claude-3-5-sonnet", label: "Claude Sonnet 5", badge: "Pro", provider: "anthropic", providerModel: "claude-sonnet-5", tier: "pro", fallbacks: ["gpt-4o", "free"], ...BUDGET.large },
+    // Pro: direct vendor keys first, then the resellers. The id stays "claude-3-5-sonnet" so earlier messages keep resolving.
+    // AgentRouter is last on purpose — it is a shared credit pool, so it is the route that keeps Pro answering when no
+    // direct key is set, not the one we'd choose first. Correct its model ids from AI_MODELS without a deploy.
+    {
+      id: "claude-3-5-sonnet",
+      label: "Claude Sonnet 5",
+      badge: "Pro",
+      provider: "anthropic",
+      providerModel: "claude-sonnet-5",
+      alternates: [{ provider: "agentrouter", providerModel: "claude-sonnet-4-5" }],
+      tier: "pro",
+      fallbacks: ["gpt-4o", "free"],
+      ...BUDGET.large,
+    },
     {
       id: "gpt-4o",
       label: "GPT-4o",
       badge: "Pro",
       provider: "openai",
       providerModel: "gpt-4o",
-      alternates: [{ provider: "openrouter", providerModel: "openai/gpt-4o" }],
+      alternates: [
+        { provider: "openrouter", providerModel: "openai/gpt-4o" },
+        { provider: "agentrouter", providerModel: "gpt-4o" },
+      ],
       tier: "pro",
       fallbacks: ["claude-3-5-sonnet", "free"],
       ...BUDGET.large,
