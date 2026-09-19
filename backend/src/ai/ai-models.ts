@@ -68,9 +68,10 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       badge: "Pro",
       provider: "anthropic",
       providerModel: "claude-sonnet-5",
-      alternates: [{ provider: "agentrouter", providerModel: "claude-sonnet-4-5" }],
       tier: "pro",
-      fallbacks: ["gpt-4o", "free"],
+      // Opus is a different model, so it is a fallback and not an alternate: the reply is then recorded as Opus
+      // answering, and the editor says so, instead of the history claiming Sonnet wrote something it didn't.
+      fallbacks: ["claude-opus-5", "gpt-4o", "free"],
       ...BUDGET.large,
     },
     {
@@ -79,16 +80,26 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       badge: "Pro",
       provider: "openai",
       providerModel: "gpt-4o",
-      alternates: [
-        { provider: "openrouter", providerModel: "openai/gpt-4o" },
-        { provider: "agentrouter", providerModel: "gpt-4o" },
-      ],
+      alternates: [{ provider: "openrouter", providerModel: "openai/gpt-4o" }],
+      tier: "pro",
+      fallbacks: ["claude-3-5-sonnet", "free"],
+      ...BUDGET.large,
+    },
+    { id: "deepseek-v4", label: "DeepSeek V4 Flash", badge: "Pro", provider: "agentrouter", providerModel: "deepseek-v4-flash", tier: "pro", fallbacks: ["free"], ...BUDGET.large },
+    // Opus through a direct key when there is one, through the shared pool otherwise — the same model either way,
+    // which is what makes this an alternate rather than a fallback.
+    {
+      id: "claude-opus-5",
+      label: "Claude Opus 5",
+      badge: "Pro",
+      provider: "anthropic",
+      providerModel: "claude-opus-5",
+      alternates: [{ provider: "agentrouter", providerModel: "claude-opus-5" }],
       tier: "pro",
       fallbacks: ["claude-3-5-sonnet", "free"],
       ...BUDGET.large,
     },
     // Configured but not offered today.
-    { id: "claude-opus-5", label: "Claude Opus 5", badge: "Pro", provider: "anthropic", providerModel: "claude-opus-5", tier: "pro", hidden: true, fallbacks: ["claude-3-5-sonnet", "free"], ...BUDGET.large },
     { id: "claude-3-haiku", label: "Claude 3 Haiku", badge: "Fast", provider: "bedrock", providerModel: "anthropic.claude-3-haiku-20240307-v1:0", tier: "free", hidden: true, fallbacks: [], ...BUDGET.large },
     { id: "gemini-flash", label: "Gemini Flash", badge: "Fast", provider: "gemini", providerModel: "gemini-flash-latest", tier: "free", hidden: true, fallbacks: [], ...BUDGET.large },
   ];
