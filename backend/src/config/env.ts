@@ -124,6 +124,8 @@ const envSchema = z
     SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
     /** The Groq model behind the free tier. */
     GROQ_MODEL: z.string().optional(),
+    /** NVIDIA's hosted model for the free tier's second chance. Hosted models are retired; this is how to move on. */
+    NVIDIA_MODEL: z.string().optional(),
     COPILOT_DAILY_MESSAGES: z.coerce.number().int().positive().default(40),
     // Credential vault (Phase 12): "id:base64-32-byte-key[,id:key…]". The active key seals new secrets; older keys
     // stay listed until every secret sealed with them has been re-saved.

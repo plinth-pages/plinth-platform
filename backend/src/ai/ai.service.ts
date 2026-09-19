@@ -5,14 +5,14 @@ import type { CopilotModelSummary } from "@plinth-pages/shared";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { buildModels, DEFAULT_MODEL_ID, routesOf, type ModelDefinition, type ModelRoute } from "./ai-models";
-import { AiProviderError, affordableTokens, promptCeilingChars, tooLarge, truncatedAnswer, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
+import { AiProviderError, affordableTokens, noToolCall, promptCeilingChars, retiredModel, tooLarge, truncatedAnswer, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
 import { AnthropicProvider } from "./anthropic.provider";
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
 import { GroqProvider } from "./groq.provider";
 import { OpenAIProvider } from "./openai.provider";
 
-export { buildModels, DEFAULT_GROQ_MODEL, DEFAULT_MODEL_ID, type ModelDefinition } from "./ai-models";
+export { buildModels, DEFAULT_GROQ_MODEL, DEFAULT_NVIDIA_MODEL, DEFAULT_MODEL_ID, type ModelDefinition } from "./ai-models";
 
 /** Lets tests swap vendors for a scripted provider. */
 export const AI_PROVIDERS = Symbol("AI_PROVIDERS");
@@ -96,7 +96,11 @@ export class AiService {
     @Optional() private readonly alerts?: Alerts,
   ) {
     this.providers = new Map((providers ?? createProviders(config)).map((provider) => [provider.id, provider]));
-    this.models = buildModels({ groqModel: config.get("GROQ_MODEL", { infer: true }), overrides: config.get("AI_MODELS", { infer: true }) });
+    this.models = buildModels({
+      groqModel: config.get("GROQ_MODEL", { infer: true }),
+      nvidiaModel: config.get("NVIDIA_MODEL", { infer: true }),
+      overrides: config.get("AI_MODELS", { infer: true }),
+    });
   }
 
   findModel(id: string): ModelDefinition | undefined {
@@ -174,9 +178,15 @@ export class AiService {
           attempts.push(`${model.id} via ${route.provider}: ${error.code ?? "error"} ${error.message.slice(0, 80)}`);
           this.logger.warn(`${model.id} via ${route.provider} failed (${error.code ?? "error"}): ${error.message.slice(0, 200)}`);
           // Out of credit (402) or throttled (429) needs a person to act, even if a fallback answered this request.
-          if (error.code === "402" || error.code === "429") {
+          // A retired model is permanent: nothing recovers until someone points it elsewhere, so it is worth waking
+          // a person for, the same as running out of credit.
+          if (error.code === "402" || error.code === "429" || retiredModel(error)) {
             this.alerts?.send({
-              title: error.code === "402" ? "AI provider out of credit" : "AI provider is rate limiting us",
+              title: retiredModel(error)
+                ? "A model has been retired and needs replacing"
+                : error.code === "402"
+                  ? "AI provider out of credit"
+                  : "AI provider is rate limiting us",
               error,
               level: "warning",
               dedupeKey: `ai:${route.provider}:${error.code}`,
@@ -205,6 +215,9 @@ export class AiService {
       // A cut-off answer means the model was given more to change than its reply could describe. Half the context is
       // half the site, so it attempts a smaller change that fits — better than telling someone to try again later.
       if (truncatedAnswer(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
+      // Answering in prose when a tool call was required is the model missing, not refusing. Sampling again lands it
+      // more often than not, and one extra call is cheaper than dropping the person to a weaker model.
+      if (noToolCall(error)) return once(model.contextChars, maxTokens);
       const affordable = affordableTokens(error);
       if (affordable && affordable < maxTokens) return once(model.contextChars, affordable);
       throw error;
