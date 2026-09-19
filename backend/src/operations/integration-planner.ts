@@ -1,8 +1,10 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
   SLOT_SEARCH_DIRS,
   couldHoldSlots,
+  migrateSlots,
+  needsSlotMigration,
   CodemodError,
   installIntegration,
   moveIntegration,
@@ -76,6 +78,8 @@ const MAX_SLOT_CANDIDATES = 200;
  */
 @Injectable()
 export class IntegrationPlanner {
+  private readonly logger = new Logger(IntegrationPlanner.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(SANDBOX_DRIVER) private readonly driver: SandboxDriver,
@@ -88,17 +92,27 @@ export class IntegrationPlanner {
     // Slots move: a redesign can put one in a component it wrote, so every file that could hold one is read and
     // handed to the codemod. Without this an integration would only ever be found in the two template files.
     const extra = await this.slotCandidates(externalId, read);
-    const files = { ...extra, ...base } as PortfolioFiles;
+    let files = { ...extra, ...base } as PortfolioFiles;
     const packageJson = await read("package.json");
+
+    // Generated repositories never re-sync, so a portfolio made before a slot existed simply does not have it, and
+    // every integration needing that slot would be unavailable to it forever. Add what it is missing first, in the
+    // same worktree, so the install that follows is planned against a portfolio that has somewhere to put it.
+    const migration = needsSlotMigration(files) ? migrateSlots(files) : null;
+    if (migration?.added.length) {
+      files = { ...files, ...migration.files } as PortfolioFiles;
+      this.logger.log(`Portfolio ${operation.portfolioId} gained ${migration.added.join(", ")} (slots v${migration.from} → v${migration.to})`);
+    }
+    const migrated = Object.entries(migration?.files ?? {}).map(([path, content]) => ({ path, content }));
 
     try {
       switch (operation.type) {
         case "install":
-          return await this.install(operation, files, packageJson, externalId);
+          return this.withMigration(await this.install(operation, files, packageJson, externalId), migrated);
         case "uninstall":
-          return await this.uninstall(operation, files, packageJson);
+          return this.withMigration(await this.uninstall(operation, files, packageJson), migrated);
         case "move":
-          return await this.move(operation, files);
+          return this.withMigration(await this.move(operation, files), migrated);
         default:
           throw new Error(`Not an integration operation: ${operation.type}`);
       }
@@ -109,6 +123,13 @@ export class IntegrationPlanner {
       if (error instanceof Unavailable) return { kind: "reject", failures: [{ source: "install", message: error.message }] };
       throw error;
     }
+  }
+
+  /** Folds the slots a portfolio just gained into the plan, ahead of the change that needed them. */
+  private withMigration(plan: Plan, migrated: FileChange[]): Plan {
+    if (!migrated.length || plan.kind !== "change") return plan;
+    const own = new Set(plan.files.map((file) => file.path));
+    return { ...plan, files: [...migrated.filter((file) => !own.has(file.path)), ...plan.files] };
   }
 
   /** Every file under the slot search directories that could declare a slot, read from the staging worktree. */

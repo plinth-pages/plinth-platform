@@ -485,7 +485,9 @@ describe("integrations", () => {
     expect(await installedRows(portfolio.id)).toEqual([]);
   });
 
-  it("reports a broken slot contract as a codemod rejection", async () => {
+  it("adds a slot the portfolio doesn't have, then installs into it", async () => {
+    // What a portfolio generated before the slot existed looks like. Without this the integration could never be
+    // installed there at all, and plinth check already treats a portfolio missing a slot as invalid.
     const portfolio = await portfolioWithSandbox();
     const tree = templateTree();
     tree.set("app/page.tsx", tree.get("app/page.tsx")!.replace('<Slot name="afterProjects"></Slot>', ""));
@@ -495,9 +497,12 @@ describe("integrations", () => {
     await runner.drain(portfolio.id);
 
     const done = await reload(op.id);
-    expect(done.status).toBe("rejected");
-    expect(failuresOf(done)).toEqual([expect.objectContaining({ source: "codemod", code: "SLOT_NOT_FOUND" })]);
-    expect(sandbox.liveHistory).toHaveLength(1);
+    expect(done.status).toBe("applied");
+    const page = sandbox.live.get("app/page.tsx")!;
+    expect(page).toContain('<Slot name="afterProjects">');
+    expect(page).toContain("plinth:github-stats:start");
+    // Put back next to the slot it belongs after, not appended to the end of the page.
+    expect(page.indexOf('name="beforeProjects"')).toBeLessThan(page.indexOf('name="afterProjects"'));
   });
 
   it("reverts an install whose page no longer renders, and doesn't record it as installed", async () => {
