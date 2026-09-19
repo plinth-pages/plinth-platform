@@ -261,7 +261,7 @@ const tokens = { installationToken: async () => "ghs_test", botIdentity: async (
 
 let sandbox: SimulatedSandbox;
 let runner: OperationRunner;
-let events: { operationId: string; status: string }[];
+let events: { operationId: string; status: string; step?: string }[];
 let scheduledPushes: string[];
 let hosting: { configured: boolean; prepared: string[]; failWith: Error | null; prepare(portfolio: Portfolio): Promise<void> };
 let tracked: string[];
@@ -342,7 +342,10 @@ beforeEach(() => {
   secretsByPortfolio = {};
   modelAnswer = null;
   modelRequests = [];
-  const publisher = { publish: async (_: string, event: { type: string; operationId?: string; status: string }) => void events.push({ operationId: event.operationId!, status: event.status }) };
+  const publisher = {
+    publish: async (_: string, event: { type: string; operationId?: string; status: string; step?: string }) =>
+      void events.push({ operationId: event.operationId!, status: event.status, step: event.step }),
+  };
   runner = new OperationRunner(
     prisma,
     sandbox,
@@ -387,7 +390,9 @@ describe("a valid edit", () => {
     expect(sandbox.live.get("content/profile.ts")).toContain("Asha Menon");
     expect(sandbox.remote).toBe("c1");
     expect(sandbox.steps).toEqual(["stage", "files", "prepare", "check", "apply", "push", "health"]);
-    expect(events.map((e) => e.status)).toEqual(["staging", "checking", "applying", "applied"]);
+    // A step says what the run is doing; only these four are changes to what it IS.
+    expect(events.filter((e) => !e.step).map((e) => e.status)).toEqual(["staging", "checking", "applying", "applied"]);
+    expect(events.filter((e) => e.step).map((e) => e.step)).toEqual(["reading", "writing", "preparing", "checking", "applying", "loading"]);
   });
 });
 

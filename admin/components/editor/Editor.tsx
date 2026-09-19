@@ -180,7 +180,7 @@ function EditorShell({ portfolio }: { portfolio: PortfolioSummary }) {
           panel === "integrations" ? "grid-cols-[minmax(0,1fr)_340px] lg:grid-cols-[340px_minmax(0,1fr)_360px]" : "grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[340px_minmax(0,1fr)_320px]"
         }`}
       >
-        <CopilotChat portfolioId={portfolio.id} operations={operations.operations} live={phase === "live"} initialDraft={initialPrompt} />
+        <CopilotChat portfolioId={portfolio.id} operations={operations.operations} live={phase === "live"} step={operations.step} initialDraft={initialPrompt} />
 
         <main className="flex min-h-0 flex-col">
           {isAdmin ? (

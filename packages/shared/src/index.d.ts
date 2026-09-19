@@ -150,10 +150,17 @@ export interface PreviewResponse {
   preview: PreviewSummary;
 }
 
+/**
+ * What an operation is doing right now, in words a person can read. Finer than `status`, which only changes four
+ * times: this is what the editor shows instead of leaving someone watching a spinner. It is carried on the event
+ * only — never stored — so the REST endpoints stay the record of what happened.
+ */
+export type OperationStep = "reading" | "writing" | "preparing" | "checking" | "repairing" | "applying" | "loading" | "publishing";
+
 /** Pushed to the IDE over server-sent events. Events are hints to refetch; the REST endpoints stay authoritative. */
 export type PortfolioEvent =
   | { type: "sandbox"; status: PreviewStatus; at: string }
-  | { type: "operation"; operationId: string; status: OperationStatus; at: string }
+  | { type: "operation"; operationId: string; status: OperationStatus; at: string; step?: OperationStep }
   | { type: "deployment"; deploymentId: string; status: DeploymentStatus; at: string };
 
 export type WorkspaceFileKind = "file" | "binary" | "too_large";

@@ -1,6 +1,6 @@
 "use client";
 
-import type { CopilotMessageSummary, CopilotModelSummary, CopilotUsage, OperationStatus, OperationSummary } from "@plinth-pages/shared";
+import type { CopilotMessageSummary, CopilotModelSummary, CopilotUsage, OperationStatus, OperationStep, OperationSummary } from "@plinth-pages/shared";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LockIcon, useToast } from "@/components/ui/Toast";
@@ -10,6 +10,21 @@ const ACTIVE: OperationStatus[] = ["queued", "staging", "checking", "applying"];
 const PREMIUM = "This model is part of Pro. Upgrade on the Plan & billing page.";
 
 const SUGGESTIONS = ["Make it dark", "Show my best repos", "Add my work experience: ", "Rewrite my headline to sound more confident"];
+
+/**
+ * What the run is doing right now, as the worker reports it. Finer than THINKING, which only has four states to say
+ * it with, and the difference between a person waiting and a person watching. No file paths, no provider names.
+ */
+const STEPS: Record<OperationStep, string> = {
+  reading: "Reading your site…",
+  writing: "Writing the changes…",
+  preparing: "Getting the files ready…",
+  checking: "Checking types and layout…",
+  repairing: "Fixing a loose end…",
+  applying: "Applying it to your preview…",
+  loading: "Loading the page…",
+  publishing: "Publishing…",
+};
 
 const THINKING: Partial<Record<OperationStatus, string>> = {
   queued: "Getting ready…",
@@ -30,7 +45,7 @@ function areaName(path: string) {
  * Plinth AI: describe a change, and it's made in your preview after it passes the same checks as every other
  * change. Replies arrive through the operation's events, so the chat never blocks on the model.
  */
-export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }: { portfolioId: string; operations: OperationSummary[]; live: boolean; initialDraft?: string }) {
+export function CopilotChat({ portfolioId, operations, live, step = null, initialDraft = "" }: { portfolioId: string; operations: OperationSummary[]; live: boolean; step?: OperationStep | null; initialDraft?: string }) {
   const toast = useToast();
   const [messages, setMessages] = useState<CopilotMessageSummary[] | null>(null);
   const [usage, setUsage] = useState<CopilotUsage | null>(null);
@@ -148,7 +163,7 @@ export function CopilotChat({ portfolioId, operations, live, initialDraft = "" }
                     <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-brand-500 motion-reduce:animate-none" style={{ animationDelay: `${i * 120}ms` }} />
                   ))}
                 </span>
-                {THINKING[activeStatus ?? "queued"] ?? "Working…"}
+                {(step && STEPS[step]) ?? THINKING[activeStatus ?? "queued"] ?? "Working…"}
               </li>
             ) : null}
           </ol>

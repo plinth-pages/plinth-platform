@@ -1,6 +1,6 @@
 "use client";
 
-import type { OperationStatus, OperationSummary, OperationTimings } from "@plinth-pages/shared";
+import type { OperationStatus, OperationStep, OperationSummary, OperationTimings } from "@plinth-pages/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { usePortfolioEvents } from "./portfolioEvents";
@@ -28,6 +28,7 @@ export function useOperations(portfolioId: string) {
   const [settling, setSettling] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [revision, setRevision] = useState(0);
+  const [step, setStep] = useState<{ operationId: string; step: OperationStep } | null>(null);
   const seen = useRef(new Map<string, OperationStatus>());
   const loaded = useRef(false);
 
@@ -64,7 +65,15 @@ export function useOperations(portfolioId: string) {
   }, [refresh]);
 
   usePortfolioEvents(portfolioId, (event) => {
-    if (event.type === "operation") void refresh();
+    if (event.type !== "operation") return;
+    // A step is a label for the operation already on screen, not a change to what it is — refetching on one would
+    // poll the API every few seconds for nothing.
+    if (event.step) {
+      setStep({ operationId: event.operationId, step: event.step });
+      return;
+    }
+    setStep((current) => (current?.operationId === event.operationId ? null : current));
+    void refresh();
   });
 
   const running = operations.filter((operation) => ACTIVE_STATUSES.includes(operation.status));
@@ -83,6 +92,8 @@ export function useOperations(portfolioId: string) {
     active,
     /** True while an operation runs, and briefly after, so the preview is never seen mid-change. */
     working: Boolean(active) || settling,
+    /** What the running operation is doing right now, finer than its status. Null until the first step arrives. */
+    step: step && running.some((operation) => operation.id === step.operationId) ? step.step : null,
     outcome,
     dismissOutcome: () => setOutcome(null),
     /** Increments when an operation finishes; views that show code refetch on it. */
