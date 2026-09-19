@@ -67,13 +67,27 @@ export class ApiError extends Error {
   }
 }
 
+/** `status` 0: the API was never reached. A dead host makes fetch throw, which is not an HTTP failure. */
+export const UNREACHABLE = 0;
+
+export function isUnreachable(error: unknown): boolean {
+  return error instanceof ApiError && error.status === UNREACHABLE;
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, {
-    ...init,
-    headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers },
-    // The session is an httpOnly cookie set by the backend; the browser attaches it.
-    credentials: "include",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      ...init,
+      headers: { ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers },
+      // The session is an httpOnly cookie set by the backend; the browser attaches it.
+      credentials: "include",
+    });
+  } catch {
+    // No host, no DNS, no network: every caller gets one recognisable error instead of a raw TypeError, so the app
+    // can say the build service is resting rather than showing a page that looks broken.
+    throw new ApiError(UNREACHABLE, "Plinth's build service can't be reached right now.");
+  }
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
@@ -90,6 +104,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
+  /**
+   * Is anything listening? Used to tell "still loading" apart from "this deployment is over". Deliberately not
+   * /health, which queries the database: this runs on public page views, and the pooler has few connections to give.
+   */
+  reachable: () => request<{ github: boolean }>("/auth/methods"),
   signInUrl: `${API_URL}/auth/github`,
   githubAppSetupUrl: `${API_URL}/dev/github-app/new`,
   me: () => request<MeResponse>("/auth/me"),

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AuthForms } from "@/components/AuthForms";
 import { RedirectIfSignedIn } from "@/components/RedirectIfSignedIn";
+import { RestingNotice } from "@/components/RestingNotice";
 import { BrandMark } from "@/components/ui/Brand";
 import { api } from "@/lib/api";
 
@@ -31,6 +32,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         </Link>
 
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col justify-center py-12">
+          <RestingNotice className="mt-0 mb-6" />
           <AuthForms githubUrl={api.signInUrl} initialMode={mode === "signin" ? "signin" : "signup"} notice={auth_error} />
           <p className="mt-10 text-center text-xs leading-relaxed text-stone-400">
             <Link href="/terms" className="hover:text-stone-600 dark:hover:text-stone-200">Terms</Link> ·{" "}

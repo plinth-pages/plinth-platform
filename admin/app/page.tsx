@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { RestingNotice } from "@/components/RestingNotice";
 import { Check } from "@/components/landing/Diff";
 import { ExampleWork } from "@/components/landing/ExampleWork";
 import { ExampleSites } from "@/components/landing/ExampleSites";
@@ -61,6 +62,7 @@ export default function LandingPage() {
               Under the hood
             </a>
           </div>
+          <RestingNotice />
           <p className="mt-4 text-[13px] text-stone-500">Free plan · No card required</p>
 
           <div className="mt-16 md:mt-20">
