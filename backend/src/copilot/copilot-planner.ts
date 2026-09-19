@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from "@nestjs/common";
 import type { CopilotChanges, OperationFailure } from "@plinth-pages/shared";
 import type { Operation, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { AiProviderError, tooLarge } from "../ai/ai-provider";
+import { AiProviderError, tooLarge, truncatedAnswer } from "../ai/ai-provider";
 import { AiService, type RequestBuilder } from "../ai/ai.service";
 import { CatalogueService } from "../catalogue/catalogue.service";
 import type { FollowUp, Plan } from "../operations/integration-planner";
@@ -103,9 +103,11 @@ export class CopilotPlanner {
     } catch (error) {
       const text = tooLarge(error)
         ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro."
-        : error instanceof AiProviderError && error.retryable
-          ? "Plinth AI is busy right now. Please try again in a moment."
-          : "Plinth AI isn't available right now. Please try again later.";
+        : truncatedAnswer(error)
+          ? "That's a bigger change than this model can write in one go. Try asking for one part at a time — the look first, then the sections — or switch to a larger model on Pro."
+          : error instanceof AiProviderError && error.retryable
+            ? "Plinth AI is busy right now. Please try again in a moment."
+            : "Plinth AI isn't available right now. Please try again later.";
       this.logger.warn(`Plinth AI call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
       this.alerts?.send({
         title: "Plinth AI couldn't answer a request",
@@ -115,6 +117,8 @@ export class CopilotPlanner {
           provider: error instanceof AiProviderError ? error.provider : "unknown",
           code: error instanceof AiProviderError ? error.code : null,
           model: input.model,
+          // Which routes were tried and why each refused: without it the alert names only the last fallback.
+          tried: error instanceof AiProviderError && error.attempts.length ? error.attempts.join(" | ").slice(0, 500) : null,
           user: message.userId,
           portfolio: operation.portfolioId,
           operation: operation.id,

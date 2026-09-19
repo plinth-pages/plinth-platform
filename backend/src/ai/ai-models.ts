@@ -85,7 +85,10 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       fallbacks: ["claude-3-5-sonnet", "free"],
       ...BUDGET.large,
     },
-    { id: "deepseek-v4", label: "DeepSeek V4 Flash", badge: "Pro", provider: "agentrouter", providerModel: "deepseek-v4-flash", tier: "pro", fallbacks: ["free"], ...BUDGET.large },
+    { id: "deepseek-v4", label: "DeepSeek V4 Flash", badge: "Pro", provider: "agentrouter", providerModel: "deepseek-v4-flash", tier: "pro", fallbacks: ["claude-opus-5", "free"], ...BUDGET.large },
+    // Served only by the shared pool, so they answer under their own names and fall back to a model that has a
+    // direct route. Neither has been seen to answer yet: the account lists them, nothing here has called them.
+    { id: "gpt-5-6-sol", label: "GPT-5.6 Sol", badge: "Pro", provider: "agentrouter", providerModel: "gpt-5.6-sol", tier: "pro", fallbacks: ["gpt-4o", "free"], ...BUDGET.large },
     // Opus through a direct key when there is one, through the shared pool otherwise — the same model either way,
     // which is what makes this an alternate rather than a fallback.
     {
@@ -97,6 +100,17 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       alternates: [{ provider: "agentrouter", providerModel: "claude-opus-5" }],
       tier: "pro",
       fallbacks: ["claude-3-5-sonnet", "free"],
+      ...BUDGET.large,
+    },
+    {
+      id: "claude-opus-4-8",
+      label: "Claude Opus 4.8",
+      badge: "Pro",
+      provider: "anthropic",
+      providerModel: "claude-opus-4-8",
+      alternates: [{ provider: "agentrouter", providerModel: "claude-opus-4-8" }],
+      tier: "pro",
+      fallbacks: ["claude-opus-5", "claude-3-5-sonnet", "free"],
       ...BUDGET.large,
     },
     // Configured but not offered today.

@@ -64,9 +64,24 @@ export class AiProviderError extends Error {
     super(message);
     this.name = "AiProviderError";
   }
+
+  /** Every route tried before this failure, in order. Set by the service; the alert reports it. */
+  attempts: string[] = [];
 }
 
 /** The vendor said the request was over its size limit for a single call. */
+/**
+ * The model ran out of room mid-answer, so its tool call is cut off and won't parse. Providers report this as a 400
+ * about the arguments rather than as a length error, which made it look like a broken request instead of one asking
+ * for more than the reply budget could hold. Asking for less is the fix, not giving up.
+ */
+export function truncatedAnswer(error: unknown): boolean {
+  return (
+    error instanceof AiProviderError &&
+    /failed to parse tool call|tool call arguments|unterminated string|unexpected end of (json|input)/i.test(error.message)
+  );
+}
+
 export function tooLarge(error: unknown): boolean {
   return error instanceof AiProviderError && (error.code === "413" || /too large|context length|maximum context|reduce your message/i.test(error.message));
 }

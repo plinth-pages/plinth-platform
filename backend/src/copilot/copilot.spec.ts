@@ -211,7 +211,9 @@ describe("model catalogue", () => {
       { id: "claude-3-5-sonnet", label: "Claude Sonnet 5", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
       { id: "gpt-4o", label: "GPT-4o", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
       { id: "deepseek-v4", label: "DeepSeek V4 Flash", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
+      { id: "gpt-5-6-sol", label: "GPT-5.6 Sol", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
       { id: "claude-opus-5", label: "Claude Opus 5", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
+      { id: "claude-opus-4-8", label: "Claude Opus 4.8", badge: "Pro", tier: "pro", locked: true, available: false, default: false },
     ]);
     expect(buildModels().find((model) => model.id === "claude-3-haiku")).toMatchObject({ provider: "bedrock", providerModel: "anthropic.claude-3-haiku-20240307-v1:0", hidden: true });
     expect(buildModels({ groqModel: "llama3-70b-8192" })[0]).toMatchObject({ label: "Llama 3 70B", provider: "groq", providerModel: "llama3-70b-8192" });

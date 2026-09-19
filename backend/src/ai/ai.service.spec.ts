@@ -1,5 +1,5 @@
 import { applyModelOverrides, buildModels } from "./ai-models";
-import { AiProviderError, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
+import { AiProviderError, tooLarge, truncatedAnswer, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
 import { AiService, type RequestBuilder } from "./ai.service";
 
 const OK: AiResult = { output: { refused: true, reply: "ok" }, text: "", usage: { inputTokens: 10, outputTokens: 5 }, stopReason: "tool_use" };
@@ -86,6 +86,42 @@ describe("AiService routing", () => {
     await expect(service.generate("claude-3-5-sonnet", build)).resolves.toMatchObject({ model: { id: "claude-opus-5" }, fellBack: true });
   });
 
+  it("follows fallbacks all the way down, so a Pro request reaches the larger free model", async () => {
+    // What happened in production: Opus had no working route, the chain stopped at the smallest free model, and
+    // the free model's own fallback - bigger context, bigger reply - was never tried.
+    const fail = new AiProviderError("groq", "Failed to parse tool call arguments as JSON", false, "400");
+    const groq = scripted("groq", [fail, fail]);
+    const nvidia = scripted("nvidia", [OK]);
+    const service = new AiService(config(), [groq.provider, nvidia.provider]);
+    await expect(service.generate("claude-opus-5", build)).resolves.toMatchObject({ model: { id: "nvidia-llama-3.3-70b" }, fellBack: true });
+  });
+
+  it("reports every route it tried, not just the last one", async () => {
+    // Twice: a cut-off answer is retried with less context before the route is given up on.
+    const cut = () => new AiProviderError("groq", "Failed to parse tool call arguments as JSON", false, "400");
+    const groq = scripted("groq", [cut(), cut()]);
+    const service = new AiService(config(), [groq.provider]);
+    const error = await service.generate("claude-opus-5", build).catch((e) => e);
+    expect(error).toBeInstanceOf(AiProviderError);
+    // The question an alert has to answer is why the model the user picked did not answer.
+    expect(error.attempts.join(" ")).toContain("claude-opus-5 via anthropic: no key");
+    expect(error.attempts.join(" ")).toContain("claude-opus-5 via agentrouter: no key");
+    expect(error.attempts.some((a: string) => a.includes("free via groq") && a.includes("400"))).toBe(true);
+  });
+
+  it("asks for less when a reply was cut off mid-answer, instead of failing the request", async () => {
+    const cut = new AiProviderError("groq", "Failed to parse tool call arguments as JSON", false, "400");
+    expect(truncatedAnswer(cut)).toBe(true);
+    expect(tooLarge(cut)).toBe(false);
+
+    const groq = scripted("groq", [cut, OK]);
+    const service = new AiService(config(), [groq.provider]);
+    await expect(service.generate("free", build)).resolves.toMatchObject({ model: { id: "free" } });
+    // The second attempt was made with less of the site, so the model writes a change small enough to finish.
+    const chars = groq.calls.map((call) => Number(call.system.replace("context ", "")));
+    expect(chars).toHaveLength(2);
+    expect(chars[1]).toBeLessThan(chars[0]);
+  });
   it("never lets one model answer under another's name", () => {
     for (const model of buildModels()) {
       for (const route of model.alternates ?? []) {

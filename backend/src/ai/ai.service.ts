@@ -5,7 +5,7 @@ import type { CopilotModelSummary } from "@plinth-pages/shared";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { buildModels, DEFAULT_MODEL_ID, routesOf, type ModelDefinition, type ModelRoute } from "./ai-models";
-import { AiProviderError, affordableTokens, tooLarge, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
+import { AiProviderError, affordableTokens, tooLarge, truncatedAnswer, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
 import { AnthropicProvider } from "./anthropic.provider";
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
@@ -19,6 +19,9 @@ export const AI_PROVIDERS = Symbol("AI_PROVIDERS");
 
 /** At most this many model/route calls for one request, so a bad day at every vendor can't stall a request for minutes. */
 const MAX_CALLS = 5;
+
+/** A cycle in `fallbacks` is a configuration mistake, not a reason to loop; this bounds the walk regardless. */
+const MAX_CHAIN = 8;
 
 const extraProvidersSchema = z.array(
   z.object({
@@ -125,18 +128,31 @@ export class AiService {
     const builder: RequestBuilder = typeof build === "function" ? build : () => build;
     const fixedMaxTokens = typeof build === "function" ? undefined : build.maxTokens;
 
-    const chain = [requested];
-    for (const id of requested.fallbacks ?? []) {
-      const model = this.findModel(id);
-      if (model && !chain.includes(model)) chain.push(model);
+    // Fallbacks are followed all the way down, not one step. A Pro request that ends up on the free model must still
+    // reach that model's own fallback: stopping a step short is how a request died on the smallest model in the list
+    // while a larger free one sat unused behind it.
+    const chain: ModelDefinition[] = [];
+    const queue = [requested];
+    while (queue.length > 0 && chain.length < MAX_CHAIN) {
+      const model = queue.shift()!;
+      if (chain.includes(model)) continue;
+      chain.push(model);
+      for (const id of model.fallbacks ?? []) {
+        const next = this.findModel(id);
+        if (next && !chain.includes(next)) queue.push(next);
+      }
     }
 
     let calls = 0;
     let lastError: unknown = null;
+    // Every route that refused, in order. Without it an alert names only the last provider tried, which is the
+    // smallest fallback — and says nothing about why the model the user actually picked didn't answer.
+    const attempts: string[] = [];
     for (const [modelIndex, model] of chain.entries()) {
       for (const [routeIndex, route] of routesOf(model).entries()) {
         const provider = this.providers.get(route.provider);
         if (!provider?.configured()) {
+          attempts.push(`${model.id} via ${route.provider}: no key`);
           lastError ??= new AiProviderError(route.provider, `${model.label} isn't available right now.`, false, "NOT_CONFIGURED");
           continue;
         }
@@ -150,6 +166,7 @@ export class AiService {
         } catch (error) {
           if (!(error instanceof AiProviderError)) throw error;
           lastError = error;
+          attempts.push(`${model.id} via ${route.provider}: ${error.code ?? "error"} ${error.message.slice(0, 80)}`);
           this.logger.warn(`${model.id} via ${route.provider} failed (${error.code ?? "error"}): ${error.message.slice(0, 200)}`);
           // Out of credit (402) or throttled (429) needs a person to act, even if a fallback answered this request.
           if (error.code === "402" || error.code === "429") {
@@ -164,7 +181,9 @@ export class AiService {
         }
       }
     }
-    throw lastError ?? new AiProviderError("plinth", `${requested.label} isn't available right now.`, false, "NOT_CONFIGURED");
+    const failure = lastError ?? new AiProviderError("plinth", `${requested.label} isn't available right now.`, false, "NOT_CONFIGURED");
+    if (failure instanceof AiProviderError) failure.attempts = attempts;
+    throw failure;
   }
 
   private async call(provider: AiProvider, route: ModelRoute, model: ModelDefinition, build: RequestBuilder, fixedMaxTokens?: number): Promise<AiResult> {
@@ -174,6 +193,9 @@ export class AiService {
       return await once(model.contextChars, maxTokens);
     } catch (error) {
       if (tooLarge(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
+      // A cut-off answer means the model was given more to change than its reply could describe. Half the context is
+      // half the site, so it attempts a smaller change that fits — better than telling someone to try again later.
+      if (truncatedAnswer(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
       const affordable = affordableTokens(error);
       if (affordable && affordable < maxTokens) return once(model.contextChars, affordable);
       throw error;
