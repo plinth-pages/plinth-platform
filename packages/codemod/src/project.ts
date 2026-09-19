@@ -1,12 +1,18 @@
-import { SLOTS, type SlotDefinition, type SlotName } from "@plinth-pages/core/slots";
+import { SLOTS, findSlotFile, type SlotDefinition, type SlotName } from "@plinth-pages/core/slots";
 import { addImport, removeImport } from "./imports";
 import { renderElement, type PropValue } from "./props";
 import { CodemodError } from "./source";
 import { insertElement, insertProvider, removeBlock } from "./slots";
 
+/** Always read and always written back. Slots may live anywhere else too — see `couldHoldSlots`. */
 export const PORTFOLIO_FILES = ["app/layout.tsx", "app/page.tsx", "plinth.json"] as const;
 export type PortfolioFile = (typeof PORTFOLIO_FILES)[number];
-export type PortfolioFiles = Record<PortfolioFile, string>;
+
+/**
+ * A portfolio's editable sources, keyed by path. The template's own files are always present; a redesign may add
+ * components that hold slots, and those are passed in alongside so an integration can still find its anchor.
+ */
+export type PortfolioFiles = Record<PortfolioFile, string> & Record<string, string>;
 
 export interface Placement {
   id: string;
@@ -31,8 +37,8 @@ export type Outcome = "installed" | "already_installed" | "uninstalled" | "not_i
 
 export interface ProjectResult {
   files: PortfolioFiles;
-  /** Files whose content differs from the input. */
-  changed: PortfolioFile[];
+  /** Paths whose content differs from the input. */
+  changed: string[];
   outcome: Outcome;
 }
 
@@ -60,7 +66,15 @@ function writePlinthJson(json: PlinthJson): string {
   return `${JSON.stringify({ ...json, integrations }, null, 2)}\n`;
 }
 
-const fileOf = (slot: SlotName) => SLOTS[slot].file as "app/layout.tsx" | "app/page.tsx";
+/**
+ * Which file holds this slot right now. Plinth AI may move a slot into a component while redesigning, so this looks
+ * rather than assumes; the template's own location is only the fallback for a slot nothing declares.
+ */
+function fileOf(files: PortfolioFiles, slot: SlotName): string {
+  // When nothing declares the slot, fall through to where the template keeps it: the edit then fails from the parser
+  // or the slot finder, which say precisely what is wrong with that file rather than only that a slot went missing.
+  return findSlotFile(files, slot) ?? SLOTS[slot].file;
+}
 
 function assertSlotKind(slot: SlotName, kind: Placement["kind"]) {
   const wraps = Boolean((SLOTS[slot] as SlotDefinition).wraps);
@@ -71,7 +85,7 @@ function assertSlotKind(slot: SlotName, kind: Placement["kind"]) {
 
 function place(files: PortfolioFiles, placement: Placement): PortfolioFiles {
   assertSlotKind(placement.slot, placement.kind);
-  const file = fileOf(placement.slot);
+  const file = fileOf(files, placement.slot);
   let source = addImport(files[file], { pkg: placement.package, named: placement.component }, file).source;
   source =
     placement.kind === "provider"
@@ -81,17 +95,19 @@ function place(files: PortfolioFiles, placement: Placement): PortfolioFiles {
 }
 
 function unplace(files: PortfolioFiles, entry: InstalledEntry, remaining: InstalledEntry[]): PortfolioFiles {
-  const file = fileOf(entry.slot);
+  const file = fileOf(files, entry.slot);
   let source = removeBlock(files[file], { slot: entry.slot, integrationId: entry.id }, file).source;
   // Keep the import while another integration in this file still uses the package.
-  if (!remaining.some((other) => other.package === entry.package && fileOf(other.slot) === file)) {
+  if (!remaining.some((other) => other.package === entry.package && fileOf(files, other.slot) === file)) {
     source = removeImport(source, { pkg: entry.package }, file).source;
   }
   return { ...files, [file]: source };
 }
 
 function result(before: PortfolioFiles, after: PortfolioFiles, outcome: Outcome): ProjectResult {
-  return { files: after, changed: PORTFOLIO_FILES.filter((file) => before[file] !== after[file]), outcome };
+  // Any path may have changed now, not only the three the template ships.
+  const paths = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  return { files: after, changed: paths.filter((file) => before[file] !== after[file]), outcome };
 }
 
 /**
