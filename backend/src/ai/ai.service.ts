@@ -5,7 +5,7 @@ import type { CopilotModelSummary } from "@plinth-pages/shared";
 import { z } from "zod";
 import type { Env } from "../config/env";
 import { buildModels, DEFAULT_MODEL_ID, routesOf, type ModelDefinition, type ModelRoute } from "./ai-models";
-import { AiProviderError, affordableTokens, tooLarge, truncatedAnswer, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
+import { AiProviderError, affordableTokens, promptCeilingChars, tooLarge, truncatedAnswer, type AiProvider, type AiProviderId, type AiRequest, type AiResult } from "./ai-provider";
 import { AnthropicProvider } from "./anthropic.provider";
 import { BedrockProvider } from "./bedrock.provider";
 import { GeminiProvider } from "./gemini.provider";
@@ -197,7 +197,11 @@ export class AiService {
     try {
       return await once(model.contextChars, maxTokens);
     } catch (error) {
-      if (tooLarge(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
+      if (tooLarge(error)) {
+        // When the service named its ceiling, fit the retry to it; halving a 120k budget can still be far too big.
+        const ceiling = promptCeilingChars(error);
+        return once(Math.min(ceiling ?? Number.MAX_SAFE_INTEGER, Math.floor(model.contextChars / 2)), maxTokens);
+      }
       // A cut-off answer means the model was given more to change than its reply could describe. Half the context is
       // half the site, so it attempts a smaller change that fits — better than telling someone to try again later.
       if (truncatedAnswer(error)) return once(Math.floor(model.contextChars / 2), maxTokens);
