@@ -43,6 +43,13 @@ export const BUDGET = {
 /** The model behind the free tier is configuration (`GROQ_MODEL`). */
 export const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 
+/**
+ * The free tier's second chance, also configuration (`NVIDIA_MODEL`). Hosted models are retired on a schedule and
+ * answer 410 once they are: the one here went end-of-life and every request that fell this far died on it, so
+ * moving to another must not need a deploy.
+ */
+export const DEFAULT_NVIDIA_MODEL = "meta/llama-3.1-70b-instruct";
+
 /** Display names, so the selector always names the model that actually answers. */
 const GROQ_LABELS: Record<string, string> = {
   "openai/gpt-oss-120b": "GPT-OSS 120B",
@@ -53,12 +60,14 @@ const GROQ_LABELS: Record<string, string> = {
 
 export const DEFAULT_MODEL_ID = "free";
 
-export function buildModels(options: { groqModel?: string; overrides?: string } = {}): ModelDefinition[] {
+export function buildModels(options: { groqModel?: string; nvidiaModel?: string; overrides?: string } = {}): ModelDefinition[] {
   const groqModel = options.groqModel || DEFAULT_GROQ_MODEL;
+  const nvidiaModel = options.nvidiaModel || DEFAULT_NVIDIA_MODEL;
   const defaults: ModelDefinition[] = [
     // Free: Groq first; NVIDIA's hosted Llama takes over when Groq is rate limited or down.
     { id: "free", label: GROQ_LABELS[groqModel] ?? groqModel, badge: "Free", provider: "groq", providerModel: groqModel, tier: "free", fallbacks: ["nvidia-llama-3.3-70b"], ...BUDGET.freeTier },
-    { id: "nvidia-llama-3.3-70b", label: "Llama 3.3 70B", badge: "Free", provider: "nvidia", providerModel: "meta/llama-3.3-70b-instruct", tier: "free", hidden: true, fallbacks: [], ...BUDGET.openFree },
+    // Label stays generic: the id is stored on every message, so it can't be renamed when the model behind it moves.
+    { id: "nvidia-llama-3.3-70b", label: "Llama (NVIDIA)", badge: "Free", provider: "nvidia", providerModel: nvidiaModel, tier: "free", hidden: true, fallbacks: [], ...BUDGET.openFree },
     // Pro: direct vendor keys first, then the resellers. The id stays "claude-3-5-sonnet" so earlier messages keep resolving.
     // AgentRouter is last on purpose — it is a shared credit pool, so it is the route that keeps Pro answering when no
     // direct key is set, not the one we'd choose first. Correct its model ids from AI_MODELS without a deploy.

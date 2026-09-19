@@ -1,5 +1,5 @@
-import { applyModelOverrides, buildModels } from "./ai-models";
-import { AiProviderError, explainAiFailure, noToolCall, promptCeilingChars, tooLarge, truncatedAnswer, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
+import { DEFAULT_NVIDIA_MODEL, applyModelOverrides, buildModels } from "./ai-models";
+import { AiProviderError, explainAiFailure, noToolCall, promptCeilingChars, retiredModel, tooLarge, truncatedAnswer, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
 import { AiService, type RequestBuilder } from "./ai.service";
 
 const OK: AiResult = { output: { refused: true, reply: "ok" }, text: "", usage: { inputTokens: 10, outputTokens: 5 }, stopReason: "tool_use" };
@@ -36,7 +36,7 @@ describe("AiService routing", () => {
     const nvidia = scripted("nvidia", [OK]);
     const result = await new AiService(config(), [groq.provider, nvidia.provider]).generate("free", build);
     expect(result).toMatchObject({ provider: "nvidia", fellBack: true, model: { id: "nvidia-llama-3.3-70b" } });
-    expect(nvidia.calls[0]).toMatchObject({ providerModel: "meta/llama-3.3-70b-instruct", maxTokens: 4_000, system: "context 24000" });
+    expect(nvidia.calls[0]).toMatchObject({ providerModel: DEFAULT_NVIDIA_MODEL, maxTokens: 4_000, system: "context 24000" });
   });
 
   it("reaches GPT-4o through OpenRouter when there's no OpenAI key, retrying within the credit it can afford", async () => {
@@ -121,6 +121,31 @@ describe("AiService routing", () => {
     const chars = groq.calls.map((call) => Number(call.system.replace("context ", "")));
     expect(chars).toHaveLength(2);
     expect(chars[1]).toBeLessThan(chars[0]);
+  });
+  it("tries again when the model answered in prose, instead of dropping to a weaker one", async () => {
+    const prose = new AiProviderError("groq", "Tool choice is required, but model did not call a tool", false, "400");
+    const groq = scripted("groq", [prose, OK]);
+    const nvidia = scripted("nvidia", [OK]);
+    const service = new AiService(config(), [groq.provider, nvidia.provider]);
+    // Answered by the model that was asked for, on its second go - not by the fallback.
+    await expect(service.generate("free", build)).resolves.toMatchObject({ model: { id: "free" }, fellBack: false });
+    expect(groq.calls).toHaveLength(2);
+    expect(nvidia.calls).toHaveLength(0);
+  });
+
+  it("treats a retired model as permanent, and says so", () => {
+    const gone = new AiProviderError("nvidia", "410 The model meta/llama-3.3-70b-instruct has reached its end of life on 2026-08-26T09:00:00Z and is no longer available.", false, "410");
+    expect(retiredModel(gone)).toBe(true);
+    expect(explainAiFailure(gone)).toMatch(/has been retired/i);
+    // Not mistaken for a passing outage, which would tell someone to wait it out forever.
+    expect(explainAiFailure(gone)).not.toMatch(/few minutes|heavy demand/i);
+  });
+
+  it("keeps the NVIDIA model configurable, because hosted models get retired", () => {
+    const moved = buildModels({ nvidiaModel: "meta/llama-4-maverick-17b-128e-instruct" });
+    expect(moved.find((m) => m.id === "nvidia-llama-3.3-70b")).toMatchObject({ providerModel: "meta/llama-4-maverick-17b-128e-instruct" });
+    // The id never moves: it is stored against every message that model answered.
+    expect(buildModels().find((m) => m.id === "nvidia-llama-3.3-70b")?.providerModel).toBe(DEFAULT_NVIDIA_MODEL);
   });
   it("never lets one model answer under another's name", () => {
     for (const model of buildModels()) {

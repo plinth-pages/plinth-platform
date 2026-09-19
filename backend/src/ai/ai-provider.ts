@@ -98,6 +98,9 @@ export function explainAiFailure(error: unknown): string {
   if (code === "402" || code === "403" || /afford|credit|quota|billing|overdue|insufficient/i.test(message)) {
     return `Plinth AI has used up its allowance with the model service for now. This is on us, not on anything you did. Try again a little later, or pick another model below. ${nothingChanged}`;
   }
+  if (retiredModel(error)) {
+    return `That model has been retired by the people who host it. Pick a different one below — we're already on it. ${nothingChanged}`;
+  }
   if (code === "503" || code === "404" || /no available channel|not available|无可用渠道|does not exist/i.test(message)) {
     return `That model isn't being served at the moment. Pick a different one below and try again. ${nothingChanged}`;
   }
@@ -154,6 +157,14 @@ export function promptCeilingChars(error: unknown): number | null {
  * The model answered in prose when it was required to call the tool. Nothing is wrong with the request or with us —
  * the model simply didn't follow the contract that turns an answer into a change.
  */
+/**
+ * The model has been retired by whoever hosts it. Nothing will fix this but pointing at a different model, so it is
+ * worth telling a person about rather than logging and falling through for weeks.
+ */
+export function retiredModel(error: unknown): boolean {
+  return error instanceof AiProviderError && (error.code === "410" || /end of life|no longer available|has been (retired|deprecated)|decommissioned/i.test(error.message));
+}
+
 export function noToolCall(error: unknown): boolean {
   return error instanceof AiProviderError && /did not call a tool|tool choice is required|no tool call/i.test(error.message);
 }
