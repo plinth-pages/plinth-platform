@@ -100,9 +100,11 @@ export function HeroDemo() {
           <span className="ml-auto rounded-md bg-gradient-to-b from-brand-500 to-brand-600 px-2.5 py-1 text-[11px] font-medium text-white shadow-[inset_0_1px_0_rgb(255_255_255/0.2)] sm:ml-0">Publish</span>
         </div>
 
-        <div className="grid md:grid-cols-[340px_minmax(0,1fr)]">
+        {/* The single mobile column must be minmax(0,1fr), not auto: an auto column sizes to the widest thing in it,
+            and the code diff is pre-wrapped, so the panel grew past the viewport until the demo flipped back to preview. */}
+        <div className="grid grid-cols-[minmax(0,1fr)] md:grid-cols-[340px_minmax(0,1fr)]">
           {/* Plinth AI */}
-          <div className="flex min-h-[420px] flex-col gap-3 border-b border-white/[0.06] p-4 md:border-r md:border-b-0">
+          <div className="flex min-h-[420px] min-w-0 flex-col gap-3 border-b border-white/[0.06] p-4 md:border-r md:border-b-0">
             <p className="flex items-center gap-2 text-xs font-medium text-stone-300">
               <Spark /> Plinth AI
             </p>
