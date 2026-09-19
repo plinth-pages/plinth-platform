@@ -2,7 +2,7 @@ import { Injectable, Logger, Optional } from "@nestjs/common";
 import type { CopilotChanges, OperationFailure } from "@plinth-pages/shared";
 import type { Operation, Prisma } from "@prisma/client";
 import { z } from "zod";
-import { AiProviderError, tooLarge, truncatedAnswer } from "../ai/ai-provider";
+import { AiProviderError, explainAiFailure, tooLarge, truncatedAnswer } from "../ai/ai-provider";
 import { AiService, type RequestBuilder } from "../ai/ai.service";
 import { CatalogueService } from "../catalogue/catalogue.service";
 import type { FollowUp, Plan } from "../operations/integration-planner";
@@ -101,13 +101,13 @@ export class CopilotPlanner {
     try {
       result = await this.ai.generate(input.model, build);
     } catch (error) {
+      // Size problems are about the request and are worth saying first; everything else is the model service, and
+      // explainAiFailure says which kind rather than blaming Plinth for all of them.
       const text = tooLarge(error)
-        ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro."
+        ? "That request is too big for this model to handle in one go. Try asking for one change at a time, or switch to a larger model on Pro. Your site is unchanged."
         : truncatedAnswer(error)
-          ? "That's a bigger change than this model can write in one go. Try asking for one part at a time — the look first, then the sections — or switch to a larger model on Pro."
-          : error instanceof AiProviderError && error.retryable
-            ? "Plinth AI is busy right now. Please try again in a moment."
-            : "Plinth AI isn't available right now. Please try again later.";
+          ? "That's a bigger change than this model can write in one go. Try asking for one part at a time — the look first, then the sections — or switch to a larger model on Pro. Your site is unchanged."
+          : explainAiFailure(error);
       this.logger.warn(`Plinth AI call failed for ${operation.id}: ${error instanceof Error ? `${error.name}: ${error.message}` : error}`);
       this.alerts?.send({
         title: "Plinth AI couldn't answer a request",

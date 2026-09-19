@@ -71,7 +71,7 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       tier: "pro",
       // Opus is a different model, so it is a fallback and not an alternate: the reply is then recorded as Opus
       // answering, and the editor says so, instead of the history claiming Sonnet wrote something it didn't.
-      fallbacks: ["claude-opus-5", "gpt-4o", "free"],
+      fallbacks: ["claude-opus-5", "gpt-4o", "gpt-5-6-sol", "deepseek-v4", "free"],
       ...BUDGET.large,
     },
     {
@@ -82,7 +82,7 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       providerModel: "gpt-4o",
       alternates: [{ provider: "openrouter", providerModel: "openai/gpt-4o" }],
       tier: "pro",
-      fallbacks: ["claude-3-5-sonnet", "free"],
+      fallbacks: ["claude-3-5-sonnet", "gpt-5-6-sol", "deepseek-v4", "free"],
       ...BUDGET.large,
     },
     { id: "deepseek-v4", label: "DeepSeek V4 Flash", badge: "Pro", provider: "agentrouter", providerModel: "deepseek-v4-flash", tier: "pro", fallbacks: ["claude-opus-5", "free"], ...BUDGET.large },
@@ -99,7 +99,7 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       providerModel: "claude-opus-5",
       alternates: [{ provider: "agentrouter", providerModel: "claude-opus-5" }],
       tier: "pro",
-      fallbacks: ["claude-3-5-sonnet", "free"],
+      fallbacks: ["claude-3-5-sonnet", "gpt-5-6-sol", "deepseek-v4", "free"],
       ...BUDGET.large,
     },
     {
@@ -110,7 +110,7 @@ export function buildModels(options: { groqModel?: string; overrides?: string } 
       providerModel: "claude-opus-4-8",
       alternates: [{ provider: "agentrouter", providerModel: "claude-opus-4-8" }],
       tier: "pro",
-      fallbacks: ["claude-opus-5", "claude-3-5-sonnet", "free"],
+      fallbacks: ["claude-opus-5", "claude-3-5-sonnet", "deepseek-v4", "free"],
       ...BUDGET.large,
     },
     // Configured but not offered today.

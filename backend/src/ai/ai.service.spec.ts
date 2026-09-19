@@ -1,5 +1,5 @@
 import { applyModelOverrides, buildModels } from "./ai-models";
-import { AiProviderError, tooLarge, truncatedAnswer, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
+import { AiProviderError, explainAiFailure, noToolCall, promptCeilingChars, tooLarge, truncatedAnswer, type AiProvider, type AiRequest, type AiResult } from "./ai-provider";
 import { AiService, type RequestBuilder } from "./ai.service";
 
 const OK: AiResult = { output: { refused: true, reply: "ok" }, text: "", usage: { inputTokens: 10, outputTokens: 5 }, stopReason: "tool_use" };
@@ -133,6 +133,80 @@ describe("AiService routing", () => {
   });
 });
 
+describe("explaining a failure to the person who asked", () => {
+  const say = (code: string, message = "boom") => explainAiFailure(new AiProviderError("groq", message, false, code));
+
+  it("blames the model service, not Plinth, and never names a provider", () => {
+    const all = ["NOT_CONFIGURED", "429", "402", "403", "503", "401", "NETWORK", "500", "418"].map((c) => say(c));
+    for (const text of all) {
+      expect(text).not.toMatch(/groq|openai|anthropic|agentrouter|nvidia|bedrock|gemini|openrouter/i);
+      // Everyone needs to know their work survived.
+      expect(text.toLowerCase()).toContain("site is unchanged");
+      expect(text.length).toBeLessThan(260);
+    }
+  });
+
+  it("tells demand, allowance and outage apart instead of saying the same thing", () => {
+    expect(say("429")).toMatch(/heavy demand/i);
+    expect(say("402")).toMatch(/used up its allowance/i);
+    expect(say("403", "Access denied due to overdue account")).toMatch(/used up its allowance/i);
+    expect(say("503")).toMatch(/isn.t being served/i);
+    expect(say("500")).toMatch(/trouble at its end/i);
+    expect(say("NETWORK")).toMatch(/took too long/i);
+    expect(say("NOT_CONFIGURED")).toMatch(/isn.t switched on/i);
+    // Distinct messages, not one sentence wearing different hats.
+    const texts = ["429", "402", "503", "500", "NETWORK", "NOT_CONFIGURED", "401"].map((c) => say(c));
+    expect(new Set(texts).size).toBe(texts.length);
+  });
+
+  it("reads the reason out of the message when there is no useful status", () => {
+    expect(explainAiFailure(new AiProviderError("groq", "Rate limit reached for model", false, null))).toMatch(/heavy demand/i);
+    expect(explainAiFailure(new AiProviderError("groq", "You have insufficient credits", false, null))).toMatch(/used up its allowance/i);
+    expect(explainAiFailure(new Error("socket hang up"))).toMatch(/took too long/i);
+  });
+
+  it("still says something useful for a failure it has never seen", () => {
+    expect(say("418", "I am a teapot")).toMatch(/couldn.t answer that one/i);
+  });
+});
+describe("failures seen in production", () => {
+  const or402 = new AiProviderError(
+    "openrouter",
+    "402 Prompt tokens limit exceeded: 11207 > 7412. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account",
+    false,
+    "402",
+  );
+
+  it("reads a prompt ceiling as too big, not as out of money", () => {
+    // It arrives as a 402 mentioning credits, but the account has room - the request does not.
+    expect(tooLarge(or402)).toBe(true);
+    expect(promptCeilingChars(or402)).toBeGreaterThan(1_000);
+    expect(promptCeilingChars(or402)).toBeLessThan(7_412 * 4);
+    expect(explainAiFailure(or402)).toMatch(/needs more room/i);
+    expect(explainAiFailure(or402)).not.toMatch(/allowance/i);
+  });
+
+  it("retries inside the ceiling the service named, not at half a budget that is still too big", async () => {
+    const openrouter = scripted("openrouter", [or402, OK]);
+    const service = new AiService(config(), [openrouter.provider]);
+    await expect(service.generate("gpt-4o", build)).resolves.toMatchObject({ model: { id: "gpt-4o" } });
+    const chars = openrouter.calls.map((call) => Number(call.system.replace("context ", "")));
+    expect(chars[0]).toBe(120_000);
+    // Half of 120k would still be four times over the stated limit.
+    expect(chars[1]).toBeLessThan(7_412 * 4);
+  });
+
+  it("explains a model that answered in prose instead of making a change", () => {
+    const prose = new AiProviderError("groq", "Tool choice is required, but model did not call a tool", false, "400");
+    expect(noToolCall(prose)).toBe(true);
+    expect(explainAiFailure(prose)).toMatch(/answered in words/i);
+  });
+
+  it("explains a model the account cannot be served", () => {
+    const noChannel = new AiProviderError("agentrouter", "503 当前分组 default 下对于模型 claude-3-5-sonnet 无可用渠道", false, "503");
+    expect(explainAiFailure(noChannel)).toMatch(/isn.t being served/i);
+  });
+});
 describe("AI_MODELS overrides", () => {
   it("adds routes to an existing model and defines a new one", () => {
     const models = applyModelOverrides(
