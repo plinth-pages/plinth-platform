@@ -12,6 +12,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { CopilotEditError, applyEdits, copilotOutputSchema, type CopilotOutput } from "./copilot-plan";
 import { reportLetdown, type LetdownContext } from "./copilot-alerts";
 import { selectContext } from "./copilot-context";
+import { REPAIR_SYSTEM_PROMPT, buildRepairTurn, repairContext } from "./copilot-repair";
 import { SUBMIT_CHANGES_TOOL, SYSTEM_PROMPT, buildUserTurn, type ContextFile } from "./copilot-prompt";
 
 export const copilotInputSchema = z.object({ messageId: z.string().min(1), model: z.string().min(1) });
@@ -22,6 +23,12 @@ const HISTORY_MESSAGES = 4;
 const HISTORY_CHARS = 600;
 
 const AI_TIMEOUT_MS = 90_000;
+
+/**
+ * Which rejections earn a second pass. `tsc` and `plinth` are the model slipping — a stale import, a renamed prop.
+ * `install`, `format` and `codemod` are not its mistake to fix, and `copilot` means a policy guard already refused it.
+ */
+const REPAIRABLE = new Set<OperationFailure["source"]>(["tsc", "plinth"]);
 
 
 /** Runs one context read (the `context` script in the staging tree). Supplied by the runner. */
@@ -160,6 +167,63 @@ export class CopilotPlanner {
 
     if (files.length === 0) return { kind: "noop", message: output.reply, followUps };
     return { kind: "change", files, tarball: null, onApplied: null, followUps };
+  }
+
+  /**
+   * One repair pass after the safety net refuses a change. Returns the files to write, or null to let the rejection
+   * stand. Never throws: a failed repair must leave the caller exactly where it was.
+   */
+  async repair(operation: Operation, failures: OperationFailure[], editedPaths: string[], readContext: ContextReader): Promise<{ path: string; content: string }[] | null> {
+    if (!failures.some((failure) => REPAIRABLE.has(failure.source))) return null;
+
+    const input = copilotInputSchema.safeParse(operation.input);
+    if (!input.success) return null;
+    const message = await this.prisma.copilotMessage.findUnique({ where: { id: input.data.messageId } });
+    if (!message) return null;
+
+    let context: Awaited<ReturnType<ContextReader>>;
+    try {
+      context = await readContext();
+    } catch {
+      return null;
+    }
+
+    const build: RequestBuilder = (_model, contextChars) => ({
+      system: REPAIR_SYSTEM_PROMPT,
+      messages: [{ role: "user" as const, text: buildRepairTurn(message.content, failures, repairContext(context.files, failures, editedPaths, contextChars)) }],
+      tool: SUBMIT_CHANGES_TOOL,
+      temperature: 0,
+      signal: AbortSignal.timeout(AI_TIMEOUT_MS),
+    });
+
+    let result: Awaited<ReturnType<AiService["generate"]>>;
+    try {
+      result = await this.ai.generate(input.data.model, build);
+    } catch (error) {
+      this.logger.warn(`Repair call failed for ${operation.id}: ${error instanceof Error ? error.message : error}`);
+      return null;
+    }
+
+    // The user is billed for the second call whether or not it works — otherwise a repair loop is a way around the plan.
+    await this.prisma.copilotMessage
+      .updateMany({
+        where: { operationId: operation.id, role: "assistant" },
+        data: { inputTokens: { increment: result.usage.inputTokens }, outputTokens: { increment: result.usage.outputTokens } },
+      })
+      .catch(() => undefined);
+
+    const parsed = copilotOutputSchema.safeParse(result.output);
+    if (!parsed.success || parsed.data.refused || parsed.data.edits.length === 0) return null;
+
+    try {
+      const byPath = new Map(context.files.map((file) => [file.path, file.content]));
+      const files = applyEdits(parsed.data.edits, (path) => byPath.get(path) ?? null);
+      return files.length ? files : null;
+    } catch (error) {
+      if (!(error instanceof CopilotEditError)) throw error;
+      this.logger.warn(`Repair for ${operation.id} didn't apply: ${error.message}`);
+      return null;
+    }
   }
 
   private async integrationFollowUps(output: CopilotOutput, installed: string[]): Promise<{ followUps: FollowUp[]; notes: string[] }> {

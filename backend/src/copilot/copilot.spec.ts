@@ -4,6 +4,7 @@ import { BedrockProvider } from "../ai/bedrock.provider";
 import { GeminiProvider } from "../ai/gemini.provider";
 import { GroqProvider, type GroqChat } from "../ai/groq.provider";
 import { letdown, reportLetdown } from "./copilot-alerts";
+import { REPAIR_SYSTEM_PROMPT, buildRepairTurn, describeFailures, repairContext } from "./copilot-repair";
 import { MAX_EDITS, applyEdits, copilotOutputSchema, writablePath } from "./copilot-plan";
 import { selectContext } from "./copilot-context";
 import { parseContext } from "./copilot-planner";
@@ -292,6 +293,49 @@ describe("selectContext on a design request", () => {
     const paths = pick("make the UI cooler", 2_000);
     expect(paths.length).toBeGreaterThan(0);
     expect(paths.every((path) => /globals\.css|theme\.ts|page\.tsx|layout\.tsx|components\//.test(path))).toBe(true);
+  });
+});
+
+describe("the repair pass", () => {
+  const page = 'import { Education, Experience, Milestones } from "@/components/sections/Career";\n\nexport default function Page() {\n  return (\n    <main>\n      <Experience />\n      <Education />\n    </main>\n  );\n}\n';
+  const context = [
+    { path: "app/page.tsx", content: page },
+    { path: "components/sections/Career.tsx", content: "export function Experience() { return null; }\nexport function Education() { return null; }\n" },
+    { path: "content/profile.ts", content: "export const profile = {};\n" },
+  ];
+  const failure = { source: "tsc" as const, file: "app/page.tsx", line: 1, message: "Module '\"@/components/sections/Career\"' has no exported member 'Milestones'." };
+
+  it("sends the file the checks named and the files the first pass wrote", () => {
+    const files = repairContext(context, [failure], ["components/sections/Career.tsx"], 24_000).map((file) => file.path);
+    expect(files).toEqual(["app/page.tsx", "components/sections/Career.tsx"]);
+    expect(files).not.toContain("content/profile.ts");
+  });
+
+  it("names the file and line so the model doesn't have to guess", () => {
+    expect(describeFailures([failure])).toContain("app/page.tsx:1");
+    expect(describeFailures([failure])).toContain("no exported member 'Milestones'");
+  });
+
+  it("gives the model the original request, the errors and the current file", () => {
+    const turn = buildRepairTurn("Remove Milestones section", [failure], context.slice(0, 1));
+    expect(turn).toContain("Remove Milestones section");
+    expect(turn).toContain("no exported member 'Milestones'");
+    expect(turn).toContain('<file path="app/page.tsx">');
+    expect(turn.indexOf("<errors>")).toBeLessThan(turn.indexOf("<files_as_they_stand>"));
+  });
+
+  it("tells the model to fix the loose end and nothing else", () => {
+    expect(REPAIR_SYSTEM_PROMPT).toMatch(/Fix ONLY what the errors report/);
+    expect(REPAIR_SYSTEM_PROMPT).toMatch(/do not undo the change you were asked to make/);
+    expect(REPAIR_SYSTEM_PROMPT).toMatch(/return no edits rather than guessing/);
+  });
+
+  it("applies the repair the same way as any other edit, guards included", () => {
+    const read = (path: string) => context.find((file) => file.path === path)?.content ?? null;
+    const fixed = applyEdits([{ action: "replace", path: "app/page.tsx", search: "{ Education, Experience, Milestones }", replace: "{ Education, Experience }" }], read);
+    expect(fixed[0].content).not.toContain("Milestones");
+    // A repair is not a way past the policy guards.
+    expect(() => applyEdits([{ action: "replace", path: "package.json", search: "a", replace: "b" }], read)).toThrow();
   });
 });
 
