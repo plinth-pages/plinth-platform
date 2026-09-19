@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from "@nestjs/common";
 import type { Operation, OperationStatus, Prisma, Sandbox } from "@prisma/client";
-import type { OperationFailure } from "@plinth-pages/shared";
+import type { OperationFailure, OperationStep } from "@plinth-pages/shared";
 import { posix } from "path";
 import { PORTFOLIO_EVENTS, type PortfolioEventPublisher } from "../events/portfolio-events";
 import { HOSTING, HostingError, type Hosting } from "../hosting/hosting";
@@ -139,6 +139,7 @@ export class OperationRunner {
       this.expectSuccess(stage, "Preparing a workspace for the change");
 
       // 3. Mutate, in the staging worktree only. Integrations are planned from the staged files by the codemod engine.
+      this.progress(operation, "reading");
       const plan = await this.planChange(operation, externalId);
       if (plan.kind === "noop") {
         await this.discard(externalId);
@@ -151,9 +152,11 @@ export class OperationRunner {
         const vendored = await this.exec(externalId, "staging", vendorScript(), { PLINTH_PATH: plan.tarball.path, PLINTH_B64: plan.tarball.base64 }, STEP_TIMEOUT.short);
         this.expectSuccess(vendored, "Adding the package");
       }
+      this.progress(operation, "writing");
       await this.mutate(externalId, plan.files);
 
       // 2 and 4. Dependencies and formatting.
+      this.progress(operation, "preparing");
       const prepared = await this.exec(externalId, "staging", prepareScript(), {}, STEP_TIMEOUT.prepare);
       if (prepared.exitCode === EXIT.noChanges) {
         await this.discard(externalId);
@@ -172,11 +175,13 @@ export class OperationRunner {
 
       // 5–6. plinth check and tsc, in parallel.
       await this.transition(operation, "checking");
+      this.progress(operation, "checking");
       let { failures, checkMs } = await this.check(externalId);
 
       // 7. Repair: one more pass when the checks caught a slip rather than a bad idea. The worktree still holds the
       // failed edits, so the model sees the errors against the files as they actually stand.
       if (failures.length && operation.type === "copilot") {
+        this.progress(operation, "repairing");
         const repaired = await this.copilot.repair(operation, failures, plan.files.map((file) => file.path), () => this.readStagedContext(externalId));
         if (repaired) {
           // Still staging: nothing has touched the live tree, and the UI should not say "publishing".
@@ -201,6 +206,7 @@ export class OperationRunner {
 
       // 8. Apply: commit in the worktree, fast-forward the live tree. From here the preview sees the change.
       await this.transition(operation, "applying", { checkMs, diff: diffStat });
+      this.progress(operation, "applying");
       const identity = await this.git.botIdentity();
       const subject = commitSubject(operation.summary);
       const applied = await this.exec(
@@ -232,6 +238,7 @@ export class OperationRunner {
       await this.pushOrSchedule(sandbox);
 
       // 9. Health check: request the affected routes; a render failure is reverted.
+      this.progress(operation, "loading");
       const routes = affectedRoutes(plan.files.map((file) => file.path));
       const health = await this.exec(externalId, "live", healthScript(), { PLINTH_ROUTES: routes.join(" ") }, STEP_TIMEOUT.health);
       const unhealthy = reported(health.stdout, "UNHEALTHY");
@@ -325,6 +332,7 @@ export class OperationRunner {
       if (failures.length) return this.reject(operation, externalId, began, failures, checkMs, `${aheadBy} change${aheadBy === 1 ? "" : "s"} not published`);
 
       await this.transition(operation, "applying", { checkMs });
+      this.progress(operation, "publishing");
       // Hosting is ready before main moves, so a misconfigured host never leaves a published commit undeployed.
       if (this.hosting.configured) {
         const portfolio = await this.prisma.portfolio.findUniqueOrThrow({ where: { id: operation.portfolioId } });
@@ -544,6 +552,17 @@ export class OperationRunner {
 
   private async finish(operation: Operation, status: OperationStatus, began: number, data: Prisma.OperationUpdateInput) {
     await this.update(operation.id, { ...data, status, finishedAt: new Date(), totalMs: Date.now() - began });
+  }
+
+  /**
+   * Says what the operation is doing, without writing to the database. Status changes four times in a run, which
+   * leaves someone watching a spinner for most of it; these are the steps in between. Best effort by design — a
+   * dropped progress event costs a label, never the change.
+   */
+  private progress(operation: Operation, step: OperationStep): void {
+    void this.events
+      .publish(operation.portfolioId, { type: "operation", operationId: operation.id, status: operation.status, at: new Date().toISOString(), step })
+      .catch(() => undefined);
   }
 
   private async update(id: string, data: Prisma.OperationUpdateInput) {
