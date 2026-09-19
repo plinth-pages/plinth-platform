@@ -52,6 +52,11 @@ export function createProviders(config: ConfigService<Env, true>): AiProvider[] 
       id: "agentrouter",
       name: "AgentRouter",
       baseURL: config.get("AGENTROUTER_BASE_URL", { infer: true }),
+      headers: {
+        "HTTP-Referer": "https://github.com/RooVetGit/Roo-Cline",
+        "X-Title": "Roo Code",
+        "User-Agent": "RooCode/3.53.0",
+      },
     }),
     new BedrockProvider({
       region: config.get("AWS_REGION", { infer: true }),
