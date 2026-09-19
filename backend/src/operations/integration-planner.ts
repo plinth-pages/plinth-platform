@@ -1,6 +1,8 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import {
+  SLOT_SEARCH_DIRS,
+  couldHoldSlots,
   CodemodError,
   installIntegration,
   moveIntegration,
@@ -19,7 +21,7 @@ import { integrationsDir } from "../catalogue/catalogue-ingest";
 import { readTarballFiles } from "../catalogue/tarball";
 import type { Env } from "../config/env";
 import { PrismaService } from "../prisma/prisma.service";
-import { SANDBOX_DRIVER, type SandboxDriver } from "../sandbox/sandbox-driver";
+import { SANDBOX_DRIVER, type FileEntry, type SandboxDriver } from "../sandbox/sandbox-driver";
 
 /** Free plan: at most this many integrations per portfolio. Enforced inside the operation, where it can't be raced. */
 export const MAX_INSTALLED_INTEGRATIONS = 5;
@@ -63,6 +65,9 @@ class Unavailable extends Error {}
 
 const CODE_FILES: PortfolioFile[] = ["app/layout.tsx", "app/page.tsx", "plinth.json"];
 
+/** A redesign can hold a lot of components; enough to cover any real portfolio without reading a runaway tree. */
+const MAX_SLOT_CANDIDATES = 200;
+
 /**
  * Turns an install, uninstall or move into file changes for the safety net. It reads the staging worktree — the exact
  * commit the change will be applied on top of — runs the codemod engine, and adds or removes the package in
@@ -79,7 +84,11 @@ export class IntegrationPlanner {
 
   async plan(operation: Operation, externalId: string): Promise<Plan> {
     const read = (path: string) => this.driver.readFile(externalId, { root: "staging", path });
-    const files = Object.fromEntries(await Promise.all(CODE_FILES.map(async (path) => [path, await read(path)]))) as PortfolioFiles;
+    const base = Object.fromEntries(await Promise.all(CODE_FILES.map(async (path) => [path, await read(path)])));
+    // Slots move: a redesign can put one in a component it wrote, so every file that could hold one is read and
+    // handed to the codemod. Without this an integration would only ever be found in the two template files.
+    const extra = await this.slotCandidates(externalId, read);
+    const files = { ...extra, ...base } as PortfolioFiles;
     const packageJson = await read("package.json");
 
     try {
@@ -100,6 +109,31 @@ export class IntegrationPlanner {
       if (error instanceof Unavailable) return { kind: "reject", failures: [{ source: "install", message: error.message }] };
       throw error;
     }
+  }
+
+  /** Every file under the slot search directories that could declare a slot, read from the staging worktree. */
+  private async slotCandidates(externalId: string, read: (path: string) => Promise<string>): Promise<Record<string, string>> {
+    const paths: string[] = [];
+    const visit = async (dir: string) => {
+      if (paths.length >= MAX_SLOT_CANDIDATES) return;
+      let entries: FileEntry[];
+      try {
+        entries = await this.driver.listFiles(externalId, { root: "staging", path: dir });
+      } catch {
+        return; // A directory the template doesn't have is not an error.
+      }
+      for (const entry of entries) {
+        if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+        const path = `${dir}/${entry.name}`;
+        if (entry.type === "dir") await visit(path);
+        else if (couldHoldSlots(path) && !CODE_FILES.includes(path as PortfolioFile)) paths.push(path);
+      }
+    };
+    for (const dir of SLOT_SEARCH_DIRS) await visit(dir);
+
+    const read_ = paths.slice(0, MAX_SLOT_CANDIDATES);
+    const contents = await Promise.all(read_.map((path) => read(path).catch(() => null)));
+    return Object.fromEntries(read_.map((path, index) => [path, contents[index]]).filter(([, text]) => text !== null) as [string, string][]);
   }
 
   private async install(operation: Operation, files: PortfolioFiles, packageJson: string, externalId: string): Promise<Plan> {

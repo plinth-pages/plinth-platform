@@ -1495,14 +1495,14 @@ packages:
     engines: {node: '>=12.4.0'}
 
   '@plinth-pages/check@file:vendor/plinth-pages-check-0.1.0.tgz':
-    resolution: {integrity: sha512-BPVw2wfFzgwZYVnREcquteLZrV9b6XcXcdBFI18hao8mxWdZjYPZjwCY76LRuP7vBEh5Gl/znaiIWRZ0/WwBiw==, tarball: file:vendor/plinth-pages-check-0.1.0.tgz}
+    resolution: {integrity: sha512-P2LKns77vPIgFsnnDVgg5OV/pv5NIdMyqmeg5dC54XBsl2eyNTEYS0BiK+YMwA25NTFY4/36aNKyz8vYcdaukw==, tarball: file:vendor/plinth-pages-check-0.1.0.tgz}
     version: 0.1.0
     hasBin: true
     peerDependencies:
       '@plinth-pages/core': ^0.1.0
 
   '@plinth-pages/core@file:vendor/plinth-pages-core-0.1.0.tgz':
-    resolution: {integrity: sha512-hP/5KAOVF/SORn3QLsz56iXzM4xOKC//Xv75hwMyLwJnbwHUJdpHCjfJ7bN3UAtC+vK20FFbap21D1pd1k5UyA==, tarball: file:vendor/plinth-pages-core-0.1.0.tgz}
+    resolution: {integrity: sha512-JUFG9NUFRE7A4QEFApl3aWeB/lKMLNiXPpaPPKF2Gmoc52ZjudsMJQr+mYdh7pbYItol5VESb4wkyXD7RTc29Q==, tarball: file:vendor/plinth-pages-core-0.1.0.tgz}
     version: 0.1.0
     peerDependencies:
       react: '>=18'

@@ -1,5 +1,7 @@
 import type { Options } from "prettier";
 
+// Re-exported so the backend can find slots the same way the engine does, without reaching into a subpath export.
+export { SLOT_SEARCH_DIRS, couldHoldSlots, findSlotFile, slotTagRegex } from "@plinth-pages/core/slots";
 export { CodemodError, type CodemodErrorCode } from "./source";
 export { addImport, removeImport, type Changed } from "./imports";
 export { insertElement, insertProvider, removeBlock, listBlocks, type Block } from "./slots";

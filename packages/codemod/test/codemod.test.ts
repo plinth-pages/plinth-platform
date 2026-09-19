@@ -97,6 +97,40 @@ describe("golden: the pristine template", () => {
     expect(syntaxErrors(files["app/page.tsx"], "page.tsx")).toEqual([]);
   });
 
+  it("follows a slot Plinth AI moved into a component it wrote", async () => {
+    // The redesign case: the sidebar slot now lives in a new component, wrapped in the new layout's styling.
+    const aside = [
+      'import { Slot } from "@plinth-pages/core";',
+      "// plinth:imports:start",
+      "// plinth:imports:end",
+      "",
+      "export function Aside() {",
+      "  return (",
+      '    <aside className="rounded-2xl border border-line bg-card p-6">',
+      '      <Slot name="sidebar"></Slot>',
+      "    </aside>",
+      "  );",
+      "}",
+      "",
+    ].join(String.fromCharCode(10));
+    const redesigned: PortfolioFiles = {
+      ...template,
+      "app/page.tsx": template["app/page.tsx"].replace('<Slot name="sidebar"></Slot>', "<Aside />"),
+      "components/Aside.tsx": aside,
+    };
+
+    const { files, changed, outcome } = installIntegration(redesigned, { ...githubStats, slot: "sidebar" });
+    expect(outcome).toBe("installed");
+    // The integration lands in the component, not in the file the template first kept the slot in.
+    expect(changed).toEqual(["components/Aside.tsx", "plinth.json"]);
+    expect(files["components/Aside.tsx"]).toContain('import { GitHubStats } from "@plinth-pages/github-stats";');
+    expect(files["components/Aside.tsx"]).toContain("plinth:github-stats:start");
+    expect(files["app/page.tsx"]).toBe(redesigned["app/page.tsx"]);
+
+    // And it comes back out of wherever it went.
+    const removed = uninstallIntegration(files, "github-stats");
+    expect(removed.files["components/Aside.tsx"]).toBe(aside);
+  });
   it("installs a provider into the wrap list of the layout", async () => {
     const { files, changed } = installIntegration(template, themeProvider);
     expect(changed).toEqual(["app/layout.tsx", "plinth.json"]);
