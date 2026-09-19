@@ -54,6 +54,31 @@ describe("applyEdits", () => {
     expect(() => applyEdits([edit], read)).toThrow(message);
   });
 
+  it("lets a redesign move and wrap a slot, so integrations come across into the new layout", () => {
+    const result = applyEdits(
+      [
+        {
+          action: "replace",
+          path: "app/page.tsx",
+          search: '    <main className="pb-16">\n      <Slot name="sidebar"></Slot>\n    </main>',
+          replace: '    <main className="mx-auto max-w-3xl px-6 py-24">\n      <aside className="rounded-page border border-line bg-card p-6">\n        <Slot name="sidebar"></Slot>\n      </aside>\n    </main>',
+        },
+      ],
+      read,
+    );
+    expect(result[0].content).toContain('<aside className="rounded-page border border-line bg-card p-6">');
+    expect(result[0].content).toContain('<Slot name="sidebar"></Slot>');
+  });
+
+  it("keeps the theme variables every integration reads", () => {
+    const css = ":root {\n  --plinth-bg: #ffffff;\n  --plinth-fg: #18181b;\n  --plinth-muted: #71717a;\n}\n";
+    const readCss = (path: string) => (path === "app/globals.css" ? css : null);
+    // Restyling them is the point of a redesign.
+    expect(applyEdits([{ action: "replace", path: "app/globals.css", search: "--plinth-bg: #ffffff;", replace: "--plinth-bg: #0b0b0f;" }], readCss)[0].content).toContain("#0b0b0f");
+    // Dropping one leaves integrations rendering their light-mode fallback on a dark site.
+    expect(() => applyEdits([{ action: "replace", path: "app/globals.css", search: "  --plinth-muted: #71717a;\n", replace: "" }], readCss)).toThrow("--plinth-muted");
+  });
+
   it("is all or nothing", () => {
     expect(() =>
       applyEdits(
