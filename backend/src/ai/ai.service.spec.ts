@@ -74,6 +74,16 @@ describe("AiService routing", () => {
     expect(service.catalogue("pro").find((model) => model.id === "gpt-4o")).toMatchObject({ available: true, locked: false });
     expect(service.catalogue("pro").find((model) => model.id === "claude-3-5-sonnet")).toMatchObject({ available: false });
   });
+
+  it("keeps Pro working on the shared pool alone, when no direct vendor key is set", async () => {
+    const agentrouter = scripted("agentrouter", [OK]);
+    const service = new AiService(config(), [agentrouter.provider]);
+    for (const id of ["claude-3-5-sonnet", "gpt-4o"]) {
+      expect(service.catalogue("pro").find((model) => model.id === id)).toMatchObject({ available: true, locked: false });
+    }
+    // It is the last route, so it answers by falling back — never ahead of a direct key.
+    await expect(service.generate("claude-3-5-sonnet", build)).resolves.toMatchObject({ provider: "agentrouter", fellBack: true });
+  });
 });
 
 describe("AI_MODELS overrides", () => {
