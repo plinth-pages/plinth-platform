@@ -167,20 +167,36 @@ export class OperationRunner {
         return this.reject(operation, externalId, began, [{ source, message: detail.trim() || `${source} failed` }], null);
       }
       this.expectSuccess(prepared, "Formatting the change");
-      const depsChanged = reported(prepared.stdout, "DEPS") === "1";
-      const diffStat = sections(prepared.stdout).stat ?? null;
+      let depsChanged = reported(prepared.stdout, "DEPS") === "1";
+      let diffStat = sections(prepared.stdout).stat ?? null;
 
       // 5–6. plinth check and tsc, in parallel.
       await this.transition(operation, "checking");
-      const checked = await this.exec(externalId, "staging", checkScript(), {}, STEP_TIMEOUT.check);
-      const parts = sections(checked.stdout);
-      const checkMs = Number(reported(checked.stdout, "CHECK_MS")) || null;
-      const tscCode = Number(reported(checked.stdout, "TSC_CODE") ?? 1);
-      const plinthCode = Number(reported(checked.stdout, "PLINTH_CODE") ?? 1);
-      const failures = [
-        ...parsePlinthCheck(parts.plinth ?? "", parts["plinth-err"] ?? "", plinthCode),
-        ...(tscCode === 0 ? [] : withFallback(parseTscOutput(parts.tsc ?? ""), parts.tsc, "tsc")),
-      ];
+      let { failures, checkMs } = await this.check(externalId);
+
+      // 7. Repair: one more pass when the checks caught a slip rather than a bad idea. The worktree still holds the
+      // failed edits, so the model sees the errors against the files as they actually stand.
+      if (failures.length && operation.type === "copilot") {
+        const repaired = await this.copilot.repair(operation, failures, plan.files.map((file) => file.path), () => this.readStagedContext(externalId));
+        if (repaired) {
+          // Still staging: nothing has touched the live tree, and the UI should not say "publishing".
+          await this.transition(operation, "staging");
+          await this.mutate(externalId, repaired);
+          const again = await this.exec(externalId, "staging", prepareScript(), {}, STEP_TIMEOUT.prepare);
+          if (again.exitCode === EXIT.installFailed || again.exitCode === EXIT.formatFailed) {
+            // The repair broke something the first pass hadn't: report what the checks originally refused.
+            return this.reject(operation, externalId, began, failures, checkMs, diffStat);
+          }
+          this.expectSuccess(again, "Formatting the fix");
+          depsChanged = depsChanged || reported(again.stdout, "DEPS") === "1";
+          diffStat = sections(again.stdout).stat ?? diffStat;
+          await this.transition(operation, "checking");
+          const rechecked = await this.check(externalId);
+          this.logger.log(`Repair for ${operation.id} ${rechecked.failures.length ? "did not hold" : "fixed the change"}`);
+          failures = rechecked.failures;
+          checkMs = rechecked.checkMs ?? checkMs;
+        }
+      }
       if (failures.length) return this.reject(operation, externalId, began, failures, checkMs, diffStat);
 
       // 8. Apply: commit in the worktree, fast-forward the live tree. From here the preview sees the change.
@@ -362,13 +378,31 @@ export class OperationRunner {
     await this.followUps.enqueue(operation.portfolioId, followUps).catch((error) => this.logger.warn(`Follow-ups for ${operation.id} weren't queued: ${errorText(error)}`));
   }
 
+  /** `plinth check` and tsc over the staging worktree, as one structured verdict. Run once per pass. */
+  private async check(externalId: string): Promise<{ failures: OperationFailure[]; checkMs: number | null }> {
+    const checked = await this.exec(externalId, "staging", checkScript(), {}, STEP_TIMEOUT.check);
+    const parts = sections(checked.stdout);
+    const tscCode = Number(reported(checked.stdout, "TSC_CODE") ?? 1);
+    const plinthCode = Number(reported(checked.stdout, "PLINTH_CODE") ?? 1);
+    return {
+      checkMs: Number(reported(checked.stdout, "CHECK_MS")) || null,
+      failures: [
+        ...parsePlinthCheck(parts.plinth ?? "", parts["plinth-err"] ?? "", plinthCode),
+        ...(tscCode === 0 ? [] : withFallback(parseTscOutput(parts.tsc ?? ""), parts.tsc, "tsc")),
+      ],
+    };
+  }
+
+  /** The staging worktree as the model should see it — after a pass has written to it, not before. */
+  private async readStagedContext(externalId: string) {
+    const read = await this.exec(externalId, "staging", contextScript(), { PLINTH_DIRS: CONTEXT_DIRECTORIES.join(" "), PLINTH_MAX_BYTES: String(MAX_CONTEXT_BYTES) }, STEP_TIMEOUT.short);
+    this.expectSuccess(read, "Reading your portfolio");
+    return parseContext(read.stdout);
+  }
+
   private async planChange(operation: Operation, externalId: string): Promise<Plan> {
     if (operation.type === "copilot") {
-      return this.copilot.plan(operation, async () => {
-        const read = await this.exec(externalId, "staging", contextScript(), { PLINTH_DIRS: CONTEXT_DIRECTORIES.join(" "), PLINTH_MAX_BYTES: String(MAX_CONTEXT_BYTES) }, STEP_TIMEOUT.short);
-        this.expectSuccess(read, "Reading your portfolio");
-        return parseContext(read.stdout);
-      });
+      return this.copilot.plan(operation, () => this.readStagedContext(externalId));
     }
     if (operation.type === "edit") {
       return { kind: "change", files: editInputSchema.parse(operation.input).files, tarball: null, onApplied: null };
